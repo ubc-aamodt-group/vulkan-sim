@@ -179,6 +179,39 @@ struct dim3comp {
   }
 };
 
+struct Ray
+{
+	float4 origin_tmin;
+	float4 dir_tmax;
+
+	bool anyhit;
+
+  float3 get_origin() const { return {origin_tmin.x, origin_tmin.y, origin_tmin.z}; }
+  void set_origin(float3 new_origin) { origin_tmin = {new_origin.x, new_origin.y, new_origin.z, origin_tmin.w}; }
+
+  float get_tmin() const { return origin_tmin.w; }
+  float get_tmax() const { return dir_tmax.w; }
+
+  float3 get_direction() const { return {dir_tmax.x, dir_tmax.y, dir_tmax.z}; }
+  void set_direction(float4 new_dir) { dir_tmax = new_dir; }
+
+  void print() const {
+    printf("Direction: %f %f %f \tOrigin: %f %f %f\tTmin: %f\tTmax: %f\n", dir_tmax.x, dir_tmax.y, dir_tmax.z, origin_tmin.x, origin_tmin.y, origin_tmin.z, origin_tmin.w, dir_tmax.w);
+  }
+
+  void make_ray(float3 o, float3 d, float t_min, float t_max)
+  {
+    origin_tmin.x = o.x;
+    origin_tmin.y = o.y;
+    origin_tmin.z = o.z;
+    origin_tmin.w = t_min;
+    dir_tmax.x = d.x;
+    dir_tmax.y = d.y;
+    dir_tmax.z = d.z;
+    dir_tmax.w = t_max;
+  }
+};
+
 void increment_x_then_y_then_z(dim3 &i, const dim3 &bound);
 
 // Jin: child kernel information for CDP
