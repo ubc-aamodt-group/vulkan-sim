@@ -1,3 +1,7 @@
+# Usage
+# python3 generate_rt_<filename>.ptx
+# It will generate <filename>.ptxinfo in the same location as the ptx file
+
 import os
 import sys
 import subprocess
