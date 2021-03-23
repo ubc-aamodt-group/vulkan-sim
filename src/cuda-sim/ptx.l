@@ -399,6 +399,7 @@ breakaddr  TC; yylval->int_value = BREAKADDR_OP; return OPCODE;
 \.x	TC; yylval->int_value = 0; return DIMENSION_MODIFIER;
 \.y	TC; yylval->int_value = 1; return DIMENSION_MODIFIER;
 \.z	TC; yylval->int_value = 2; return DIMENSION_MODIFIER;
+\.w	TC; yylval->int_value = 3; return DIMENSION_MODIFIER;
 
 "-"	TC; return MINUS;
 "+"	TC; return PLUS;

@@ -79,5 +79,6 @@ class gpgpu_context {
   unsigned translate_pc_to_ptxlineno(unsigned pc);
 };
 gpgpu_context *GPGPU_Context();
+CUctx_st *GPGPUSim_Context(gpgpu_context *ctx);
 
 #endif /* __gpgpu_context_h__ */

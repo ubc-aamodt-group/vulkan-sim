@@ -41,6 +41,8 @@ public:
 
     static void setPipelineInfo(VkRayTracingPipelineCreateInfoKHR* pCreateInfos);
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
+    static void invoke_gpgpusim();
+    static void registerShaders();
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

@@ -2,6 +2,37 @@
 
 #include "vector-math.h"
 #include <iostream>
+#include <vector>
+#include <string>
+#include <fstream>
+#define BOOST_FILESYSTEM_VERSION 3
+#define BOOST_FILESYSTEM_NO_DEPRECATED 
+#include <boost/filesystem.hpp>
+
+namespace fs = boost::filesystem;
+
+#define __CUDA_RUNTIME_API_H__
+// clang-format off
+#include "host_defines.h"
+#include "builtin_types.h"
+#include "driver_types.h"
+#include "../../libcuda/cuda_api.h"
+#include "cudaProfiler.h"
+// clang-format on
+#if (CUDART_VERSION < 8000)
+#include "__cudaFatFormat.h"
+#endif
+
+#include "../../libcuda/gpgpu_context.h"
+#include "../../libcuda/cuda_api_object.h"
+#include "../gpgpu-sim/gpu-sim.h"
+#include "../cuda-sim/ptx_loader.h"
+#include "../cuda-sim/cuda-sim.h"
+#include "../cuda-sim/ptx_ir.h"
+#include "../cuda-sim/ptx_parser.h"
+#include "../gpgpusim_entrypoint.h"
+#include "../stream_manager.h"
+#include "../abstract_hardware_model.h"
 
 VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
@@ -260,4 +291,73 @@ void VulkanRayTracing::setGeometries(VkAccelerationStructureGeometryKHR* pGeomet
     VulkanRayTracing::pGeometries = pGeometries;
     VulkanRayTracing::geometryCount = geometryCount;
 	std::cout << "gpgpusim: set geometry" << std::endl;
+}
+
+static bool invoked = false;
+
+void VulkanRayTracing::registerShaders()
+{
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    // Register all the ptx files in $MESA_ROOT/gpgpusimShaders by looping through them
+    std::vector <std::string> ptx_list;
+
+    // Add ptx file names in gpgpusimShaders folder to ptx_list
+    char *mesa_root = getenv("MESA_ROOT");
+    char *filePath = "gpgpusimShaders/";
+    char fullPath[200];
+    snprintf(fullPath, sizeof(fullPath), "%s%s", mesa_root, filePath);
+    std::string fullPathString(fullPath);
+
+    for (auto &p : fs::recursive_directory_iterator(fullPathString))
+    {
+        if (p.path().extension() == ".ptx")
+        {
+            //std::cout << p.path().string() << '\n';
+            ptx_list.push_back(p.path().string());
+        }
+    }
+    
+    // Register each ptx file in ptx_list
+    symbol_table *symtab;
+    unsigned num_ptx_versions = 0;
+    unsigned max_capability = 20;
+    unsigned selected_capability = 20;
+    bool found = false;
+    
+    unsigned source_num = 1;
+    unsigned long long fat_cubin_handle = 1;
+
+    for(auto itr : ptx_list)
+    {
+        // PTX File
+        //std::cout << itr << std::endl;
+        symtab = ctx->gpgpu_ptx_sim_load_ptx_from_filename(itr.c_str());
+        context->add_binary(symtab, fat_cubin_handle);
+        // need to add all the magic registers to ptx.l to special_register, reference ayub ptx.l:225
+
+        // PTX info
+        // run the python script and get it in
+        //ctx->gpgpu_ptx_info_load_from_filename(itr.c_str(), source_num, max_capability, ptx_list.size());
+
+        source_num++;
+        fat_cubin_handle++;
+    }
+
+}
+
+
+void VulkanRayTracing::invoke_gpgpusim()
+{
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    if(!invoked)
+    {
+        registerShaders();
+        invoked = true;
+    }
 }
