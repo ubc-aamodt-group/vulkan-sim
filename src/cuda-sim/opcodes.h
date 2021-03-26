@@ -59,8 +59,23 @@ enum special_regs {
   SMID_REG,
   TID_REG,
   WARPID_REG,
-  WARPSZ_REG
+  WARPSZ_REG,
+  hitValue_REG,
+  shader_call_data_REG,
+  ray_hit_attrib_REG,
+  attribs_REG,
+  CameraProperties_REG,
+  ubo_REG,
+  field0_REG,
+  field1_REG,
+  function_temp_REG,
+  image_REG,
+  uniform_REG
 };
+// Vulkan MESA NIR Special Registers
+// TODO: Need to make translation print out declared regs, treating as special regs for now
+// TODO: Need to change struct types to a size offset that I can get from mesa
+
 enum wmma_type {
   LOAD_A,
   LOAD_B,

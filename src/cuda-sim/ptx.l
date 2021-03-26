@@ -262,6 +262,18 @@ store_deref TC; yylval->int_value = ST_DEREF_OP; return OPCODE;
 "%warpid"  TC; yylval->int_value = WARPID_REG; return SPECIAL_REGISTER;
 "WARP_SZ"  TC; yylval->int_value = WARPSZ_REG; return SPECIAL_REGISTER;
 
+"hitValue"  TC; yylval->int_value = hitValue_REG; return SPECIAL_REGISTER; // TODO: declared reg
+"shader_call_data"  TC; yylval->int_value = shader_call_data_REG; return SPECIAL_REGISTER; // TODO: struct type
+"ray_hit_attrib"  TC; yylval->int_value = ray_hit_attrib_REG; return SPECIAL_REGISTER; // TODO: struct type
+"attribs"  TC; yylval->int_value = attribs_REG; return SPECIAL_REGISTER; // TODO: declared reg
+"CameraProperties"  TC; yylval->int_value = CameraProperties_REG; return SPECIAL_REGISTER; // TODO: struct type
+"ubo"  TC; yylval->int_value = ubo_REG; return SPECIAL_REGISTER;
+"field0"  TC; yylval->int_value = field0_REG; return SPECIAL_REGISTER;
+"field1"  TC; yylval->int_value = field1_REG; return SPECIAL_REGISTER;
+"function_temp"  TC; yylval->int_value = function_temp_REG; return SPECIAL_REGISTER;
+"image"  TC; yylval->int_value = image_REG; return SPECIAL_REGISTER; // TODO: declared reg
+"uniform"  TC; yylval->int_value = uniform_REG; return SPECIAL_REGISTER;
+
 [a-zA-Z_][a-zA-Z0-9_$]*  TC; yylval->string_value = strdup(yytext); return IDENTIFIER;
 [$%][a-zA-Z0-9_$]+  TC; yylval->string_value = strdup(yytext); return IDENTIFIER;
 
