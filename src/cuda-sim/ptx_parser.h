@@ -135,6 +135,12 @@ class ptx_recognizer {
   void add_8vector_operand(const char *d1, const char *d2, const char *d3,
                            const char *d4, const char *d5, const char *d6,
                            const char *d7, const char *d8);
+  void add_2vector_literal_int(int d1, int d2);
+  void add_4vector_literal_int(int d1, int d2, int d3, int d4);
+  void add_2vector_literal_float(float d1, float d2);
+  void add_4vector_literal_float(float d1, float d2, float d3, float d4);
+  void add_2vector_literal_double(double d1, double d2);
+  void add_4vector_literal_double(double d1, double d2, double d3, double d4);
   void add_option(int option);
   void add_wmma_option(int option);
   void add_builtin_operand(int builtin, int dim_modifier);

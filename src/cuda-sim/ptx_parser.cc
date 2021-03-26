@@ -752,6 +752,36 @@ void ptx_recognizer::add_8vector_operand(const char *d1, const char *d2,
   g_operands.push_back(operand_info(s1, s2, s3, s4, s5, s6, s7, s8, gpgpu_ctx));
 }
 
+void ptx_recognizer::add_2vector_literal_int(int d1, int d2) {
+  PTX_PARSE_DPRINTF("add_2vector_literal_int");
+  g_operands.push_back(operand_info(d1, d2, (int)0, (int)0, gpgpu_ctx));
+}
+
+void ptx_recognizer::add_4vector_literal_int(int d1, int d2, int d3, int d4) {
+  PTX_PARSE_DPRINTF("add_4vector_literal_int");
+  g_operands.push_back(operand_info(d1, d2, d3, d4, gpgpu_ctx));
+}
+
+void ptx_recognizer::add_2vector_literal_float(float d1, float d2) {
+  PTX_PARSE_DPRINTF("add_2vector_literal_float");
+  g_operands.push_back(operand_info(d1, d2, (float)0, (float)0, gpgpu_ctx));
+}
+
+void ptx_recognizer::add_4vector_literal_float(float d1, float d2, float d3, float d4) {
+  PTX_PARSE_DPRINTF("add_4vector_literal_float");
+  g_operands.push_back(operand_info(d1, d2, d3, d4, gpgpu_ctx));
+}
+
+void ptx_recognizer::add_2vector_literal_double(double d1, double d2) {
+  PTX_PARSE_DPRINTF("add_2vector_literal_double");
+  g_operands.push_back(operand_info(d1, d2, (double)0, (double)0, gpgpu_ctx));
+}
+
+void ptx_recognizer::add_4vector_literal_double(double d1, double d2, double d3, double d4) {
+  PTX_PARSE_DPRINTF("add_4vector_literal_double");
+  g_operands.push_back(operand_info(d1, d2, d3, d4, gpgpu_ctx));
+}
+
 void ptx_recognizer::add_builtin_operand(int builtin, int dim_modifier) {
   PTX_PARSE_DPRINTF("add_builtin_operand");
   g_operands.push_back(operand_info(builtin, dim_modifier, gpgpu_ctx));

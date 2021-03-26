@@ -6603,3 +6603,50 @@ void video_mem_instruction(const ptx_instruction *pI, ptx_thread_info *thread, i
   return;
 }
 
+void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void load_vulkan_descriptor_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void deref_var_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void deref_cast_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void deref_struct_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void deref_array_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void load_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}
+
+void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+}

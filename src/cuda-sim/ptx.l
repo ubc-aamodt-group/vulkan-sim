@@ -164,6 +164,19 @@ nop     TC; yylval->int_value = NOP_OP; return OPCODE;
 break  TC; yylval->int_value = BREAK_OP; return OPCODE;
 breakaddr  TC; yylval->int_value = BREAKADDR_OP; return OPCODE;
 
+load_ray_launch_id  TC; yylval->int_value = LD_RAY_LAUNCH_ID_OP; return OPCODE;
+load_ray_launch_size    TC; yylval->int_value = LD_RAY_LAUNCH_SIZE_OP; return OPCODE;
+vulkan_resource_index   TC; yylval->int_value = VK_RESOURCE_INDEX_OP; return OPCODE;
+load_vulkan_descriptor  TC; yylval->int_value = LD_VK_DESC_OP; return OPCODE;
+deref_var   TC; yylval->int_value = DEREF_VAR_OP; return OPCODE;
+deref_cast  TC; yylval->int_value = DEREF_CAST_OP; return OPCODE;
+deref_struct    TC; yylval->int_value = DEREF_STRUCT_OP; return OPCODE;
+deref_array TC; yylval->int_value = DEREF_ARRAY_OP; return OPCODE;
+load_deref  TC; yylval->int_value = LD_DEREF_OP; return OPCODE;
+trace_ray   TC; yylval->int_value = TRACE_RAY_OP; return OPCODE;
+image_deref_store   TC; yylval->int_value = IMG_DEREF_ST_OP; return OPCODE;
+store_deref TC; yylval->int_value = ST_DEREF_OP; return OPCODE;
+
 "CPTX_END"	printf("ENDING CUSTOM PTX.\n"); BEGIN(IN_COMMENT);
 
 <INITIAL,NOT_OPCODE,IN_INST,IN_FUNC_DECL>{

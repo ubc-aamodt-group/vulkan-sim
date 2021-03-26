@@ -570,6 +570,69 @@ class operand_info {
     m_is_return_var = false;
     m_immediate_address = false;
   }
+  operand_info(int x1, int x2, int x3, int x4, gpgpu_context *ctx) {
+    init(ctx);
+    m_is_non_arch_reg = false;
+    m_addr_space = undefined_space;
+    m_operand_lohi = 0;
+    m_double_operand_type = 0;
+    m_operand_neg = false;
+    m_const_mem_offset = 0;
+    m_uid = get_uid();
+    m_valid = true;
+    m_vector = true;
+    m_type = int_t;
+    m_value.m_vint[0] = x1;
+    m_value.m_vint[1] = x2;
+    m_value.m_vint[2] = x3;
+    m_value.m_vint[3] = x4;
+    m_addr_offset = 0;
+    m_neg_pred = false;
+    m_is_return_var = false;
+    m_immediate_address = false;
+  }
+  operand_info(float x1, float x2, float x3, float x4, gpgpu_context *ctx) {
+    init(ctx);
+    m_is_non_arch_reg = false;
+    m_addr_space = undefined_space;
+    m_operand_lohi = 0;
+    m_double_operand_type = 0;
+    m_operand_neg = false;
+    m_const_mem_offset = 0;
+    m_uid = get_uid();
+    m_valid = true;
+    m_vector = true;
+    m_type = float_op_t;
+    m_value.m_vfloat[0] = x1;
+    m_value.m_vfloat[1] = x2;
+    m_value.m_vfloat[2] = x3;
+    m_value.m_vfloat[3] = x4;
+    m_addr_offset = 0;
+    m_neg_pred = false;
+    m_is_return_var = false;
+    m_immediate_address = false;
+  }
+  operand_info(double x1, double x2, double x3, double x4, gpgpu_context *ctx) {
+    init(ctx);
+    m_is_non_arch_reg = false;
+    m_addr_space = undefined_space;
+    m_operand_lohi = 0;
+    m_double_operand_type = 0;
+    m_operand_neg = false;
+    m_const_mem_offset = 0;
+    m_uid = get_uid();
+    m_valid = true;
+    m_vector = true;
+    m_type = double_op_t;
+    m_value.m_vdouble[0] = x1;
+    m_value.m_vdouble[1] = x2;
+    m_value.m_vdouble[2] = x3;
+    m_value.m_vdouble[3] = x4;
+    m_addr_offset = 0;
+    m_neg_pred = false;
+    m_is_return_var = false;
+    m_immediate_address = false;
+  }
   operand_info(const symbol *s1, const symbol *s2, const symbol *s3,
                const symbol *s4, gpgpu_context *ctx) {
     init(ctx);
