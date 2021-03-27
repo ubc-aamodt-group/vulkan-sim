@@ -940,6 +940,23 @@ void ptx_recognizer::add_neg_pred_operand(const char *identifier) {
   g_operands.push_back(op);
 }
 
+void ptx_recognizer::add_scalar_operand_with_dim_mod(const char *identifier, int dim_modifier) {
+  PTX_PARSE_DPRINTF("add_scalar_operand_with_dim_mod");
+  const symbol *s = g_current_symbol_table->lookup(identifier);
+  if (s == NULL) {
+    if (g_opcode == BRA_OP || g_opcode == CALLP_OP) {
+      // forward branch target...
+      s = g_current_symbol_table->add_variable(
+          identifier, NULL, 0, gpgpu_ctx->g_filename, ptx_get_lineno(scanner));
+    } else {
+      std::string msg =
+          std::string("operand \"") + identifier + "\" has no declaration.";
+      parse_error(msg.c_str());
+    }
+  }
+  g_operands.push_back(operand_info(s, dim_modifier, true, gpgpu_ctx));
+}
+
 void ptx_recognizer::add_address_operand(const char *identifier, int offset) {
   PTX_PARSE_DPRINTF("add_address_operand");
   const symbol *s = g_current_symbol_table->lookup(identifier);

@@ -436,6 +436,49 @@ class operand_info {
     m_is_return_var = false;
     m_immediate_address = false;
   }
+  operand_info(const symbol *addr, int dim_modifier, bool is_vector, gpgpu_context *ctx) {
+    init(ctx);
+    m_is_non_arch_reg = false;
+    m_addr_space = undefined_space;
+    m_operand_lohi = 0;
+    m_double_operand_type = 0;
+    m_operand_neg = false;
+    m_const_mem_offset = 0;
+    m_uid = get_uid();
+    m_valid = true;
+    if (addr->is_label()) {
+      m_type = label_t;
+    } else if (addr->is_shared()) {
+      m_type = symbolic_t;
+    } else if (addr->is_const()) {
+      m_type = symbolic_t;
+    } else if (addr->is_global()) {
+      m_type = symbolic_t;
+    } else if (addr->is_local()) {
+      m_type = symbolic_t;
+    } else if (addr->is_param_local()) {
+      m_type = symbolic_t;
+    } else if (addr->is_param_kernel()) {
+      m_type = symbolic_t;
+    } else if (addr->is_tex()) {
+      m_type = symbolic_t;
+    } else if (addr->is_func_addr()) {
+      m_type = symbolic_t;
+    } else if (!addr->is_reg()) {
+      m_type = symbolic_t;
+    } else {
+      m_type = reg_t;
+    }
+
+    m_is_non_arch_reg = addr->is_non_arch_reg();
+    m_value.m_symbolic = addr;
+    m_addr_offset = 0;
+    m_vector = is_vector;
+    m_neg_pred = false;
+    m_is_return_var = false;
+    m_immediate_address = false;
+    m_vector_reg_dim_mod = dim_modifier;
+  }
   operand_info(const symbol *addr1, const symbol *addr2, gpgpu_context *ctx) {
     init(ctx);
     m_is_non_arch_reg = false;
@@ -717,6 +760,7 @@ class operand_info {
     m_neg_pred = 0;
     m_is_return_var = 0;
     m_is_non_arch_reg = 0;
+    m_vector_reg_dim_mod = -1;
   }
   void make_memory_operand() { m_type = memory_t; }
   void set_return() { m_is_return_var = true; }
@@ -947,6 +991,8 @@ class operand_info {
   bool m_neg_pred;
   bool m_is_return_var;
   bool m_is_non_arch_reg;
+
+  int m_vector_reg_dim_mod;
 
   unsigned get_uid();
 };

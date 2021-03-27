@@ -123,6 +123,7 @@ class ptx_recognizer {
   void add_scalar_type_spec(int type_spec);
   void add_scalar_operand(const char *identifier);
   void add_neg_pred_operand(const char *identifier);
+  void add_scalar_operand_with_dim_mod(const char *identifier, int dim_modifier);
   void add_variables();
   void set_variable_type();
   void add_opcode(int opcode);

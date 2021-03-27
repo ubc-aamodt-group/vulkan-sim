@@ -599,6 +599,7 @@ operand: IDENTIFIER  { recognizer->add_scalar_operand( $1 ); }
 	| IDENTIFIER BACKSLASH IDENTIFIER { recognizer->add_2vector_operand($1,$3); recognizer->change_double_operand_type(-3);}
 	| IDENTIFIER BACKSLASH IDENTIFIER LO_OPTION { recognizer->add_2vector_operand($1,$3); recognizer->change_double_operand_type(-3); recognizer->change_operand_lohi(1);}
 	| IDENTIFIER BACKSLASH IDENTIFIER HI_OPTION { recognizer->add_2vector_operand($1,$3); recognizer->change_double_operand_type(-3); recognizer->change_operand_lohi(2);}
+	| IDENTIFIER DIMENSION_MODIFIER { recognizer->add_scalar_operand_with_dim_mod($1,$2); }
 	;
 
 vector_operand: LEFT_BRACE IDENTIFIER COMMA IDENTIFIER RIGHT_BRACE { recognizer->add_2vector_operand($2,$4); }

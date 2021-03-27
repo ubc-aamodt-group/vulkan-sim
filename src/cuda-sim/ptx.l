@@ -268,6 +268,7 @@ store_deref TC; yylval->int_value = ST_DEREF_OP; return OPCODE;
 "attribs"  TC; yylval->int_value = attribs_REG; return SPECIAL_REGISTER; // TODO: declared reg
 "CameraProperties"  TC; yylval->int_value = CameraProperties_REG; return SPECIAL_REGISTER; // TODO: struct type
 "ubo"  TC; yylval->int_value = ubo_REG; return SPECIAL_REGISTER;
+"ptr"  TC; yylval->int_value = ptr_REG; return SPECIAL_REGISTER;
 "field0"  TC; yylval->int_value = field0_REG; return SPECIAL_REGISTER;
 "field1"  TC; yylval->int_value = field1_REG; return SPECIAL_REGISTER;
 "function_temp"  TC; yylval->int_value = function_temp_REG; return SPECIAL_REGISTER;

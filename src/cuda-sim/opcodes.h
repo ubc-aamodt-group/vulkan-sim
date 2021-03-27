@@ -66,6 +66,7 @@ enum special_regs {
   attribs_REG,
   CameraProperties_REG,
   ubo_REG,
+  ptr_REG,
   field0_REG,
   field1_REG,
   function_temp_REG,
