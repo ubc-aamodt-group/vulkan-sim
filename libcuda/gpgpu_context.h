@@ -64,6 +64,7 @@ class gpgpu_context {
       const char *filename);
   void gpgpu_ptx_info_load_from_filename(const char *filename,
                                          unsigned sm_version);
+  void gpgpu_ptx_info_load_from_external_file(const char *filename);
   void gpgpu_ptxinfo_load_from_string(const char *p_for_info,
                                       unsigned source_num,
                                       unsigned sm_version = 20,

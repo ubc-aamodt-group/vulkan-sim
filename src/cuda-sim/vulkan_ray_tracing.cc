@@ -306,6 +306,7 @@ void VulkanRayTracing::registerShaders()
 
     // Add ptx file names in gpgpusimShaders folder to ptx_list
     char *mesa_root = getenv("MESA_ROOT");
+    char *gpgpusim_root = getenv("GPGPUSIM_ROOT");
     char *filePath = "gpgpusimShaders/";
     char fullPath[200];
     snprintf(fullPath, sizeof(fullPath), "%s%s", mesa_root, filePath);
@@ -339,8 +340,20 @@ void VulkanRayTracing::registerShaders()
         // need to add all the magic registers to ptx.l to special_register, reference ayub ptx.l:225
 
         // PTX info
-        // run the python script and get it in
-        //ctx->gpgpu_ptx_info_load_from_filename(itr.c_str(), source_num, max_capability, ptx_list.size());
+        // Run the python script and get ptxinfo
+        std::cout << "GPGPUSIM: Generating PTXINFO for" << itr.c_str() << "info" << std::endl;
+        char command[400];
+        snprintf(command, sizeof(command), "python3 %s/scripts/generate_rt_ptxinfo.py %s", gpgpusim_root, itr.c_str());
+        int result = system(command);
+        if (result != 0) {
+            printf("GPGPU-Sim PTX: ERROR ** while loading PTX (b) %d\n", result);
+            printf("               Ensure ptxas is in your path.\n");
+            exit(1);
+        }
+        
+        char ptxinfo_filename[400];
+        snprintf(ptxinfo_filename, sizeof(ptxinfo_filename), "%sinfo", itr.c_str());
+        ctx->gpgpu_ptx_info_load_from_external_file(ptxinfo_filename); // TODO: make a version where it just loads my ptxinfo instead of generating a new one
 
         source_num++;
         fat_cubin_handle++;
