@@ -6640,6 +6640,7 @@ void load_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("###############  calling trace_ray from ptx.\n");
   inst_not_implemented(pI);
 }
 

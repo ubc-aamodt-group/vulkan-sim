@@ -333,6 +333,7 @@ void VulkanRayTracing::registerShaders()
 
     for(auto itr : ptx_list)
     {
+        printf("############### adding %s\n", itr.c_str());
         // PTX File
         //std::cout << itr << std::endl;
         symtab = ctx->gpgpu_ptx_sim_load_ptx_from_filename(itr.c_str());
@@ -355,6 +356,12 @@ void VulkanRayTracing::registerShaders()
         snprintf(ptxinfo_filename, sizeof(ptxinfo_filename), "%sinfo", itr.c_str());
         ctx->gpgpu_ptx_info_load_from_external_file(ptxinfo_filename); // TODO: make a version where it just loads my ptxinfo instead of generating a new one
 
+        if (itr.find("RAYGEN") != std::string::npos)
+        {
+            printf("############### registering %s\n", itr.c_str());
+            context->register_function(fat_cubin_handle, "raygen_shader", "MESA_SHADER_RAYGEN_main");
+        }
+
         source_num++;
         fat_cubin_handle++;
     }
@@ -373,4 +380,37 @@ void VulkanRayTracing::invoke_gpgpusim()
         registerShaders();
         invoked = true;
     }
+}
+
+void VulkanRayTracing::vkCmdTraceRaysKHR(
+                      const VkStridedDeviceAddressRegionKHR *raygen_sbt,
+                      const VkStridedDeviceAddressRegionKHR *miss_sbt,
+                      const VkStridedDeviceAddressRegionKHR *hit_sbt,
+                      const VkStridedDeviceAddressRegionKHR *callable_sbt,
+                      bool is_indirect,
+                      uint32_t launch_width,
+                      uint32_t launch_height,
+                      uint32_t launch_depth,
+                      uint64_t launch_size_addr) {
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    printf("vkCmdTraceRaysKHR\n");
+    function_info *entry = context->get_kernel("raygen_shader");
+    printf("################ number of args = %d\n", entry->num_args());
+
+    gpgpu_ptx_sim_arg_list_t args;
+    kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
+      "raygen_shader", args, dim3(1, 1, 1), dim3(16, 1, 1),
+      context);
+    
+    struct CUstream_st *stream = 0;
+    stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
+    ctx->the_gpgpusim->g_stream_manager->push(op);
+
+    // for (unsigned i = 0; i < entry->num_args(); i++) {
+    //     std::pair<size_t, unsigned> p = entry->get_param_config(i);
+    //     cudaSetupArgumentInternal(args[i], p.first, p.second);
+    // }
 }

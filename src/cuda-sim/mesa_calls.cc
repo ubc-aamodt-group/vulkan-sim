@@ -29,8 +29,9 @@ extern "C" void gpgpusim_vkCmdTraceRaysKHR(
                       uint32_t launch_depth,
                       uint64_t launch_size_addr)
 {
-    printf("calling vkCmdTraceRaysKHR in gpgpusim\n");
     VulkanRayTracing::invoke_gpgpusim();
+    VulkanRayTracing::vkCmdTraceRaysKHR(raygen_sbt, miss_sbt, hit_sbt, callable_sbt,
+            is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
 }
 
 #endif /* MESA_CALLS_H */

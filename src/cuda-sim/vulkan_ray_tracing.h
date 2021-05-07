@@ -43,6 +43,16 @@ public:
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
     static void invoke_gpgpusim();
     static void registerShaders();
+    static void vkCmdTraceRaysKHR(
+                      const VkStridedDeviceAddressRegionKHR *raygen_sbt,
+                      const VkStridedDeviceAddressRegionKHR *miss_sbt,
+                      const VkStridedDeviceAddressRegionKHR *hit_sbt,
+                      const VkStridedDeviceAddressRegionKHR *callable_sbt,
+                      bool is_indirect,
+                      uint32_t launch_width,
+                      uint32_t launch_height,
+                      uint32_t launch_depth,
+                      uint64_t launch_size_addr);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */
