@@ -33,10 +33,12 @@ namespace fs = boost::filesystem;
 #include "../gpgpusim_entrypoint.h"
 #include "../stream_manager.h"
 #include "../abstract_hardware_model.h"
+#include "vulkan_acceleration_structure_util.h"
 
 VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
 uint32_t VulkanRayTracing::geometryCount = 0;
+VkAccelerationStructureKHR VulkanRayTracing::topLevelAS = NULL;
 
 float magic_max7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
 {
@@ -122,12 +124,12 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                    float Tmax,
                    int payload)
 {
-	assert(cullMask = 0xff);
-	assert(payload = 0);
+	assert(cullMask == 0xff);
+	assert(payload == 0);
 
 	// Global memory
-    //memory_space *mem=NULL;
-    //mem = thread->get_global_memory();
+    // memory_space *mem=NULL;
+    // mem = thread->get_global_memory();
 
 	// Create ray
 	Ray ray;
@@ -137,111 +139,173 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
 	VkAccelerationStructureBuildGeometryInfoKHR* pInfos;
 
 	// Get bottom-level AS
-	struct anv_bvh_node* topLevelASRoot =  (struct anv_bvh_node*)(_topLevelAS);
+    uint8_t* topLevelASAddr = (uint8_t *)get_anv_accel_address(topLevelAS);
+    GEN_RT_BVH topBVH;
+    GEN_RT_BVH_unpack(&topBVH, topLevelASAddr);
+    
+    uint8_t* topRootAddr = topLevelASAddr + topBVH.RootNodeOffset;
 
-	assert(topLevelASRoot->children[0]->is_leaf);
-	uint32_t bottomLevelGeometryID = ((struct anv_bvh_leaf*)(topLevelASRoot->children[0]))->geometry_id;
+    std::list<uint8_t *> traversal_stack;
+	std::list<uint8_t *> leaf_stack;
 
-	assert(pInfos->pGeometries[bottomLevelGeometryID].geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR);
-	VkAccelerationStructureGeometryInstancesDataKHR ASInstance = pInfos->pGeometries[bottomLevelGeometryID].geometry.instances;
-	struct anv_bvh_node* root = (struct anv_bvh_node*)(ASInstance.data.hostAddress);
-
-
-
-	std::list<struct anv_bvh_node*> traversal_stack;
-	std::list<struct anv_bvh_leaf*> leaf_stack;
-
-	// Initialize
-    struct anv_bvh_node* next_node = 0;
-
-    while (next_node > 0)
+    // start traversing top level BVH
     {
-		bool child_hit[6];
-		struct anv_bvh_node** child_addr = next_node->children;
-		float thit[6];
-		for(int i = 0; i < 6; i++)
-		{
-            float3 idir = calculate_idir(ray.get_direction());
-			float3 lo, hi;
-			lo = {next_node->lower_x[i], next_node->lower_y[i], next_node->lower_z[i]};
-			hi = {next_node->upper_x[i], next_node->upper_y[i], next_node->upper_z[i]};
+        uint8_t *node_addr = NULL;
+        uint8_t *next_node_addr = topRootAddr;
+        
 
-			child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
-		}
+        while (next_node_addr > 0)
+        {
+            node_addr = next_node_addr;
+            next_node_addr = NULL;
+            struct GEN_RT_BVH_INTERNAL_NODE node;
+            GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
 
-		next_node = 0;
-		for(int i = 0; i < 6; i++)
-		{
-			if(child_hit[i])
-			{
-				if(child_addr[i]->is_leaf == 1)
-					leaf_stack.push_back((struct anv_bvh_leaf*)(child_addr[i]));
-				else
-				{
-					if(next_node == 0)
-						next_node = child_addr[i]; // sort by thit
-					else
-						traversal_stack.push_back(child_addr[i]);
-				}
-			}
-		}
+            bool child_hit[6];
+            float thit[6];
+            for(int i = 0; i < 6; i++)
+            {
+                float3 idir = calculate_idir(ray.get_direction());
+                float3 lo, hi;
+                lo = {node.ChildLowerXBound[i], node.ChildLowerYBound[i], node.ChildLowerYBound[i]}; //TODO: change this
+                hi = {node.ChildUpperXBound[i], node.ChildUpperYBound[i], node.ChildUpperZBound[i]};
 
-        // Miss
-        if (next_node == 0) {
-            if (traversal_stack.empty()) {
-                break;
+                child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
             }
 
-            // Pop next node from stack
-            next_node = traversal_stack.back();
-            traversal_stack.pop_back();
+            uint8_t *child_addr = node_addr + (node.ChildOffset * 64);
+            for(int i = 0; i < 6; i++)
+            {
+                if(child_hit[i])
+                {
+                    uint8_t *child_addr = node_addr + (node.ChildOffset * 64) * (i + 1);
+                    if(node.ChildType[i] != NODE_TYPE_INTERNAL)
+                        leaf_stack.push_back(child_addr);
+                    else
+                    {
+                        if(next_node_addr == 0)
+                            next_node_addr = child_addr; // TODO: sort by thit
+                        else
+                            traversal_stack.push_back(child_addr);
+                    }
+                }
+            }
+
+            // Miss
+            if (next_node_addr == NULL) {
+                if (traversal_stack.empty()) {
+                    break;
+                }
+
+                // Pop next node from stack
+                next_node_addr = traversal_stack.back();
+                traversal_stack.pop_back();
+            }
         }
     }
 
-	#ifdef DEBUG_PRINT
-	printf("Transition to leaf nodes.\n");
-	#endif
+    { // leaf nodes
+        // Set thit to max
+        float min_thit = ray.dir_tmax.w;
+        uint32_t min_geometry_id;
 
-	// Initialize
-    struct anv_bvh_leaf* next_leaf = 0;
+        for (auto const& leaf_addr : leaf_stack)
+        {
+            GEN_RT_BVH_INSTANCE_LEAF leaf;
+            GEN_RT_BVH_INSTANCE_LEAF_unpack(&leaf, leaf_addr);
 
-	// Set thit to max
+            //TODO: apply transformation matrix
+            traversal_stack.push_back((uint8_t *)anv_address_map(*(struct anv_address *)(leaf.StartNodeAddress)));
+        }
+    }
+
+
+
+    //traverse bottom AS
+    if(!traversal_stack.empty())
+    {
+        uint8_t* node_addr = NULL;
+        uint8_t* next_node_addr = traversal_stack.back();
+        traversal_stack.pop_back();
+        
+
+        while (next_node_addr > 0)
+        {
+            node_addr = next_node_addr;
+            next_node_addr = NULL;
+            struct GEN_RT_BVH_INTERNAL_NODE node;
+            GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
+
+            bool child_hit[6];
+            float thit[6];
+            for(int i = 0; i < 6; i++)
+            {
+                float3 idir = calculate_idir(ray.get_direction());
+                float3 lo, hi;
+                lo = {node.ChildLowerXBound[i], node.ChildLowerYBound[i], node.ChildLowerZBound[i]}; //TODO: change this
+                hi = {node.ChildUpperXBound[i], node.ChildUpperYBound[i], node.ChildUpperZBound[i]};
+
+                child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+            }
+
+            for(int i = 0; i < 6; i++)
+            {
+                if(child_hit[i])
+                {
+                    uint8_t *child_addr = node_addr + (node.ChildOffset * 64) * (i + 1);
+                    if(node.ChildType[i] != NODE_TYPE_INTERNAL)
+                        leaf_stack.push_back(child_addr);
+                    else
+                    {
+                        if(next_node_addr == 0)
+                            next_node_addr = child_addr; // TODO: sort by thit
+                        else
+                            traversal_stack.push_back(child_addr);
+                    }
+                }
+            }
+
+            // Miss
+            if (next_node_addr == NULL) {
+                if (traversal_stack.empty()) {
+                    break;
+                }
+
+                // Pop next node from stack
+                next_node_addr = traversal_stack.back();
+                traversal_stack.pop_back();
+            }
+        }
+    }
+
+    // Set thit to max
     float min_thit = ray.dir_tmax.w;
-	uint32_t min_geometry_id;
+    uint32_t min_geometry_id;
+    {
+        for (auto const& leaf_addr : leaf_stack)
+        {
+            struct GEN_RT_BVH_QUAD_LEAF leaf;
+            GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
 
+            float3 p[3];
+            for(int i = 0; i < 3; i++)
+            {
+                p[i].x = leaf.QuadVertex[i].X;
+                p[i].y = leaf.QuadVertex[i].Y;
+                p[i].z = leaf.QuadVertex[i].Z;
+            }
 
-	for (auto const& leaf_addr : leaf_stack)
-	{
-	    // Load vertices
-		uint32_t geometry_id = leaf_addr->geometry_id;
+            // Triangle intersection algorithm
+            float thit;
+            bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], ray, &thit);
 
-		assert(pInfos->pGeometries[geometry_id].geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR);
-		const VkAccelerationStructureGeometryTrianglesDataKHR triangleData = pInfos->pGeometries[bottomLevelGeometryID].geometry.triangles;
-
-		assert(triangleData.maxVertex == 3);
-		assert(triangleData.vertexStride == 12);
-		float* vertexData = (float*)(triangleData.vertexData.hostAddress);
-
-		float3 p[3];
-		for(int i = 0; i < 3; i++)
-		{
-			p[i].x = vertexData[i];
-			p[i].y = vertexData[i + 1];
-			p[i].z = vertexData[i + 2];
-			vertexData += 3; //TODO: +3 or +12
-		}
-
-
-	    // Triangle intersection algorithm
-		float thit;
-	    bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], ray, &thit);
-
-		if(thit < min_thit)
-		{
-			min_thit = thit;
-			min_geometry_id = geometry_id;
-		}
-	}
+            if(thit < min_thit)
+            {
+                min_thit = thit;
+                min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
+            }
+        }
+    }
 
 
 	if (min_thit != ray.get_tmax())
@@ -293,10 +357,22 @@ void VulkanRayTracing::setGeometries(VkAccelerationStructureGeometryKHR* pGeomet
 	std::cout << "gpgpusim: set geometry" << std::endl;
 }
 
+void VulkanRayTracing::setAccelerationStructure(VkAccelerationStructureKHR accelerationStructure)
+{
+    std::cout << "gpgpusim: set AS" << std::endl;
+    VulkanRayTracing::topLevelAS = accelerationStructure;
+}
+
 static bool invoked = false;
 
 void VulkanRayTracing::registerShaders()
 {
+    // std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    // std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx",   std::ios::binary);
+    // dst << src.rdbuf();
+
+
+
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);

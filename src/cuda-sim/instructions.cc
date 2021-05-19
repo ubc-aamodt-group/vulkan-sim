@@ -51,6 +51,7 @@ class ptx_recognizer;
 #include "cuda_device_printf.h"
 #include "ptx.tab.h"
 #include "ptx_loader.h"
+#include "vulkan_ray_tracing.h"
 
 // Jin: include device runtime for CDP
 #include "cuda_device_runtime.h"
@@ -4108,7 +4109,9 @@ void min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, d, i_type, thread, pI);
 }
 
+static int _count = 0;
 void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("########## running inst number %d at line %d\n", _count++, pI->source_line());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -6604,6 +6607,7 @@ void video_mem_instruction(const ptx_instruction *pI, ptx_thread_info *thread, i
 }
 
 void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("");
   inst_not_implemented(pI);
 }
 
@@ -6641,7 +6645,55 @@ void load_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   printf("###############  calling trace_ray from ptx.\n");
-  inst_not_implemented(pI);
+  // const operand_info &target = pI->func_addr();
+  // const symbol *func_addr = target.get_symbol();
+  // function_info *target_func = func_addr->get_pc();
+
+  // unsigned n_return = target_func->has_return();
+  // assert(n_return == 0);
+  // unsigned n_args = target_func->num_args();
+  // assert(n_args == 11);
+
+
+  int arg = 0;
+  // const operand_info &op1 = pI->operand_lookup(arg);
+  // VkAccelerationStructureKHR *_topLevelAS = (VkAccelerationStructureKHR *)(op1.get_symbol()->get_address());
+
+
+  arg++;
+  const operand_info &op2 = pI->operand_lookup(arg);
+  uint rayFlags = (uint)(op2.get_int());
+
+
+  arg++;
+  const operand_info &op3 = pI->operand_lookup(arg);
+  uint cullMask = (uint)(op3.get_int());
+
+  arg++;
+  const operand_info &op4 = pI->operand_lookup(arg);
+  uint sbtRecordOffset = (uint)(op4.get_int());
+
+  arg++;
+  const operand_info &op5 = pI->operand_lookup(arg);
+  uint sbtRecordStride = (uint)(op5.get_int());
+
+  arg++;
+  const operand_info &op6 = pI->operand_lookup(arg);
+  uint missIndex = (uint)(op6.get_int());
+
+  // Todo
+  // float3 origin
+  // float Tmin
+  // float3 direction
+  // float Tmax
+  // int payload
+
+  VulkanRayTracing::traceRay(NULL, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
+                   {0, 0, 0},
+                   0,
+                   {0, 0, 0},
+                   0,
+                   0);
 }
 
 void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
