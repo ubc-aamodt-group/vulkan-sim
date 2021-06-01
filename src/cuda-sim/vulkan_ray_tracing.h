@@ -40,7 +40,9 @@ public:
                        float Tmin,
                        float3 direction,
                        float Tmax,
-                       int payload);
+                       int payload,
+                       const ptx_instruction *pI,
+                       ptx_thread_info *thread);
 
     static void setPipelineInfo(VkRayTracingPipelineCreateInfoKHR* pCreateInfos);
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
@@ -57,6 +59,11 @@ public:
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr);
+    static void callShader(const ptx_instruction *pI, ptx_thread_info *thread, function_info *target_func);
+    static void callMissShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

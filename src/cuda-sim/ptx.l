@@ -174,6 +174,10 @@ deref_struct    TC; yylval->int_value = DEREF_STRUCT_OP; return OPCODE;
 deref_array TC; yylval->int_value = DEREF_ARRAY_OP; return OPCODE;
 load_deref  TC; yylval->int_value = LD_DEREF_OP; return OPCODE;
 trace_ray   TC; yylval->int_value = TRACE_RAY_OP; return OPCODE;
+call_miss_shader   TC; yylval->int_value = CALL_MISS_SHADER_OP; return OPCODE;
+call_closest_hit_shader   TC; yylval->int_value = CALL_CLOSEST_HIT_SHADER_OP; return OPCODE;
+call_intersection_shader   TC; yylval->int_value = CALL_MISS_SHADER_OP; return OPCODE;
+call_any_hit_shader   TC; yylval->int_value = CALL_MISS_SHADER_OP; return OPCODE;
 image_deref_store   TC; yylval->int_value = IMG_DEREF_ST_OP; return OPCODE;
 store_deref TC; yylval->int_value = ST_DEREF_OP; return OPCODE;
 

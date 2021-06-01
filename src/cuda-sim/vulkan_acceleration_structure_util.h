@@ -24,13 +24,13 @@ GEN_RT_BVH_VEC3_unpack(struct GEN_RT_BVH_VEC3* dst,
                               uint8_t *data)
 {
    dst->X = *((float *)data);
-   data += sizeof(float);
+   data += 4;
 
    dst->Y = *((float *)data);
-   data += sizeof(float);
+   data += 4;
 
-   dst->Y = *((float *)data);
-   data += sizeof(float);
+   dst->Z = *((float *)data);
+   data += 4;
 
    return data;
 }
@@ -47,7 +47,7 @@ GEN_RT_BVH_unpack(struct GEN_RT_BVH* dst,
                               uint8_t *data)
 {
    dst->RootNodeOffset = *((uint64_t *)data);
-   data += sizeof(uint64_t);
+   data += 8;
 
    data = GEN_RT_BVH_VEC3_unpack(&(dst->BoundsMin), data);
    data = GEN_RT_BVH_VEC3_unpack(&(dst->BoundsMax), data);
@@ -87,7 +87,7 @@ GEN_RT_BVH_INTERNAL_NODE_unpack(struct GEN_RT_BVH_INTERNAL_NODE* dst,
    data = GEN_RT_BVH_VEC3_unpack(&(dst->Origin), data);
 
    dst->ChildOffset = *((int32_t *)data);
-   data += sizeof(int32_t);
+   data += 4;
 
    dst->NodeType = (uint32_t)(*data);
    data += 1;
@@ -268,8 +268,8 @@ GEN_RT_BVH_INSTANCE_LEAF_unpack(struct GEN_RT_BVH_INSTANCE_LEAF* dst,
       data += sizeof(float);
     }
 
-    dst->BVHAddress = *((uint64_t *)data) & (1 << 48 - 1);
-    data += 6;
+    dst->BVHAddress = *((uint64_t *)data);
+    data += 8;
 
     dst->InstanceID = *((uint32_t *)data);
     data += 4;
@@ -398,6 +398,47 @@ GEN_RT_BVH_QUAD_LEAF_unpack(struct GEN_RT_BVH_QUAD_LEAF* dst,
    return data;
 }
 
+#define GEN_RT_BVH_PROCEDURAL_LEAF_length     16
+struct GEN_RT_BVH_PROCEDURAL_LEAF {
+   struct GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR LeafDescriptor;
+   uint32_t                             NumPrimitives;
+   uint32_t                             LastPrimitive;
+   uint32_t                             PrimitiveIndex[13];
+};
+
+static uint8_t *
+GEN_RT_BVH_PROCEDURAL_LEAF_unpack(struct GEN_RT_BVH_PROCEDURAL_LEAF* dst,
+                              uint8_t *data)
+{
+   data = GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_unpack(&(dst->LeafDescriptor), data);
+
+   {
+      uint32_t temp = *((uint32_t *)data);
+      data += 4;
+
+      dst->NumPrimitives = temp & (1 << 4 - 1);
+      dst->LastPrimitive = temp >> 20;
+   }
+
+   for(int i = 0; i < 13; i++)
+   {
+      dst->PrimitiveIndex[i] = *((uint32_t *)data);
+      data += 4;
+   }
+
+   return data;
+}
+
+void set_child_bounds(struct GEN_RT_BVH_INTERNAL_NODE *node, int child, float3 *lo, float3 *hi)
+{
+   lo->x = node->Origin.X + ldexpf(node->ChildLowerXBound[child], node->ChildBoundsExponentX - 8);
+   lo->y = node->Origin.Y + ldexpf(node->ChildLowerYBound[child], node->ChildBoundsExponentY - 8);
+   lo->z = node->Origin.Z + ldexpf(node->ChildLowerZBound[child], node->ChildBoundsExponentZ - 8);
+
+   hi->x = node->Origin.X + ldexpf(node->ChildUpperXBound[child], node->ChildBoundsExponentX - 8);
+   hi->y = node->Origin.Y + ldexpf(node->ChildUpperYBound[child], node->ChildBoundsExponentY - 8);
+   hi->z = node->Origin.Z + ldexpf(node->ChildUpperZBound[child], node->ChildBoundsExponentZ - 8);
+}
 
 
 

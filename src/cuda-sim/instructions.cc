@@ -6644,7 +6644,6 @@ void load_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("###############  calling trace_ray from ptx.\n");
   // const operand_info &target = pI->func_addr();
   // const symbol *func_addr = target.get_symbol();
   // function_info *target_func = func_addr->get_pc();
@@ -6693,7 +6692,25 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
                    0,
                    {0, 0, 0},
                    0,
-                   0);
+                   0,
+                   pI,
+                   thread);
+}
+
+void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VulkanRayTracing::callMissShader(pI, thread);
+}
+
+void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VulkanRayTracing::callClosestHitShader(pI, thread);
+}
+
+void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VulkanRayTracing::callIntersectionShader(pI, thread);
+}
+
+void call_any_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VulkanRayTracing::callAnyHitShader(pI, thread);
 }
 
 void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {

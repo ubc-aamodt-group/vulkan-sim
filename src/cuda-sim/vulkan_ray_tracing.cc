@@ -83,10 +83,14 @@ float3 calculate_idir(float3 direction) {
 
     // Calculate inverse direction
     float3 idir;
+    // TODO: is this wrong?
     idir.x = 1.0f / (fabsf(direction.x) > ooeps ? direction.x : copysignf(ooeps, direction.x));
     idir.y = 1.0f / (fabsf(direction.y) > ooeps ? direction.y : copysignf(ooeps, direction.y));
     idir.z = 1.0f / (fabsf(direction.z) > ooeps ? direction.z : copysignf(ooeps, direction.z));
 
+    // idir.x = fabsf(direction.x) > ooeps ? 1.0f / direction.x : copysignf(ooeps, direction.x);
+    // idir.y = fabsf(direction.y) > ooeps ? 1.0f / direction.y : copysignf(ooeps, direction.y);
+    // idir.z = fabsf(direction.z) > ooeps ? 1.0f / direction.z : copysignf(ooeps, direction.z);
     return idir;
 }
 
@@ -122,7 +126,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                    float Tmin,
                    float3 direction,
                    float Tmax,
-                   int payload)
+                   int payload,
+                   const ptx_instruction *pI,
+                   ptx_thread_info *thread)
 {
 	assert(cullMask == 0xff);
 	assert(payload == 0);
@@ -130,6 +136,17 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
 	// Global memory
     // memory_space *mem=NULL;
     // mem = thread->get_global_memory();
+    Tmin = 0;
+    Tmax = 1000000;
+
+    origin.x = 0.5;
+    origin.y = 0.5;
+    origin.z = 0.5;
+
+    direction.x = -0.5;
+    direction.y = -0.5;
+    direction.z = -0.5;
+
 
 	// Create ray
 	Ray ray;
@@ -139,8 +156,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
 	VkAccelerationStructureBuildGeometryInfoKHR* pInfos;
 
 	// Get bottom-level AS
-    uint8_t* topLevelASAddr = (uint8_t *)get_anv_accel_address(topLevelAS);
-    GEN_RT_BVH topBVH;
+    uint8_t* topLevelASAddr = get_anv_accel_address(topLevelAS);
+    GEN_RT_BVH topBVH; //TODO: test hit with world before traversal
     GEN_RT_BVH_unpack(&topBVH, topLevelASAddr);
     
     uint8_t* topRootAddr = topLevelASAddr + topBVH.RootNodeOffset;
@@ -165,12 +182,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             float thit[6];
             for(int i = 0; i < 6; i++)
             {
-                float3 idir = calculate_idir(ray.get_direction());
-                float3 lo, hi;
-                lo = {node.ChildLowerXBound[i], node.ChildLowerYBound[i], node.ChildLowerYBound[i]}; //TODO: change this
-                hi = {node.ChildUpperXBound[i], node.ChildUpperYBound[i], node.ChildUpperZBound[i]};
+                if (node.ChildSize[i] > 0)
+                {
+                    float3 idir = calculate_idir(ray.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
+                    float3 lo, hi;
+                    set_child_bounds(&node, i, &lo, &hi);
 
-                child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+                    child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+                }
+                else
+                    child_hit[i] = false;
             }
 
             uint8_t *child_addr = node_addr + (node.ChildOffset * 64);
@@ -178,9 +199,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             {
                 if(child_hit[i])
                 {
-                    uint8_t *child_addr = node_addr + (node.ChildOffset * 64) * (i + 1);
                     if(node.ChildType[i] != NODE_TYPE_INTERNAL)
+                    {
+                        assert(node.ChildType[i] == NODE_TYPE_INSTANCE);
                         leaf_stack.push_back(child_addr);
+                    }
                     else
                     {
                         if(next_node_addr == 0)
@@ -189,6 +212,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                             traversal_stack.push_back(child_addr);
                     }
                 }
+                child_addr += node.ChildSize[i] * 64;
             }
 
             // Miss
@@ -202,20 +226,24 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                 traversal_stack.pop_back();
             }
         }
-    }
 
-    { // leaf nodes
-        // Set thit to max
-        float min_thit = ray.dir_tmax.w;
-        uint32_t min_geometry_id;
+        { // leaf nodes
+            // Set thit to max
+            float min_thit = ray.dir_tmax.w;
+            uint32_t min_geometry_id;
 
-        for (auto const& leaf_addr : leaf_stack)
-        {
-            GEN_RT_BVH_INSTANCE_LEAF leaf;
-            GEN_RT_BVH_INSTANCE_LEAF_unpack(&leaf, leaf_addr);
+            for (auto const& leaf_addr : leaf_stack)
+            {
+                GEN_RT_BVH_INSTANCE_LEAF leaf;
+                GEN_RT_BVH_INSTANCE_LEAF_unpack(&leaf, leaf_addr);
 
-            //TODO: apply transformation matrix
-            traversal_stack.push_back((uint8_t *)anv_address_map(*(struct anv_address *)(leaf.StartNodeAddress)));
+                //TODO: apply transformation matrix
+                assert(leaf.BVHAddress != NULL);
+                GEN_RT_BVH botLevelASAddr;
+                GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf.BVHAddress));
+                traversal_stack.push_back(((uint8_t *)(leaf.BVHAddress)) + botLevelASAddr.RootNodeOffset);
+            }
+            leaf_stack.clear();
         }
     }
 
@@ -240,21 +268,28 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             float thit[6];
             for(int i = 0; i < 6; i++)
             {
-                float3 idir = calculate_idir(ray.get_direction());
-                float3 lo, hi;
-                lo = {node.ChildLowerXBound[i], node.ChildLowerYBound[i], node.ChildLowerZBound[i]}; //TODO: change this
-                hi = {node.ChildUpperXBound[i], node.ChildUpperYBound[i], node.ChildUpperZBound[i]};
+                if (node.ChildSize[i] > 0)
+                {
+                    float3 idir = calculate_idir(ray.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
+                    float3 lo, hi;
+                    set_child_bounds(&node, i, &lo, &hi);
 
-                child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+                    child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+                }
+                else
+                    child_hit[i] = false;
             }
 
+            uint8_t *child_addr = node_addr + (node.ChildOffset * 64);
             for(int i = 0; i < 6; i++)
             {
                 if(child_hit[i])
                 {
-                    uint8_t *child_addr = node_addr + (node.ChildOffset * 64) * (i + 1);
                     if(node.ChildType[i] != NODE_TYPE_INTERNAL)
+                    {
+                        assert(node.ChildType[i] != NODE_TYPE_INSTANCE);
                         leaf_stack.push_back(child_addr);
+                    }
                     else
                     {
                         if(next_node_addr == 0)
@@ -263,6 +298,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                             traversal_stack.push_back(child_addr);
                     }
                 }
+                child_addr += node.ChildSize[i] * 64;
             }
 
             // Miss
@@ -284,38 +320,39 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
     {
         for (auto const& leaf_addr : leaf_stack)
         {
-            struct GEN_RT_BVH_QUAD_LEAF leaf;
-            GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
+            struct GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR leaf_descriptor;
+            GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_unpack(&leaf_descriptor, leaf_addr);
 
-            float3 p[3];
-            for(int i = 0; i < 3; i++)
+            if (leaf_descriptor.LeafType == TYPE_QUAD)
             {
-                p[i].x = leaf.QuadVertex[i].X;
-                p[i].y = leaf.QuadVertex[i].Y;
-                p[i].z = leaf.QuadVertex[i].Z;
+                struct GEN_RT_BVH_QUAD_LEAF leaf;
+                GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
+
+                float3 p[3];
+                for(int i = 0; i < 3; i++)
+                {
+                    p[i].x = leaf.QuadVertex[i].X;
+                    p[i].y = leaf.QuadVertex[i].Y;
+                    p[i].z = leaf.QuadVertex[i].Z;
+                }
+
+                // Triangle intersection algorithm
+                float thit;
+                bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], ray, &thit);
+
+                if(hit && thit < min_thit)
+                {
+                    min_thit = thit;
+                    min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
+                }
             }
-
-            // Triangle intersection algorithm
-            float thit;
-            bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], ray, &thit);
-
-            if(thit < min_thit)
+            else
             {
-                min_thit = thit;
-                min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
+                struct GEN_RT_BVH_PROCEDURAL_LEAF leaf;
+                GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, leaf_addr);
             }
         }
     }
-
-
-	if (min_thit != ray.get_tmax())
-	{
-		// Run closest hit shader
-	}
-	else
-	{
-		// Run miss shader
-	}
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)
@@ -367,11 +404,16 @@ static bool invoked = false;
 
 void VulkanRayTracing::registerShaders()
 {
-    // std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    // std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx",   std::ios::binary);
-    // dst << src.rdbuf();
-
-
+    // {
+    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx",   std::ios::binary);
+    //     dst << src.rdbuf();
+    // }
+    // {
+    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
+    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_0.ptx",   std::ios::binary);
+    //     dst << src.rdbuf();
+    // }
 
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
@@ -438,6 +480,12 @@ void VulkanRayTracing::registerShaders()
             context->register_function(fat_cubin_handle, "raygen_shader", "MESA_SHADER_RAYGEN_main");
         }
 
+        if (itr.find("MISS") != std::string::npos)
+        {
+            printf("############### registering %s\n", itr.c_str());
+            context->register_function(fat_cubin_handle, "miss_shader", "MESA_SHADER_MISS_main");
+        }
+
         source_num++;
         fat_cubin_handle++;
     }
@@ -489,4 +537,130 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     //     std::pair<size_t, unsigned> p = entry->get_param_config(i);
     //     cudaSetupArgumentInternal(args[i], p.first, p.second);
     // }
+}
+
+void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info *thread) {
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    function_info *entry = context->get_kernel("miss_shader");
+    callShader(pI, thread, entry);
+}
+
+void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread) {
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    function_info *entry = context->get_kernel("closest_hit_shader");
+    callShader(pI, thread, entry);
+}
+
+void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread) {
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    function_info *entry = context->get_kernel("intersection_shader");
+    callShader(pI, thread, entry);
+}
+
+void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread) {
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
+    function_info *entry = context->get_kernel("any_hit_shader");
+    callShader(pI, thread, entry);
+}
+
+void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *thread, function_info *target_func) {
+    static unsigned call_uid_next = 1;
+
+  if (target_func->is_pdom_set()) {
+    printf("GPGPU-Sim PTX: PDOM analysis already done for %s \n",
+           target_func->get_name().c_str());
+  } else {
+    printf("GPGPU-Sim PTX: finding reconvergence points for \'%s\'...\n",
+           target_func->get_name().c_str());
+    /*
+     * Some of the instructions like printf() gives the gpgpusim the wrong
+     * impression that it is a function call. As printf() doesnt have a body
+     * like functions do, doing pdom analysis for printf() causes a crash.
+     */
+    if (target_func->get_function_size() > 0) target_func->do_pdom();
+    target_func->set_pdom();
+  }
+
+  // check that number of args and return match function requirements
+  if (pI->has_return() ^ target_func->has_return()) {
+    printf(
+        "GPGPU-Sim PTX: Execution error - mismatch in number of return values "
+        "between\n"
+        "               call instruction and function declaration\n");
+    abort();
+  }
+  unsigned n_return = target_func->has_return();
+  unsigned n_args = target_func->num_args();
+  unsigned n_operands = pI->get_num_operands();
+
+  // TODO: why this fails?
+//   if (n_operands != (n_return + 1 + n_args)) {
+//     printf(
+//         "GPGPU-Sim PTX: Execution error - mismatch in number of arguements "
+//         "between\n"
+//         "               call instruction and function declaration\n");
+//     abort();
+//   }
+
+  // handle intrinsic functions
+//   std::string fname = target_func->get_name();
+//   if (fname == "vprintf") {
+//     gpgpusim_cuda_vprintf(pI, thread, target_func);
+//     return;
+//   }
+// #if (CUDART_VERSION >= 5000)
+//   // Jin: handle device runtime apis for CDP
+//   else if (fname == "cudaGetParameterBufferV2") {
+//     target_func->gpgpu_ctx->device_runtime->gpgpusim_cuda_getParameterBufferV2(
+//         pI, thread, target_func);
+//     return;
+//   } else if (fname == "cudaLaunchDeviceV2") {
+//     target_func->gpgpu_ctx->device_runtime->gpgpusim_cuda_launchDeviceV2(
+//         pI, thread, target_func);
+//     return;
+//   } else if (fname == "cudaStreamCreateWithFlags") {
+//     target_func->gpgpu_ctx->device_runtime->gpgpusim_cuda_streamCreateWithFlags(
+//         pI, thread, target_func);
+//     return;
+//   }
+// #endif
+
+  // read source arguements into register specified in declaration of function
+  arg_buffer_list_t arg_values;
+  copy_args_into_buffer_list(pI, thread, target_func, arg_values);
+
+  // record local for return value (we only support a single return value)
+  const symbol *return_var_src = NULL;
+  const symbol *return_var_dst = NULL;
+  if (target_func->has_return()) {
+    return_var_dst = pI->dst().get_symbol();
+    return_var_src = target_func->get_return_var();
+  }
+
+  gpgpu_sim *gpu = thread->get_gpu();
+  unsigned callee_pc = 0, callee_rpc = 0;
+  if (gpu->simd_model() == POST_DOMINATOR) {
+    thread->get_core()->get_pdom_stack_top_info(thread->get_hw_wid(),
+                                                &callee_pc, &callee_rpc);
+    assert(callee_pc == thread->get_pc());
+  }
+
+  thread->callstack_push(callee_pc + pI->inst_size(), callee_rpc,
+                         return_var_src, return_var_dst, call_uid_next++);
+
+  copy_buffer_list_into_frame(thread, arg_values);
+
+  thread->set_npc(target_func);
 }
