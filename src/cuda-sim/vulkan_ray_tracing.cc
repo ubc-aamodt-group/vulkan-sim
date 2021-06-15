@@ -39,6 +39,7 @@ VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
 uint32_t VulkanRayTracing::geometryCount = 0;
 VkAccelerationStructureKHR VulkanRayTracing::topLevelAS = NULL;
+std::vector<std::vector<Descriptor> > VulkanRayTracing::descriptors;
 
 float magic_max7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
 {
@@ -404,11 +405,11 @@ static bool invoked = false;
 
 void VulkanRayTracing::registerShaders()
 {
-    // {
-    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx",   std::ios::binary);
-    //     dst << src.rdbuf();
-    // }
+    {
+        std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+        std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx",   std::ios::binary);
+        dst << src.rdbuf();
+    }
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
     //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_0.ptx",   std::ios::binary);
@@ -663,4 +664,18 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
   copy_buffer_list_into_frame(thread, arg_values);
 
   thread->set_npc(target_func);
+}
+
+void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
+{
+    if(descriptors.size() <= setID)
+        descriptors.resize(setID + 1);
+    if(descriptors[setID].size() <= descID)
+        descriptors[setID].resize(descID + 1);
+    
+    descriptors[setID][descID].setID = setID;
+    descriptors[setID][descID].descID = descID;
+    descriptors[setID][descID].address = address;
+    descriptors[setID][descID].size = size;
+    descriptors[setID][descID].type = type;
 }

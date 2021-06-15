@@ -7,6 +7,13 @@
 #include "vulkan/anv_acceleration_structure.h"
 #include "vulkan/anv_public.h"
 
+// #define HAVE_PTHREAD
+// #define UTIL_ARCH_LITTLE_ENDIAN 1
+// #define UTIL_ARCH_BIG_ENDIAN 0
+// #include "util/u_endian.h"
+// #include "vulkan/anv_private.h"
+// #include "vk_object.h"
+
 #include "ptx_ir.h"
 //#include "vector-math.h"
 #include "../../libcuda/gpgpu_context.h"
@@ -16,6 +23,15 @@
 #define MIN_MAX(a,b,c) MAX(MIN((a), (b)), (c))
 #define MAX_MIN(a,b,c) MIN(MAX((a), (b)), (c))
 
+typedef struct Descriptor
+{
+    uint32_t setID;
+    uint32_t descID;
+    void *address;
+    uint32_t size;
+    VkDescriptorType type;
+} Descriptor;
+
 
 class VulkanRayTracing
 {
@@ -24,6 +40,7 @@ private:
     static VkAccelerationStructureGeometryKHR* pGeometries;
     static uint32_t geometryCount;
     static VkAccelerationStructureKHR topLevelAS;
+    static std::vector<std::vector<Descriptor> > descriptors;
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
@@ -64,6 +81,7 @@ public:
     static void callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

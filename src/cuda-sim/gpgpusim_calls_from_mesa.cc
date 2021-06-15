@@ -1,5 +1,5 @@
-#ifndef MESA_CALLS_H
-#define MESA_CALLS_H
+#ifndef GPGPUSIM_CALLS_FROM_MESA_CC
+#define GPGPUSIM_CALLS_FROM_MESA_CC
 
 #include "vulkan_ray_tracing.h"
 
@@ -39,4 +39,9 @@ extern "C" void gpgpusim_vkCmdTraceRaysKHR(
             is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
 }
 
-#endif /* MESA_CALLS_H */
+extern "C" void gpgpusim_setDescriptorSet(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
+{
+    VulkanRayTracing::setDescriptor(setID, descID, address, size, type);
+}
+
+#endif /* GPGPUSIM_CALLS_FROM_MESA_CC */
