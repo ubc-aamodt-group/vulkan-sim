@@ -131,8 +131,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                    const ptx_instruction *pI,
                    ptx_thread_info *thread)
 {
-	assert(cullMask == 0xff);
-	assert(payload == 0);
+    printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
+            rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
+	// assert(cullMask == 0xff);
+	// assert(payload == 0);
 
 	// Global memory
     // memory_space *mem=NULL;
@@ -380,6 +382,11 @@ bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray
     return true;
 }
 
+void VulkanRayTracing::load_descriptor(const ptx_instruction *pI, ptx_thread_info *thread)
+{
+
+}
+
 
 void VulkanRayTracing::setPipelineInfo(VkRayTracingPipelineCreateInfoKHR* pCreateInfos)
 {
@@ -405,11 +412,11 @@ static bool invoked = false;
 
 void VulkanRayTracing::registerShaders()
 {
-    {
-        std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-        std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx",   std::ios::binary);
-        dst << src.rdbuf();
-    }
+    // {
+    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    //     dst << src.rdbuf();
+    // }
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
     //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_0.ptx",   std::ios::binary);
@@ -523,11 +530,11 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     printf("vkCmdTraceRaysKHR\n");
     function_info *entry = context->get_kernel("raygen_shader");
-    printf("################ number of args = %d\n", entry->num_args());
+    // printf("################ number of args = %d\n", entry->num_args());
 
     gpgpu_ptx_sim_arg_list_t args;
     kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-      "raygen_shader", args, dim3(1, 1, 1), dim3(16, 1, 1),
+      "raygen_shader", args, dim3(1, 1, 1), dim3(1, 1, 1),
       context);
     
     struct CUstream_st *stream = 0;
@@ -678,4 +685,12 @@ void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *addr
     descriptors[setID][descID].address = address;
     descriptors[setID][descID].size = size;
     descriptors[setID][descID].type = type;
+}
+
+void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
+{
+    assert(setID < descriptors.size());
+    assert(descID < descriptors[setID].size());
+
+    return descriptors[setID][descID].address;
 }

@@ -60,6 +60,8 @@ public:
                        int payload,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
+    
+    static void load_descriptor(const ptx_instruction *pI, ptx_thread_info *thread);
 
     static void setPipelineInfo(VkRayTracingPipelineCreateInfoKHR* pCreateInfos);
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
@@ -82,6 +84,7 @@ public:
     static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
+    static void* getDescriptorAddress(uint32_t setID, uint32_t descID);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

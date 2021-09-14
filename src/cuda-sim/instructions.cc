@@ -984,6 +984,7 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("########## running inst at line %d\n", pI->source_line());
   ptx_reg_t src1_data, src2_data, data;
   int overflow = 0;
   int carry = 0;
@@ -3357,6 +3358,7 @@ void decode_space(memory_space_t &space, ptx_thread_info *thread,
 }
 
 void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("########## running inst at line %d\n", pI->source_line());
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
@@ -3369,6 +3371,7 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   memory_space *mem = NULL;
   addr_t addr = src1_data.u32;
+  char* addr64 = (char*) (src1_data.u64); // MRS_TODO: check how this changes other load instructions
 
   decode_space(space, thread, src1, mem, addr);
 
@@ -3377,10 +3380,13 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.u64 = 0;
   type_info_key::type_decode(type, size, t);
   if (!vector_spec) {
-    mem->read(addr, size / 8, &data.s64);
+    // mem->read(addr, size / 8, &data.s64); // MRS_TODO: this is the correct one needed
+    memcpy(&(data.s64), addr64, size / 8);
+    printf("float value = %f\n", *((float*)addr64));
     if (type == S16_TYPE || type == S32_TYPE) sign_extend(data, size, dst);
     thread->set_operand_value(dst, data, type, thread, pI);
   } else {
+    assert(0); //MRS_TODO: what happends here? turn this to 64 bit as well
     ptx_reg_t data1, data2, data3, data4;
     mem->read(addr, size / 8, &data1.s64);
     mem->read(addr + size / 8, size / 8, &data2.s64);
@@ -4118,6 +4124,7 @@ void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &src1 = pI->src1();
   unsigned i_type = pI->get_type();
   assert(src1.is_param_local() == 0);
+  ptx_reg_t symbolicReg = thread->get_reg(dst.get_symbol());
 
   if ((src1.is_vector() || dst.is_vector()) && (i_type != BB64_TYPE) &&
       (i_type != BB128_TYPE) && (i_type != FF64_TYPE)) {
@@ -4130,6 +4137,8 @@ void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
         nbits_to_move = 16;
         break;
       case B32_TYPE:
+      case U32_TYPE:
+      case F32_TYPE:
         nbits_to_move = 32;
         break;
       case B64_TYPE:
@@ -4176,7 +4185,11 @@ void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
           tmp_bits.u16 = data.u16;
           break;
         case B32_TYPE:
+        case U32_TYPE:
           tmp_bits.u32 = data.u32;
+          break;
+        case F32_TYPE:
+          tmp_bits.f32 = data.f32;
           break;
         case B64_TYPE:
           tmp_bits.u64 = data.u64;
@@ -4276,6 +4289,7 @@ void mul24_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void mul_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("########## running inst at line %d\n", pI->source_line());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -6607,12 +6621,45 @@ void video_mem_instruction(const ptx_instruction *pI, ptx_thread_info *thread, i
 }
 
 void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("");
-  inst_not_implemented(pI);
+  assert(pI->get_num_operands() == 3);
+  const operand_info &src0 = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+  uint32_t v[4];
+  v[0] = thread->get_tid().x;
+  v[1] = thread->get_tid().y;
+  v[2] = thread->get_tid().z;
+
+  ptx_reg_t data;
+  data.u32 = v[0];
+  thread->set_operand_value(src0, data, U32_TYPE, thread, pI);
+
+  data.u32 = v[1];
+  thread->set_operand_value(src1, data, U32_TYPE, thread, pI);
+
+  data.u32 = v[2];
+  thread->set_operand_value(src2, data, U32_TYPE, thread, pI);
 }
 
 void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  inst_not_implemented(pI);
+  assert(pI->get_num_operands() == 3);
+  const operand_info &src0 = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+  uint32_t v[4];
+  v[0] = thread->get_ntid().x;
+  v[1] = thread->get_ntid().y;
+  v[2] = thread->get_ntid().z;
+
+  ptx_reg_t data;
+  data.u32 = v[0];
+  thread->set_operand_value(src0, data, U32_TYPE, thread, pI);
+
+  data.u32 = v[1];
+  thread->set_operand_value(src1, data, U32_TYPE, thread, pI);
+
+  data.u32 = v[2];
+  thread->set_operand_value(src2, data, U32_TYPE, thread, pI);
 }
 
 void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -6620,11 +6667,21 @@ void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thre
 }
 
 void load_vulkan_descriptor_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  inst_not_implemented(pI);
+
+  ptx_reg_t src1_data, src2_data, data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+
+  src1_data = thread->get_operand_value(src1, dst, U32_TYPE, thread, 1);
+  src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 1);
+
+  data.u64 = (uint64_t)(VulkanRayTracing::getDescriptorAddress(src1_data.u32, src2_data.u32));
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void deref_var_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  inst_not_implemented(pI);
 }
 
 void deref_cast_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -6655,47 +6712,105 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 
   int arg = 0;
-  // const operand_info &op1 = pI->operand_lookup(arg);
-  // VkAccelerationStructureKHR *_topLevelAS = (VkAccelerationStructureKHR *)(op1.get_symbol()->get_address());
-
+  const operand_info &op1 = pI->operand_lookup(arg);
+  ptx_reg_t op1_data = thread->get_operand_value(op1, op1, B64_TYPE, thread, 1);
+  VkAccelerationStructureKHR *_topLevelAS = (VkAccelerationStructureKHR *)(op1_data.s64);
 
   arg++;
   const operand_info &op2 = pI->operand_lookup(arg);
-  uint rayFlags = (uint)(op2.get_int());
+  ptx_reg_t op2_data = thread->get_operand_value(op2, op2, F32_TYPE, thread, 1);
+  uint rayFlags = (uint)(op2_data.f32);
 
 
   arg++;
   const operand_info &op3 = pI->operand_lookup(arg);
-  uint cullMask = (uint)(op3.get_int());
+  ptx_reg_t op3_data = thread->get_operand_value(op3, op3, F32_TYPE, thread, 1);
+  uint cullMask = (uint)(op3_data.f32);
 
   arg++;
   const operand_info &op4 = pI->operand_lookup(arg);
-  uint sbtRecordOffset = (uint)(op4.get_int());
+  ptx_reg_t op4_data = thread->get_operand_value(op4, op4, F32_TYPE, thread, 1);
+  uint sbtRecordOffset = (uint)(op4_data.f32);
 
   arg++;
   const operand_info &op5 = pI->operand_lookup(arg);
-  uint sbtRecordStride = (uint)(op5.get_int());
+  ptx_reg_t op5_data = thread->get_operand_value(op5, op5, F32_TYPE, thread, 1);
+  uint sbtRecordStride = (uint)(op5_data.f32);
 
   arg++;
   const operand_info &op6 = pI->operand_lookup(arg);
-  uint missIndex = (uint)(op6.get_int());
+  ptx_reg_t op6_data = thread->get_operand_value(op6, op6, F32_TYPE, thread, 1);
+  uint missIndex = (uint)(op6_data.f32);
 
-  // Todo
-  // float3 origin
-  // float Tmin
-  // float3 direction
-  // float Tmax
-  // int payload
+  arg++;
+  const operand_info &op7 = pI->operand_lookup(arg);
+  ptx_reg_t op7_data = thread->get_operand_value(op7, op7, F32_TYPE, thread, 1);
+  float originX = op7_data.f32;
 
-  VulkanRayTracing::traceRay(NULL, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
-                   {0, 0, 0},
-                   0,
-                   {0, 0, 0},
-                   0,
-                   0,
+  arg++;
+  const operand_info &op8 = pI->operand_lookup(arg);
+  ptx_reg_t op8_data = thread->get_operand_value(op8, op8, F32_TYPE, thread, 1);
+  float originY = op8_data.f32;
+
+  arg++;
+  const operand_info &op9 = pI->operand_lookup(arg);
+  ptx_reg_t op9_data = thread->get_operand_value(op9, op9, F32_TYPE, thread, 1);
+  float originZ = op9_data.f32;
+
+  arg++;
+  const operand_info &op10 = pI->operand_lookup(arg);
+  ptx_reg_t op10_data = thread->get_operand_value(op10, op10, F32_TYPE, thread, 1);
+  float Tmin = op10_data.f32;
+
+  arg++;
+  const operand_info &op11 = pI->operand_lookup(arg);
+  ptx_reg_t op11_data = thread->get_operand_value(op11, op11, F32_TYPE, thread, 1);
+  float directionX = op11_data.f32;
+
+  arg++;
+  const operand_info &op12 = pI->operand_lookup(arg);
+  ptx_reg_t op12_data = thread->get_operand_value(op12, op12, F32_TYPE, thread, 1);
+  float directionY = op12_data.f32;
+
+  arg++;
+  const operand_info &op13 = pI->operand_lookup(arg);
+  ptx_reg_t op13_data = thread->get_operand_value(op13, op13, F32_TYPE, thread, 1);
+  float directionZ = op13_data.f32;
+
+  arg++;
+  const operand_info &op14 = pI->operand_lookup(arg);
+  ptx_reg_t op14_data = thread->get_operand_value(op14, op14, F32_TYPE, thread, 1);
+  float Tmax = op14_data.f32;
+
+  arg++;
+  const operand_info &op15 = pI->operand_lookup(arg);
+  ptx_reg_t op15_data = thread->get_operand_value(op15, op15, U32_TYPE, thread, 1);
+  uint32_t payload = op15_data.u32;
+
+
+  VulkanRayTracing::traceRay(_topLevelAS, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
+                   {originX, originY, originZ},
+                   Tmin,
+                   {directionX, directionY, directionZ},
+                   Tmax,
+                   payload,
                    pI,
                    thread);
 }
+
+// VkAccelerationStructureKHR* _topLevelAS,
+// uint rayFlags,
+// uint cullMask,
+// uint sbtRecordOffset,
+// uint sbtRecordStride,
+// uint missIndex,
+// float3 origin,
+// float Tmin,
+// float3 direction,
+// float Tmax,
+// int payload,
+// const ptx_instruction *pI,
+// ptx_thread_info *thread
 
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   VulkanRayTracing::callMissShader(pI, thread);
@@ -6719,4 +6834,19 @@ void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
 
 void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   inst_not_implemented(pI);
+}
+
+void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 2);
+  ptx_reg_t src1_data, data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+
+  src1_data = thread->get_operand_value(src1, dst, U32_TYPE, thread, 0);
+
+  // MRS_TODO: change this. needs to be allocated by gpgpusim memory modules
+  data.u64 = (uint64_t) malloc(src1_data.u32);
+
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
