@@ -6711,6 +6711,7 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // assert(n_args == 11);
 
 
+
   int arg = 0;
   const operand_info &op1 = pI->operand_lookup(arg);
   ptx_reg_t op1_data = thread->get_operand_value(op1, op1, B64_TYPE, thread, 1);
@@ -6787,6 +6788,7 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   ptx_reg_t op15_data = thread->get_operand_value(op15, op15, U32_TYPE, thread, 1);
   uint32_t payload = op15_data.u32;
 
+  thread->dump_regs(stdout);
 
   VulkanRayTracing::traceRay(_topLevelAS, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
                    {originX, originY, originZ},
@@ -6849,4 +6851,107 @@ void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.u64 = (uint64_t) malloc(src1_data.u32);
 
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
+}
+
+// wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3
+void wrap_32_4_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  ptx_reg_t src1_data, src2_data, src3_data, src4_data, data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+  const operand_info &src3 = pI->src3();
+  const operand_info &src4 = pI->src4();
+
+  src1_data = thread->get_operand_value(src1, dst, U32_TYPE, thread, 1);
+  src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 1);
+  src3_data = thread->get_operand_value(src3, dst, U32_TYPE, thread, 1);
+  src4_data = thread->get_operand_value(src4, dst, U32_TYPE, thread, 1);
+
+  data.u128.lowest = src1_data.u32;
+  data.u128.low = src2_data.u32;
+  data.u128.high = src3_data.u32;
+  data.u128.highest = src4_data.u32;
+
+  const symbol *name = dst.get_symbol();
+  thread->set_reg(name, data);
+  // thread->set_operand_value(dst, data, BB128_TYPE, thread, pI);
+}
+
+// unwrap_32_4 %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3, %ssa_0
+void unwrap_32_4_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  ptx_reg_t src_data, data1, data2, data3, data4;
+
+  const operand_info &dst1 = pI->operand_lookup(0);
+  const operand_info &dst2 = pI->operand_lookup(1);
+  const operand_info &dst3 = pI->operand_lookup(2);
+  const operand_info &dst4 = pI->operand_lookup(3);
+  const operand_info &src = pI->operand_lookup(4);
+
+  const symbol *name = src.get_symbol();
+  src_data = thread->get_reg(name);
+  // src_data = thread->get_operand_value(src, src, BB128_TYPE, thread, 1);
+
+  data1.u32 = src_data.u128.lowest;
+  data2.u32 = src_data.u128.low;
+  data3.u32 = src_data.u128.high;
+  data4.u32 = src_data.u128.highest;
+
+  thread->set_operand_value(dst1, data1, U32_TYPE, thread, pI);
+  thread->set_operand_value(dst2, data2, U32_TYPE, thread, pI);
+  thread->set_operand_value(dst3, data3, U32_TYPE, thread, pI);
+  thread->set_operand_value(dst4, data4, U32_TYPE, thread, pI);
+}
+
+// get_element_32 %ssa_0_1, %ssa_0, 1
+void get_element_32_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  ptx_reg_t src1_data, src2_data, data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+
+  const symbol *name = src1.get_symbol();
+  src1_data = thread->get_reg(name);
+  // src1_data = thread->get_operand_value(src1, dst, BB128_TYPE, thread, 1);
+  src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 1);
+
+  if(src2_data.u32 == 0)
+    data.u32 = src1_data.u128.lowest;
+  else if(src2_data.u32 == 1)
+    data.u32 = src1_data.u128.low;
+  else if(src2_data.u32 == 2)
+    data.u32 = src1_data.u128.high;
+  else if(src2_data.u32 == 3)
+    data.u32 = src1_data.u128.highest;
+  else
+    assert(0);
+
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+// set_element_32 %ssa_0, %ssa_0_1, 1
+void set_element_32_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  ptx_reg_t src1_data, src2_data, data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+
+  data = thread->get_operand_value(dst, dst, BB128_TYPE, thread, 1);
+  src1_data = thread->get_operand_value(src1, dst, U32_TYPE, thread, 1);
+  src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 1);
+
+  if(src2_data.u32 == 0)
+    data.u128.lowest = src1_data.u32;
+  else if(src2_data.u32 == 1)
+    data.u128.low = src1_data.u32;
+  else if(src2_data.u32 == 2)
+    data.u128.high = src1_data.u32;
+  else if(src2_data.u32 == 3)
+    data.u128.highest = src1_data.u32;
+  else
+    assert(0);
+  
+  thread->set_operand_value(dst, data, BB128_TYPE, thread, pI);
 }

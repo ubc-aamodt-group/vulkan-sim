@@ -574,7 +574,8 @@ void ptx_instruction::set_fp_or_int_archop() {
       (m_opcode == CALL_CLOSEST_HIT_SHADER_OP) || (m_opcode == LD_RAY_LAUNCH_ID_OP) ||
       (m_opcode == LD_RAY_LAUNCH_SIZE_OP) || (m_opcode == LD_VK_DESC_OP) ||
       (m_opcode == IMG_DEREF_ST_OP) || (m_opcode == RT_ALLOC_MEM_OP) ||
-      (m_opcode == DEREF_VAR_OP)) {
+      (m_opcode == DEREF_VAR_OP) || (m_opcode == WRAP_32_4_OP) || (m_opcode == UNWRAP_32_4_OP) ||
+      (m_opcode == GET_ELEMENT_32_OP) || (m_opcode == SET_ELEMENT_32_OP)) {
     // do nothing
   } else if ((m_opcode == CVT_OP || m_opcode == SET_OP ||
               m_opcode == SLCT_OP)) {
@@ -592,6 +593,7 @@ void ptx_instruction::set_fp_or_int_archop() {
       oprnd_type = INT_OP;
   }
 }
+
 void ptx_instruction::set_mul_div_or_other_archop() {
   sp_op = OTHER_OP;
   if ((m_opcode != MEMBAR_OP) && (m_opcode != SSY_OP) && (m_opcode != BRA_OP) &&
@@ -601,7 +603,8 @@ void ptx_instruction::set_mul_div_or_other_archop() {
       (m_opcode != CALL_CLOSEST_HIT_SHADER_OP) && (m_opcode != LD_RAY_LAUNCH_ID_OP) &&
       (m_opcode != LD_RAY_LAUNCH_SIZE_OP) && (m_opcode != LD_VK_DESC_OP) &&
       (m_opcode != IMG_DEREF_ST_OP) && (m_opcode != RT_ALLOC_MEM_OP) &&
-      (m_opcode != DEREF_VAR_OP)) {
+      (m_opcode != DEREF_VAR_OP) && (m_opcode != WRAP_32_4_OP) && (m_opcode != UNWRAP_32_4_OP) && 
+      (m_opcode != GET_ELEMENT_32_OP) && (m_opcode != SET_ELEMENT_32_OP)) {
     if (get_type() == F32_TYPE || get_type() == F64_TYPE ||
         get_type() == FF64_TYPE) {
       switch (get_opcode()) {

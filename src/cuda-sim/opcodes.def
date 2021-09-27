@@ -151,3 +151,7 @@ OP_DEF(CALL_ANY_HIT_SHADER_OP,call_any_hit_shader_impl,"call_any_hit_shader",0,1
 OP_DEF(IMG_DEREF_ST_OP,image_deref_store_impl,"image_deref_store",0,11)
 OP_DEF(ST_DEREF_OP,store_deref_impl,"store_deref",0,11)
 OP_DEF(RT_ALLOC_MEM_OP,rt_alloc_mem_impl,"rt_alloc_mem",0,11)
+OP_DEF(WRAP_32_4_OP,wrap_32_4_impl,"wrap_32_4",0,11)
+OP_DEF(UNWRAP_32_4_OP,unwrap_32_4_impl,"unwrap_32_4",0,11)
+OP_DEF(GET_ELEMENT_32_OP,get_element_32_impl,"get_element_32",0,11)
+OP_DEF(SET_ELEMENT_32_OP,set_element_32_impl,"set_element_32",0,11)

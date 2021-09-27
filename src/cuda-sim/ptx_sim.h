@@ -455,6 +455,18 @@ class ptx_thread_info {
   void popc_reduction(unsigned ctaid, unsigned barid, bool value) {
     m_core->popc_reduction(ctaid, barid, value);
   }
+  // void print_all_symbols() {
+  //   for(int i = 0; i < 1000; i++) {
+  //     std::string symbolName = "%ssa_" + std::to_string(i);
+  //     symbol* current_symbol = m_symbol_table->lookup(symbolName.c_str());
+  //     if(current_symbol == NULL) {
+  //       break;
+  //       exit(-1);
+  //     }
+  //     ptx_reg_t reg = get_reg(current_symbol);
+  //     fprintf("symbol %s: u32 = %d, u64 = %lld, f32 = %f, s32 = %d, s64 = %lld\n", symbolName, reg.u32, reg.u64, reg.f32, reg.s32, reg.s64);
+  //   }
+  // }
 
   // Jin: get corresponding kernel grid for CDP purpose
   kernel_info_t &get_kernel() { return m_kernel; }
