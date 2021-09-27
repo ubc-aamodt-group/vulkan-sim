@@ -532,6 +532,34 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     function_info *entry = context->get_kernel("raygen_shader");
     // printf("################ number of args = %d\n", entry->num_args());
 
+    if (entry->is_pdom_set()) {
+        printf("GPGPU-Sim PTX: PDOM analysis already done for %s \n",
+            entry->get_name().c_str());
+    } else {
+        printf("GPGPU-Sim PTX: finding reconvergence points for \'%s\'...\n",
+            entry->get_name().c_str());
+        /*
+        * Some of the instructions like printf() gives the gpgpusim the wrong
+        * impression that it is a function call. As printf() doesnt have a body
+        * like functions do, doing pdom analysis for printf() causes a crash.
+        */
+        if (entry->get_function_size() > 0) entry->do_pdom();
+        entry->set_pdom();
+    }
+
+    // check that number of args and return match function requirements
+    //if (pI->has_return() ^ entry->has_return()) {
+    //    printf(
+    //        "GPGPU-Sim PTX: Execution error - mismatch in number of return values "
+    //        "between\n"
+    //        "               call instruction and function declaration\n");
+    //    abort();
+    //}
+    unsigned n_return = entry->has_return();
+    unsigned n_args = entry->num_args();
+    //unsigned n_operands = pI->get_num_operands();
+
+
     gpgpu_ptx_sim_arg_list_t args;
     kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
       "raygen_shader", args, dim3(1, 1, 1), dim3(1, 1, 1),
