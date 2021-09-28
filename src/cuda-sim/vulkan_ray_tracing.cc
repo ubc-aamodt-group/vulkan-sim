@@ -699,7 +699,7 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
 
   gpgpu_sim *gpu = thread->get_gpu();
   unsigned callee_pc = 0, callee_rpc = 0;
-  if (gpu->simd_model() == POST_DOMINATOR) {
+  /*if (gpu->simd_model() == POST_DOMINATOR)*/ { //MRS_TODO: why this fails?
     thread->get_core()->get_pdom_stack_top_info(thread->get_hw_wid(),
                                                 &callee_pc, &callee_rpc);
     assert(callee_pc == thread->get_pc());

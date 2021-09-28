@@ -288,6 +288,13 @@ class ptx_version {
   unsigned m_ptx_extensions;
 };
 
+typedef struct Vulkan_RT_decleration_entry{
+  uint64_t type;
+  std::string name;
+  uint64_t address;
+  uint32_t size;
+} Vulkan_RT_decleration_entry;
+
 class ptx_thread_info {
  public:
   ~ptx_thread_info();
@@ -482,6 +489,7 @@ class ptx_thread_info {
   ptx_warp_info *m_warp_info;
   ptx_cta_info *m_cta_info;
   ptx_reg_t m_last_set_operand_value;
+  std::vector<Vulkan_RT_decleration_entry> Vulkan_RT_decleration_table;
 
  private:
   bool m_functionalSimulationMode;

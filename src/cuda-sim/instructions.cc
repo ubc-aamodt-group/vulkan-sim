@@ -6823,13 +6823,13 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 // ptx_thread_info *thread
 
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // VulkanRayTracing::callMissShader(pI, thread);
-  printf("calling miss shader\n");
+  VulkanRayTracing::callMissShader(pI, thread);
+  // printf("calling miss shader\n");
 }
 
 void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // VulkanRayTracing::callClosestHitShader(pI, thread);
-  printf("calling closest hit shader\n");
+  VulkanRayTracing::callClosestHitShader(pI, thread);
+  // printf("calling closest hit shader\n");
 }
 
 void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -6849,17 +6849,40 @@ void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(pI->get_num_operands() == 2);
-  ptx_reg_t src1_data, data;
+  assert(pI->get_num_operands() == 3);
+  ptx_reg_t src1_data, src2_data, data;
 
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
 
   src1_data = thread->get_operand_value(src1, dst, U32_TYPE, thread, 0);
+  src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 0);
 
-  // MRS_TODO: change this. needs to be allocated by gpgpusim memory modules
-  data.u64 = (uint64_t) malloc(src1_data.u32);
 
+  std::string name = dst.get_symbol()->name();
+  uint32_t size = src1_data.u32;
+  uint32_t type = src2_data.u32;
+  uint64_t address = NULL;
+  for (int i = 0; i < thread->Vulkan_RT_decleration_table.size(); i++) {
+    if (thread->Vulkan_RT_decleration_table[i].name == name) {
+      assert(thread->Vulkan_RT_decleration_table[i].size == size);
+      // assert(thread->Vulkan_RT_decleration_table[i].type == type);
+      address = thread->Vulkan_RT_decleration_table[i].address;
+      assert (address != NULL);
+    }
+  }
+  if (address == NULL) {
+    address = (uint64_t) malloc(src1_data.u32);
+    Vulkan_RT_decleration_entry entry;
+    entry.address = address;
+    entry.size = size;
+    entry.name = name;
+    entry.type = type;
+    thread->Vulkan_RT_decleration_table.push_back(entry);
+  }
+
+  data.u64 = address;
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
