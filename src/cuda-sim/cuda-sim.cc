@@ -751,6 +751,9 @@ void ptx_instruction::set_opcode_and_latency() {
   mem_op = NOT_TEX;
   initiation_interval = latency = 1;
   switch (m_opcode) {
+    case TRACE_RAY_OP:
+      op = RT_CORE_OP;
+      break;
     case MOV_OP:
       assert(!(has_memory_read() && has_memory_write()));
       if (has_memory_read()) op = LOAD_OP;

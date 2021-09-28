@@ -500,6 +500,12 @@ void VulkanRayTracing::registerShaders()
             context->register_function(fat_cubin_handle, "miss_shader", "MESA_SHADER_MISS_main");
         }
 
+        if (itr.find("CLOSEST") != std::string::npos)
+        {
+            printf("############### registering %s\n", itr.c_str());
+            context->register_function(fat_cubin_handle, "closest_hit_shader", "MESA_SHADER_CLOSEST_HIT_main");
+        }
+
         source_num++;
         fat_cubin_handle++;
     }
