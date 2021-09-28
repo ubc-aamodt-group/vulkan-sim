@@ -58,6 +58,7 @@ public:
                        float3 direction,
                        float Tmax,
                        int payload,
+                       uint32_t *hit_geometry,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
     

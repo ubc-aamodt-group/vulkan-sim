@@ -6788,6 +6788,10 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   ptx_reg_t op15_data = thread->get_operand_value(op15, op15, U32_TYPE, thread, 1);
   uint32_t payload = op15_data.u32;
 
+  arg++;
+  const operand_info &op16 = pI->operand_lookup(arg);
+  ptx_reg_t hit_geometry;
+
   thread->dump_regs(stdout);
 
   VulkanRayTracing::traceRay(_topLevelAS, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
@@ -6796,8 +6800,12 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
                    {directionX, directionY, directionZ},
                    Tmax,
                    payload,
+                   &(hit_geometry.u32),
                    pI,
                    thread);
+  
+
+  thread->set_operand_value(op16, hit_geometry, U32_TYPE, thread, pI);
 }
 
 // VkAccelerationStructureKHR* _topLevelAS,
@@ -6815,11 +6823,13 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 // ptx_thread_info *thread
 
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  VulkanRayTracing::callMissShader(pI, thread);
+  // VulkanRayTracing::callMissShader(pI, thread);
+  printf("calling miss shader\n");
 }
 
 void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  VulkanRayTracing::callClosestHitShader(pI, thread);
+  // VulkanRayTracing::callClosestHitShader(pI, thread);
+  printf("calling closest hit shader\n");
 }
 
 void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {

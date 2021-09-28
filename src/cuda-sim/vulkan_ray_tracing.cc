@@ -128,6 +128,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                    float3 direction,
                    float Tmax,
                    int payload,
+                   uint32_t *hit_geometry,
                    const ptx_instruction *pI,
                    ptx_thread_info *thread)
 {
@@ -139,16 +140,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
 	// Global memory
     // memory_space *mem=NULL;
     // mem = thread->get_global_memory();
-    Tmin = 0;
-    Tmax = 1000000;
+    // Tmin = 0;
+    // Tmax = 1000000;
 
-    origin.x = 0.5;
-    origin.y = 0.5;
-    origin.z = 0.5;
+    // origin.x = 0.5;
+    // origin.y = 0.5;
+    // origin.z = 0.5;
 
-    direction.x = -0.5;
-    direction.y = -0.5;
-    direction.z = -0.5;
+    // direction.x = -0.5;
+    // direction.y = -0.5;
+    // direction.z = -0.5;
 
 
 	// Create ray
@@ -356,6 +357,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             }
         }
     }
+
+    if (min_thit < ray.dir_tmax.w)
+        *hit_geometry = 1;
+    else
+        *hit_geometry = 0;
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)
