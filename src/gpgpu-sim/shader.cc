@@ -124,6 +124,9 @@ void shader_core_ctx::create_front_pipeline() {
     if (m_config->gpgpu_num_int_units > 0)
       assert(m_config->gpgpu_num_sched_per_core ==
              m_pipeline_reg[ID_OC_INT].get_size());
+    if (m_config->gpgpu_num_rt_core_units > 0)
+      assert(m_config->gpgpu_num_sched_per_core == 
+             m_pipeline_reg[ID_OC_RT].get_size());
   }
 
   m_threadState = (thread_ctx_t *)calloc(sizeof(thread_ctx_t),
@@ -187,7 +190,7 @@ void shader_core_ctx::create_schedulers() {
             m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
             &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
             &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
-            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], &m_pipeline_reg[ID_OC_RT], m_specilized_dispatch_reg,
             &m_pipeline_reg[ID_OC_MEM], i));
         break;
       case CONCRETE_SCHEDULER_TWO_LEVEL_ACTIVE:
@@ -195,7 +198,7 @@ void shader_core_ctx::create_schedulers() {
             m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
             &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
             &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
-            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], &m_pipeline_reg[ID_OC_RT], m_specilized_dispatch_reg,
             &m_pipeline_reg[ID_OC_MEM], i, m_config->gpgpu_scheduler_string));
         break;
       case CONCRETE_SCHEDULER_GTO:
@@ -203,7 +206,7 @@ void shader_core_ctx::create_schedulers() {
             m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
             &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
             &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
-            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], &m_pipeline_reg[ID_OC_RT], m_specilized_dispatch_reg,
             &m_pipeline_reg[ID_OC_MEM], i));
         break;
       case CONCRETE_SCHEDULER_OLDEST_FIRST:
@@ -211,7 +214,7 @@ void shader_core_ctx::create_schedulers() {
             m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
             &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
             &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
-            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], &m_pipeline_reg[ID_OC_RT], m_specilized_dispatch_reg,
             &m_pipeline_reg[ID_OC_MEM], i));
         break;
       case CONCRETE_SCHEDULER_WARP_LIMITING:
@@ -219,7 +222,7 @@ void shader_core_ctx::create_schedulers() {
             m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
             &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
             &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
-            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], &m_pipeline_reg[ID_OC_RT], m_specilized_dispatch_reg,
             &m_pipeline_reg[ID_OC_MEM], i, m_config->gpgpu_scheduler_string));
         break;
       default:
@@ -269,6 +272,10 @@ void shader_core_ctx::create_exec_pipeline() {
     if (m_config->gpgpu_num_int_units > 0) {
       in_ports.push_back(&m_pipeline_reg[ID_OC_INT]);
       out_ports.push_back(&m_pipeline_reg[OC_EX_INT]);
+    }
+    if (m_config->gpgpu_num_rt_core_units > 0) {
+      in_ports.push_back(&m_pipeline_reg[ID_OC_RT]);
+      out_ports.push_back(&m_pipeline_reg[OC_EX_RT]);
     }
     if (m_config->m_specialized_unit.size() > 0) {
       for (unsigned j = 0; j < m_config->m_specialized_unit.size(); ++j) {
@@ -371,7 +378,7 @@ void shader_core_ctx::create_exec_pipeline() {
       m_config->gpgpu_num_sp_units + m_config->gpgpu_num_dp_units +
       m_config->gpgpu_num_sfu_units + m_config->gpgpu_num_tensor_core_units +
       m_config->gpgpu_num_int_units + m_config->m_specialized_unit_num +
-      1;  // sp_unit, sfu, dp, tensor, int, ldst_unit
+      1 + 1;  // sp_unit, sfu, dp, tensor, int, rt_unit, ldst_unit
   // m_dispatch_port = new enum pipeline_stage_name_t[ m_num_function_units ];
   // m_issue_port = new enum pipeline_stage_name_t[ m_num_function_units ];
 
@@ -416,7 +423,13 @@ void shader_core_ctx::create_exec_pipeline() {
       m_issue_port.push_back(m_config->m_specialized_unit[j].OC_EX_SPEC_ID);
     }
   }
-
+  
+  
+  m_rt_unit = new rt_unit(m_icnt, m_mem_fetch_allocator, this, m_config, m_stats, m_sid, m_tpc);
+  m_fu.push_back(m_rt_unit);
+  m_dispatch_port.push_back(ID_OC_RT);
+  m_issue_port.push_back(OC_EX_RT);
+  
   m_ldst_unit = new ldst_unit(m_icnt, m_mem_fetch_allocator, this,
                               &m_operand_collector, m_scoreboard, m_config,
                               m_memory_config, m_stats, m_sid, m_tpc);
@@ -641,15 +654,13 @@ void shader_core_stats::print(FILE *fout) const {
       gpu_stall_shd_mem_breakdown[G_MEM_LD][COAL_STALL] +
           gpu_stall_shd_mem_breakdown[G_MEM_ST][COAL_STALL] +
           gpu_stall_shd_mem_breakdown[L_MEM_LD][COAL_STALL] +
-          gpu_stall_shd_mem_breakdown[L_MEM_ST]
-                                     [COAL_STALL]);  // coalescing stall + bank
+          gpu_stall_shd_mem_breakdown[L_MEM_ST][COAL_STALL]);  // coalescing stall + bank
                                                      // conflict at data cache
   fprintf(fout, "gpgpu_stall_shd_mem[gl_mem][data_port_stall] = %d\n",
           gpu_stall_shd_mem_breakdown[G_MEM_LD][DATA_PORT_STALL] +
               gpu_stall_shd_mem_breakdown[G_MEM_ST][DATA_PORT_STALL] +
               gpu_stall_shd_mem_breakdown[L_MEM_LD][DATA_PORT_STALL] +
-              gpu_stall_shd_mem_breakdown[L_MEM_ST]
-                                         [DATA_PORT_STALL]);  // data port stall
+              gpu_stall_shd_mem_breakdown[L_MEM_ST][DATA_PORT_STALL]);  // data port stall
                                                               // at data cache
   // fprintf(fout, "gpgpu_stall_shd_mem[g_mem_ld][mshr_rc] = %d\n",
   // gpu_stall_shd_mem_breakdown[G_MEM_LD][MSHR_RC_FAIL]); fprintf(fout,
@@ -1227,6 +1238,20 @@ void scheduler_unit::cycle() {
                 warp_inst_issued = true;
                 previous_issued_inst_exec_type = exec_unit_type_t::MEM;
               }
+            } else if (pI->op == RT_CORE_OP) {
+              assert(m_shader->m_config->gpgpu_num_rt_core_units > 0);
+              if (m_rt_core_out->has_free(m_shader->m_config->sub_core_model, m_id)
+                  && !(diff_exec_units && 
+                        previous_issued_inst_exec_type == exec_unit_type_t::RT)) {
+
+                  m_shader->issue_warp(*m_rt_core_out, pI, active_mask,
+                                       warp_id, m_id);
+                  issued++;
+                  issued_inst = true;
+                  warp_inst_issued = true;
+                  previous_issued_inst_exec_type = exec_unit_type_t::RT;              
+              }
+
             } else {
               bool sp_pipe_avail =
                   (m_shader->m_config->gpgpu_num_sp_units > 0) &&
@@ -1540,11 +1565,11 @@ swl_scheduler::swl_scheduler(shader_core_stats *stats, shader_core_ctx *shader,
                              std::vector<shd_warp_t *> *warp,
                              register_set *sp_out, register_set *dp_out,
                              register_set *sfu_out, register_set *int_out,
-                             register_set *tensor_core_out,
+                             register_set *tensor_core_out, register_set *rt_core_out,
                              std::vector<register_set *> &spec_cores_out,
                              register_set *mem_out, int id, char *config_string)
     : scheduler_unit(stats, shader, scoreboard, simt, warp, sp_out, dp_out,
-                     sfu_out, int_out, tensor_core_out, spec_cores_out, mem_out,
+                     sfu_out, int_out, tensor_core_out, rt_core_out, spec_cores_out, mem_out,
                      id) {
   unsigned m_prioritization_readin;
   int ret = sscanf(config_string, "warp_limiting:%d:%d",
@@ -1710,6 +1735,10 @@ void ldst_unit::get_L1C_sub_stats(struct cache_sub_stats &css) const {
 void ldst_unit::get_L1T_sub_stats(struct cache_sub_stats &css) const {
   if (m_L1T) m_L1T->get_sub_stats(css);
 }
+void rt_unit::get_L0C_sub_stats(struct cache_sub_stats &css) const {
+  if (m_L0_complet) m_L0_complet->get_sub_stats(css);
+}
+
 
 void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst) {
 #if 0
@@ -2207,6 +2236,14 @@ void tensor_core::active_lanes_in_pipeline() {
   m_core->incfumemactivelanes_stat(active_count);
 }
 
+void rt_unit::active_lanes_in_pipeline() {
+  unsigned active_count = pipelined_simd_unit::get_active_lanes_in_pipeline();
+  assert(active_count <= m_core->get_config()->warp_size);
+  m_core->incsfuactivelanes_stat(active_count);
+  m_core->incfuactivelanes_stat(active_count);
+  m_core->incfumemactivelanes_stat(active_count);
+}
+
 sp_unit::sp_unit(register_set *result_port, const shader_core_config *config,
                  shader_core_ctx *core)
     : pipelined_simd_unit(result_port, config, config->max_sp_latency, core) {
@@ -2317,6 +2354,418 @@ void pipelined_simd_unit::issue(register_set &source_reg) {
         simd_function_unit::issue(source_reg);
     }
 */
+
+rt_unit::rt_unit(mem_fetch_interface *icnt,
+                     shader_core_mem_fetch_allocator *mf_allocator,
+                     shader_core_ctx *core,
+                     const shader_core_config *config,
+                     shader_core_stats *stats,
+                     unsigned sid, unsigned tpc)
+    : pipelined_simd_unit(NULL, config, (unsigned int)1, core) { // rt_unit::cycle() overrides the max latency hard coded here
+    
+  // m_memory_config = mem_config;
+  m_icnt = icnt;
+  m_mf_allocator = mf_allocator;  
+  m_core = core;
+  // m_operand_collector = operand_collector;
+  // m_scoreboard = scoreboard;
+  m_stats = stats;
+  m_sid = sid;
+  m_tpc = tpc;
+  
+  n_warps = 0;
+  
+  m_L0_complet = new read_only_cache( "L0Complet", m_config->m_L0C_config, m_sid,
+                                      get_shader_constant_cache_id(), icnt, 
+                                      IN_L1C_MISS_QUEUE);
+                                
+  //m_ray_predictor = new ray_predictor(m_sid, m_config->m_rt_predictor_config, m_core);
+
+  m_mem_rc = NO_RC_FAIL;
+  m_name = "RT_CORE";
+  
+}
+
+
+bool rt_unit::can_issue(const warp_inst_t &inst) const {
+  switch (inst.op) {
+    case RT_CORE_OP:
+      break;
+    default:
+      return false;
+  }
+  if (n_warps >= (m_config->m_rt_max_warps)) return false;
+  return m_dispatch_reg->empty() && !occupied.test(inst.latency);
+}
+        
+void rt_unit::issue(register_set &reg_set) {
+  warp_inst_t *inst = *(reg_set.get_ready());
+  inst->op_pipe = MEM__OP;
+  pipelined_simd_unit::issue(reg_set);
+}
+
+void rt_unit::cycle() {
+  
+  // Copy ldst unit injection mechanism
+  warp_inst_t &pipe_reg = *m_dispatch_reg;
+  enum mem_stage_stall_type rc_fail = NO_RC_FAIL;
+  mem_stage_access_type type;
+  
+  occupied >>=1;
+  
+  // Cycle intersection tests
+  for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+    (it->second).dec_thread_latency();
+  }
+  
+  // Check memory request responses
+  if (!m_response_fifo.empty()) {
+    
+    mem_fetch *mf = m_response_fifo.front();
+    new_addr_type addr = mf->get_addr();
+    
+    // Update MF
+    mf->set_status(IN_SHADER_FETCHED,
+                   m_core->get_gpu()->gpu_sim_cycle +
+                   m_core->get_gpu()->gpu_tot_sim_cycle);
+                
+    // Update cache
+    if (!m_config->bypassL0Complet) {
+      m_L0_complet->fill( mf, m_core->get_gpu()->gpu_sim_cycle +
+                        m_core->get_gpu()->gpu_tot_sim_cycle);
+    }
+                        
+    m_response_fifo.pop_front();
+
+    // If more than 1 warp in RT unit:
+    if (m_config->m_rt_max_warps > 0) {
+      // Clear all warps if coalesced
+      if (m_config->m_rt_coalesce_warps) {
+        unsigned requester_thread_found = 0;
+        pipe_reg.clear_mem_fetch_wait(mf->get_addr());
+        if (!m_config->m_rt_lock_threads) {
+          requester_thread_found += pipe_reg.clear_rt_awaiting_threads(mf->get_addr(), 'f');
+        }
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+          (it->second).clear_mem_fetch_wait(mf->get_addr());
+          if (!m_config->m_rt_lock_threads) {
+            requester_thread_found += (it->second).clear_rt_awaiting_threads(mf->get_addr(), 'f');
+          }
+        }
+
+        // Make sure at least one thread accepted the response. (Other threads might still be completing intersection test)
+        if (requester_thread_found == 0) {
+          // Might occur in warp coalescing in rare cases when multiple requests were sent, but only 1 was necessary
+          printf("Requester not found for: 0x%x\n", mf->get_addr());
+        }
+      } 
+      
+      else if (!m_config->bypassL0Complet){
+        // Check MSHR for all accessed to this address
+        std::list<mem_fetch *> response_mf = m_L0_complet->probe_mshr(mf->get_addr());
+        
+        unsigned requester_thread_found = 0;
+        for (auto it=response_mf.begin(); it!=response_mf.end(); ++it) {
+          mem_fetch* response = *it;
+          // Check all the warps
+          for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+            if (it->second.warp_id() == response->get_wid()) {
+              it->second.clear_mem_fetch_wait(mf->get_addr());
+              if (!m_config->m_rt_lock_threads) {
+                if (requester_thread_found > 0) {
+                  requester_thread_found += it->second.clear_rt_awaiting_threads(mf->get_addr(), 'm');
+                }
+                else {
+                  requester_thread_found += it->second.clear_rt_awaiting_threads(mf->get_addr(), 'f');
+                }
+              }
+            }
+          }
+        }
+        
+        // Make sure at least one thread accepted the response. (Other threads might still be completing intersection test)
+        if (requester_thread_found == 0) {
+          printf("Requester not found for: 0x%x\n", mf->get_addr());
+        }
+      }
+      
+      else {
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+          if (it->second.warp_id() == mf->get_wid()) {
+            it->second.clear_mem_fetch_wait(mf->get_addr());
+            if (!m_config->m_rt_lock_threads) it->second.clear_rt_awaiting_threads(mf->get_addr(), 'f');
+          }
+        }
+      }
+    } 
+    else {
+      // Clear response from list of in flight mem accesses
+      pipe_reg.clear_mem_fetch_wait(mf->get_addr());
+      if (!m_config->m_rt_lock_threads) pipe_reg.clear_rt_awaiting_threads(mf->get_addr(), 'f');
+    }   
+    
+    // Reservation fails stats tracking
+    m_reservation_fails.erase(mf->get_uncoalesced_addr());
+  }
+    
+  writeback();
+  
+  // Cycle caches
+  m_L0_complet->cycle();
+  
+  bool done = true;
+  warp_inst_t rt_inst;
+  
+  m_cache_hit_counter = 0;
+
+  done &= memory_cycle(rt_inst, rc_fail, type);
+  m_mem_rc = rc_fail;
+  
+  if (!done && !rt_inst.empty()) {
+    // Move unconditionally to m_current_warps
+    m_current_warps[rt_inst.get_uid()] = rt_inst;
+    rt_inst.clear();
+    return;
+  }
+
+  // If "done" (no more mem accesses)
+  if (!rt_inst.empty() && !rt_inst.mem_fetch_wait(m_config->m_rt_lock_threads)) {
+    // pipe_reg = rt_inst;
+    unsigned warp_id = rt_inst.warp_id();
+    assert(rt_inst.is_load());
+    assert(rt_inst.space.get_type() == global_space);
+
+    // Skip checking for pending writes (no WAW hazard?)
+   
+    m_core->warp_inst_complete(rt_inst);
+    // RT-CORE NOTE check if this is still needed
+    // m_scoreboard->releaseRegisters(m_dispatch_reg);
+    
+    m_core->dec_inst_in_pipeline(warp_id);
+    
+    // Track number of warps in RT core
+    assert(n_warps >= 0);
+    rt_inst.clear();
+  }
+  
+}
+
+bool rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type) {
+  if (inst.empty()) {
+    if (m_config->m_rt_max_warps > 0) {
+      // Check awaiting warps to see if any are ready
+      if (m_current_warps.empty()) return true;
+      else {
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+          if (!((it->second).mem_fetch_wait(m_config->m_rt_lock_threads))) { 
+            inst = it->second;
+            // inst.set_rt_warp_cycle();
+            unsigned warp_id = it->first;
+            m_current_warps.erase(it);
+            break;
+          }
+        }
+        // Return if none are ready
+        if (inst.empty()) return true;
+      }
+    } else {
+      return true;
+    }
+  }
+
+  
+  if (!inst.active_count()) return true;
+  assert(inst.space.get_type() == global_space);
+  
+  // If waiting for responses, don't send new requests
+  if (inst.mem_fetch_wait(m_config->m_rt_lock_threads)) return inst.rt_mem_accesses_empty();
+  
+  // If MSHR is at the "limit" don't sent new requests
+  if (m_config->m_rt_max_warps > 0 && m_L0_complet->num_mshr_entries() > m_config->m_rt_max_mshr_entries) return inst.rt_mem_accesses_empty();
+  
+  mem_stage_stall_type fail;
+  fail = process_memory_access_queue(m_L0_complet, inst);
+  
+  // Stalled
+  if (fail != NO_RC_FAIL) {
+    rc_fail = fail;
+    fail_type = RT_C_MEM;
+  }
+  
+  // Done if no more rt mem accesses
+  return inst.rt_mem_accesses_empty();
+}
+
+
+void rt_unit::writeback() {
+  while (m_L0_complet->access_ready()) {
+    mem_fetch *mf = m_L0_complet->next_access();
+    // m_next_wb = mf->get_inst();
+    delete mf;
+    // serviced_client = next_client;
+  }
+}
+
+
+void rt_unit::coalesce_warp_requests(mem_access_t access) {
+  // Get address
+  new_addr_type addr = access.get_addr();
+  // Check all warps in rt core
+  for(auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+    warp_inst_t &inst = it->second;
+    std::set<new_addr_type> addr_set = inst.get_rt_accesses();
+    // Mark as sent if matching address found
+    if (addr_set.find(addr) != addr_set.end()) {
+      inst.clear_rt_access(addr);
+      inst.set_mem_fetch_wait(addr);
+    }
+  }
+}
+
+
+void rt_unit::track_warp_mem_accesses(warp_inst_t &inst) {
+  bool mem_inserted = false;
+  
+  // Add currently selected warp's accesses
+  inst.fill_next_rt_mem_access(m_config->m_rt_lock_threads);
+  
+  // Add all other warp's accesses
+  for(auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+    warp_inst_t &inst = it->second;
+    inst.fill_next_rt_mem_access(m_config->m_rt_lock_threads);
+    std::set<new_addr_type> warp_accesses = inst.get_rt_accesses();
+    for (auto it=warp_accesses.begin(); it!=warp_accesses.end(); ++it) {
+      new_addr_type addr = *it;
+      new_addr_type block_addr = addr & ~(32 - 1);
+      inst.clear_rt_access(addr);
+      inst.set_mem_fetch_wait(block_addr);
+    }
+  }
+}
+
+mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_inst_t &inst) {
+  mem_stage_stall_type result = NO_RC_FAIL;
+  if (inst.rt_mem_accesses_empty()) return result;
+  
+  if (!cache->data_port_free()) return DATA_PORT_STALL;
+
+  mem_fetch *mf;
+  
+  mem_access_t access = inst.get_next_rt_mem_access(m_config->m_rt_lock_threads);
+  
+  // Attempt to coalesce memory accesses between multiple warps
+  if (m_config->m_rt_coalesce_warps) {
+    coalesce_warp_requests(access);
+  }
+  
+  // Access cache
+  mf = m_mf_allocator->alloc(
+    inst, access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
+  ); 
+    
+  enum cache_request_status status;
+  std::list<cache_event> events;
+  
+  if (m_config->bypassL0Complet) {
+    // bypass L1 cache
+    unsigned control_size = 8;
+    unsigned size = mf->get_access_size() + control_size;
+    // printf("Interconnect:Addr: %x, size=%d\n",access.get_addr(),size);
+    if (m_icnt->full(size, inst.is_store() || inst.isatomic())) {
+      result = ICNT_RC_FAIL;
+    } else {
+      m_icnt->push(mf);
+      return result;
+    }
+  }
+  
+  else {
+    status = cache->access(
+      mf->get_addr(), mf,
+      m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle,
+      events
+    );
+  }
+  
+  // Stalled
+  if (status == RESERVATION_FAIL || result == ICNT_RC_FAIL) {
+
+    m_reservation_fails.insert(mf->get_uncoalesced_addr());
+    
+    // Address already in MSHR, but MSHR entry is full
+    if (!m_L0_complet->probe_mshr(mf->get_addr()).empty()) {
+      
+      // If using warp coalescing, this is irrelevant
+      if (m_config->m_rt_coalesce_warps) {
+        printf("0x%x\n", mf->get_addr());
+      }
+      
+      // Otherwise, the request cannot be handled this cycle
+      else {
+        inst.undo_rt_access(mf->get_addr());
+      }
+    }
+    else {
+      // Remove from m_mf_awaiting_response 
+      inst.undo_rt_access(mf->get_addr());
+    }
+  }
+  
+  if (result == ICNT_RC_FAIL) return result;
+  
+  return process_cache_access(cache, mf->get_addr(), inst, events, mf, status);
+}
+
+mem_stage_stall_type rt_unit::process_cache_access(
+    cache_t *cache, new_addr_type address, warp_inst_t &inst,
+    std::list<cache_event> &events, mem_fetch *mf,
+    enum cache_request_status status) {
+      
+    mem_stage_stall_type result = NO_RC_FAIL;
+    
+    // Assume no writes sent
+    
+    if (status == HIT) {
+      m_cache_hit_counter++;
+      inst.clear_mem_fetch_wait(address);
+      unsigned found = 0;
+      if (!m_config->m_rt_lock_threads) {
+        found += inst.clear_rt_awaiting_threads(address, 'h');
+      }
+      if (m_config->m_rt_coalesce_warps) {
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+          (it->second).clear_mem_fetch_wait(address);
+          if (!m_config->m_rt_lock_threads) {
+            if (found > 0) {
+              (it->second).clear_rt_awaiting_threads(address, 'c');
+            }
+            else {
+              (it->second).clear_rt_awaiting_threads(address, 'h');
+            }
+          }
+        }
+      }
+      
+      delete mf;
+      
+    } else if (status == RESERVATION_FAIL) {
+      result = BK_CONF;
+      delete mf;
+    } else {
+      assert(status == MISS);
+    }
+    
+    if (!inst.rt_mem_accesses_empty() && result == NO_RC_FAIL) result = COAL_STALL;
+    return result;
+}
+
+void rt_unit::fill(mem_fetch *mf) {
+  // RT-CORE NOTE: Add a new status (IN_SHADER_RT_RESPONSE_FIFO)
+  mf->set_status(
+      IN_SHADER_LDST_RESPONSE_FIFO,
+      m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle);
+  m_response_fifo.push_back(mf);
+}
 
 void ldst_unit::init(mem_fetch_interface *icnt,
                      shader_core_mem_fetch_allocator *mf_allocator,
@@ -2600,7 +3049,8 @@ void ldst_unit::cycle() {
             m_next_global = mf;
           }
         } else {
-          if (m_L1D->fill_port_free()) {
+          // Do not pop ray trace mf from response fifo
+          if (!(mf->israytrace()) && m_L1D->fill_port_free()) {
             m_L1D->fill(mf, m_core->get_gpu()->gpu_sim_cycle +
                                 m_core->get_gpu()->gpu_tot_sim_cycle);
             m_response_fifo.pop_front();
@@ -2885,6 +3335,35 @@ void gpgpu_sim::shader_print_cache_stats(FILE *fout) const {
     fprintf(fout, "\tL1T_total_cache_reservation_fails = %llu\n",
             total_css.res_fails);
   }
+  
+  // L0C
+  if (!m_shader_config->m_L0C_config.disabled()) {
+    total_css.clear();
+    css.clear();
+    fprintf(fout, "L0_Complet_Cache:\n");
+    for (unsigned i = 0; i < m_shader_config->n_simt_clusters; ++i) {
+      m_cluster[i]->get_L0C_sub_stats(css);
+
+      fprintf(stdout,
+              "\tL0C_cache_core[%d]: Access = %llu, Miss = %llu, Miss_rate = "
+              "%.3lf, Pending_hits = %llu, Reservation_fails = %llu\n",
+              i, css.accesses, css.misses,
+              (double)css.misses / (double)css.accesses, css.pending_hits,
+              css.res_fails);
+
+      total_css += css;
+    }
+    fprintf(fout, "\tL0C_total_cache_accesses = %llu\n", total_css.accesses);
+    fprintf(fout, "\tL0C_total_cache_misses = %llu\n", total_css.misses);
+    if (total_css.accesses > 0) {
+      fprintf(fout, "\tL0C_total_cache_miss_rate = %.4lf\n",
+              (double)total_css.misses / (double)total_css.accesses);
+    }
+    fprintf(fout, "\tL0C_total_cache_pending_hits = %llu\n",
+            total_css.pending_hits);
+    fprintf(fout, "\tL0C_total_cache_reservation_fails = %llu\n",
+            total_css.res_fails);
+  }
 }
 
 void gpgpu_sim::shader_print_l1_miss_stat(FILE *fout) const {
@@ -3106,6 +3585,93 @@ void ldst_unit::print(FILE *fout) const {
        i != m_response_fifo.end(); i++) {
     const mem_fetch *mf = *i;
     mf->print(fout);
+  }
+}
+
+void rt_unit::print(FILE *fout) const {
+  // Issued instruction
+  fprintf(fout, "%s dispatch (%d warps)\n", m_name.c_str(), n_warps);
+  if (m_dispatch_reg->m_is_raytrace) {
+    fprintf(fout, "%d ", m_dispatch_reg->mem_fetch_wait(m_config->m_rt_lock_threads));
+  }
+  fprintf(fout, "uid:%5d ", m_dispatch_reg->get_uid());
+  m_dispatch_reg->print(fout);
+  
+  // RT Core Warps
+  fprintf(fout, "RT Core Warps: (%d warps)\n", m_current_warps.size());
+  for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+    warp_inst_t inst = it->second;
+    fprintf(fout, "%d uid:%5d ", inst.mem_fetch_wait(m_config->m_rt_lock_threads), it->first);
+    inst.print(fout);
+    fprintf(fout, "Latency Delay: [");
+    for (unsigned i=0; i<m_config->warp_size; i++) {
+      fprintf(fout, "%4d", inst.get_thread_latency(i));
+    }
+    fprintf(fout, "]\n");
+    fprintf(fout, "Thread Length: [");
+    for (unsigned i=0; i<m_config->warp_size; i++) {
+      fprintf(fout, "%4d", inst.mem_list_length(i));
+    }
+    fprintf(fout, "]\n");
+  }
+  
+  // Current Memory Accesses
+  m_L0_complet->display_state(fout);
+  
+  // Response FIFO
+  fprintf(fout, "RT response FIFO (occupancy = %zu):\n", m_response_fifo.size());
+  for (std::list<mem_fetch *>::const_iterator i = m_response_fifo.begin();
+       i != m_response_fifo.end(); i++) {
+    const mem_fetch *mf = *i;
+    mf->print(fout);
+  }
+}
+
+void shader_core_ctx::display_rt_pipeline(FILE *fout, int mask) const{
+  fprintf(fout, "=================================================\n");
+  fprintf(fout, "shader %u at cycle %Lu+%Lu (%u threads running)\n", m_sid,
+          m_gpu->gpu_tot_sim_cycle, m_gpu->gpu_sim_cycle, m_not_completed);
+  fprintf(fout, "=================================================\n");
+  
+  dump_warp_state(fout);
+  fprintf(fout, "\n");
+
+  m_L1I->display_state(fout);
+
+  fprintf(fout, "IF/ID       = ");
+  if (!m_inst_fetch_buffer.m_valid)
+    fprintf(fout, "bubble\n");
+  else {
+    fprintf(fout, "w%2u : pc = 0x%x, nbytes = %u\n",
+            m_inst_fetch_buffer.m_warp_id, m_inst_fetch_buffer.m_pc,
+            m_inst_fetch_buffer.m_nbytes);
+  }
+  fprintf(fout, "\nibuffer status:\n");
+  for (unsigned i = 0; i < m_config->max_warps_per_shader; i++) {
+    if (!m_warp[i]->ibuffer_empty()) m_warp[i]->print_ibuffer(fout);
+  }
+  fprintf(fout, "\n");
+  display_simt_state(fout, mask);
+  fprintf(fout, "-------------------------- Scoreboard\n");
+  m_scoreboard->printContents();
+  fprintf(fout, "-------------------------- OP COL\n");
+  m_operand_collector.dump(fout);
+  fprintf(fout, "-------------------------- Pipe Regs\n");   
+  
+  fprintf(fout, "--- %s ---\n", pipeline_stage_name_decode[ID_OC_RT]);
+  print_stage(ID_OC_RT, fout);
+  fprintf(fout, "\n");
+  fprintf(fout, "--- %s ---\n", pipeline_stage_name_decode[OC_EX_RT]);
+  print_stage(OC_EX_RT, fout);
+  fprintf(fout, "\n");
+  
+  fprintf(fout, "-------------------------- Fu\n");
+  for (unsigned n = 0; n < m_num_function_units; n++) {
+    std::string fu_name = m_fu[n]->get_name();
+    if (fu_name == "RT_CORE") {
+      m_fu[n]->print(fout);
+      fprintf(fout, "---------------\n");
+    }
   }
 }
 
@@ -3721,7 +4287,11 @@ bool shader_core_ctx::ldst_unit_response_buffer_full() const {
 }
 
 void shader_core_ctx::accept_ldst_unit_response(mem_fetch *mf) {
-  m_ldst_unit->fill(mf);
+  // Go to rt_unit
+  if (mf->israytrace()) m_rt_unit->fill(mf);
+  
+  // Go to ldst_unit
+  else m_ldst_unit->fill(mf);
 }
 
 void shader_core_ctx::store_ack(class mem_fetch *mf) {
@@ -3742,6 +4312,14 @@ void shader_core_ctx::get_cache_stats(cache_stats &cs) {
   m_ldst_unit->get_cache_stats(cs);  // Get L1D, L1C, L1T stats
 }
 
+void shader_core_ctx::get_rt_cache_stats(cache_stats &cs) {
+  m_rt_unit->get_cache_stats(cs);
+}
+
+void shader_core_ctx::reset_rt_stats() {
+  m_rt_unit->reset_rt_stats();
+}
+
 void shader_core_ctx::get_L1I_sub_stats(struct cache_sub_stats &css) const {
   if (m_L1I) m_L1I->get_sub_stats(css);
 }
@@ -3753,6 +4331,9 @@ void shader_core_ctx::get_L1C_sub_stats(struct cache_sub_stats &css) const {
 }
 void shader_core_ctx::get_L1T_sub_stats(struct cache_sub_stats &css) const {
   m_ldst_unit->get_L1T_sub_stats(css);
+}
+void shader_core_ctx::get_L0C_sub_stats(struct cache_sub_stats &css) const {
+  m_rt_unit->get_L0C_sub_stats(css);
 }
 
 void shader_core_ctx::get_icnt_power_stats(long &n_simt_to_mem,
@@ -4162,6 +4743,9 @@ void simt_core_cluster::print_not_completed(FILE *fp) const {
     unsigned not_completed = m_core[i]->get_not_completed();
     unsigned sid = m_config->cid_to_sid(i, m_cluster_id);
     fprintf(fp, "%u(%u) ", sid, not_completed);
+    if (not_completed > 0) {
+      display_rt_pipeline(sid, stdout, 0x40 & 0x2E);
+    }
   }
 }
 
@@ -4369,6 +4953,10 @@ void simt_core_cluster::display_pipeline(unsigned sid, FILE *fout,
   }
 }
 
+void simt_core_cluster::display_rt_pipeline(unsigned sid, FILE *fout, int mask) const {
+  m_core[m_config->sid_to_cid(sid)]->display_rt_pipeline(fout, mask);
+}
+
 void simt_core_cluster::print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                                           unsigned &dl1_misses) const {
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
@@ -4390,6 +4978,18 @@ void simt_core_cluster::get_icnt_stats(long &n_simt_to_mem,
 void simt_core_cluster::get_cache_stats(cache_stats &cs) const {
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
     m_core[i]->get_cache_stats(cs);
+  }
+
+}
+void simt_core_cluster::get_rt_cache_stats(cache_stats &cs) const {
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    m_core[i]->get_rt_cache_stats(cs);
+  }
+}
+
+void simt_core_cluster::reset_rt_stats() {
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    m_core[i]->reset_rt_stats();
   }
 }
 
@@ -4433,6 +5033,17 @@ void simt_core_cluster::get_L1T_sub_stats(struct cache_sub_stats &css) const {
   total_css.clear();
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
     m_core[i]->get_L1T_sub_stats(temp_css);
+    total_css += temp_css;
+  }
+  css = total_css;
+}
+void simt_core_cluster::get_L0C_sub_stats(struct cache_sub_stats &css) const {
+  struct cache_sub_stats temp_css;
+  struct cache_sub_stats total_css;
+  temp_css.clear();
+  total_css.clear();
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    m_core[i]->get_L0C_sub_stats(temp_css);
     total_css += temp_css;
   }
   css = total_css;

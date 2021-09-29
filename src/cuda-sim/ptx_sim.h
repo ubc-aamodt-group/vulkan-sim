@@ -302,6 +302,7 @@ class ptx_thread_info {
     m_hw_wid = wid;
     m_hw_tid = tid;
     m_functionalSimulationMode = fsim;
+    m_raytrace_intersect = 0;
   }
 
   void ptx_fetch_inst(inst_t &inst) const;
@@ -458,6 +459,15 @@ class ptx_thread_info {
 
   // Jin: get corresponding kernel grid for CDP purpose
   kernel_info_t &get_kernel() { return m_kernel; }
+  
+  void add_raytrace_mem_access(addr_t addr) { m_raytrace_mem_accesses.push_back(addr); }
+  void add_ray_intersect() { m_raytrace_intersect = 1; }
+  void add_ray_properties(Ray ray) { m_ray = ray; }
+  void set_node_start(addr_t node_start) { m_node_start = node_start; }
+  void set_tri_start(addr_t tri_start) { m_tri_start = tri_start; }
+  void set_num_nodes_accessed(addr_t num_nodes_accessed) { m_num_nodes_accessed = num_nodes_accessed; }
+  void set_num_triangles_accessed(addr_t num_triangles_accessed) {
+    m_num_triangles_accessed = num_triangles_accessed; }
 
  public:
   addr_t m_last_effective_address;
@@ -513,6 +523,14 @@ class ptx_thread_info {
   bool m_enable_debug_trace;
 
   std::stack<class operand_info, std::vector<operand_info> > m_breakaddrs;
+  
+  std::deque<new_addr_type> m_raytrace_mem_accesses;
+  unsigned m_raytrace_intersect;
+  Ray m_ray;
+  addr_t m_node_start;
+  addr_t m_tri_start;
+  int m_num_nodes_accessed;
+  int m_num_triangles_accessed;
 };
 
 addr_t generic_to_local(unsigned smid, unsigned hwtid, addr_t addr);

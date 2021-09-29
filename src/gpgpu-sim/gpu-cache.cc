@@ -48,8 +48,8 @@ const char *cache_request_status_str(enum cache_request_status status) {
 
 const char *cache_fail_status_str(enum cache_reservation_fail_reason status) {
   static const char *static_cache_reservation_fail_reason_str[] = {
-      "LINE_ALLOC_FAIL", "MISS_QUEUE_FULL", "MSHR_ENRTY_FAIL",
-      "MSHR_MERGE_ENRTY_FAIL", "MSHR_RW_PENDING"};
+      "LINE_ALLOC_FAIL", "MISS_QUEUE_FULL", "MSHR_ENTRY_FAIL",
+      "MSHR_MERGE_ENTRY_FAIL", "MSHR_RW_PENDING"};
 
   assert(sizeof(static_cache_reservation_fail_reason_str) /
              sizeof(const char *) ==
@@ -526,6 +526,7 @@ bool mshr_table::full(new_addr_type block_addr) const {
 
 /// Add or merge this access
 void mshr_table::add(new_addr_type block_addr, mem_fetch *mf) {
+  assert(mf != NULL); //if (mf == NULL) return; TIMING_TODO: WHY bug?
   m_data[block_addr].m_list.push_back(mf);
   assert(m_data.size() <= m_num_entries);
   assert(m_data[block_addr].m_list.size() <= m_max_merged);
@@ -589,6 +590,10 @@ void mshr_table::display(FILE *fp) const {
       fprintf(fp, " no memory requests???\n");
     }
   }
+}
+
+std::list<mem_fetch*> mshr_table::get_mf_list(new_addr_type block_addr) {
+  return m_data[block_addr].m_list;
 }
 /***************************************************************** Caches
  * *****************************************************************/
@@ -1146,9 +1151,9 @@ void baseline_cache::send_read_request(new_addr_type addr,
 
     do_miss = true;
   } else if (mshr_hit && !mshr_avail)
-    m_stats.inc_fail_stats(mf->get_access_type(), MSHR_MERGE_ENRTY_FAIL);
+    m_stats.inc_fail_stats(mf->get_access_type(), MSHR_MERGE_ENTRY_FAIL);
   else if (!mshr_hit && !mshr_avail)
-    m_stats.inc_fail_stats(mf->get_access_type(), MSHR_ENRTY_FAIL);
+    m_stats.inc_fail_stats(mf->get_access_type(), MSHR_ENTRY_FAIL);
   else
     assert(0);
 }
@@ -1259,9 +1264,9 @@ enum cache_request_status data_cache::wr_miss_wa_naive(
     if (miss_queue_full(2))
       m_stats.inc_fail_stats(mf->get_access_type(), MISS_QUEUE_FULL);
     else if (mshr_hit && !mshr_avail)
-      m_stats.inc_fail_stats(mf->get_access_type(), MSHR_MERGE_ENRTY_FAIL);
+      m_stats.inc_fail_stats(mf->get_access_type(), MSHR_MERGE_ENTRY_FAIL);
     else if (!mshr_hit && !mshr_avail)
-      m_stats.inc_fail_stats(mf->get_access_type(), MSHR_ENRTY_FAIL);
+      m_stats.inc_fail_stats(mf->get_access_type(), MSHR_ENTRY_FAIL);
     else
       assert(0);
 
@@ -1372,9 +1377,9 @@ enum cache_request_status data_cache::wr_miss_wa_fetch_on_write(
       if (miss_queue_full(1))
         m_stats.inc_fail_stats(mf->get_access_type(), MISS_QUEUE_FULL);
       else if (mshr_hit && !mshr_avail)
-        m_stats.inc_fail_stats(mf->get_access_type(), MSHR_MERGE_ENRTY_FAIL);
+        m_stats.inc_fail_stats(mf->get_access_type(), MSHR_MERGE_ENTRY_FAIL);
       else if (!mshr_hit && !mshr_avail)
-        m_stats.inc_fail_stats(mf->get_access_type(), MSHR_ENRTY_FAIL);
+        m_stats.inc_fail_stats(mf->get_access_type(), MSHR_ENTRY_FAIL);
       else
         assert(0);
 

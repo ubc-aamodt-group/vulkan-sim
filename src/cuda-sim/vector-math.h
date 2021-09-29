@@ -28,6 +28,16 @@ float3 operator*(float3 a, float3 b)
     return make_float3(a.x * b.x, a.y * b.y, a.z * b.z);
 }
 
+float3 operator*(float3 a, float s)
+{
+    return make_float3(a.x * s, a.y * s, a.z * s);
+}
+
+float3 operator*(float s, float3 a)
+{
+    return make_float3(a.x * s, a.y * s, a.z * s);
+}
+
 // Cross Product
 float3 cross(float3 a, float3 b)
 {

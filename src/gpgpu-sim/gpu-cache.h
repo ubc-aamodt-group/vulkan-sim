@@ -55,8 +55,8 @@ enum cache_request_status {
 enum cache_reservation_fail_reason {
   LINE_ALLOC_FAIL = 0,  // all line are reserved
   MISS_QUEUE_FULL,      // MISS queue (i.e. interconnect or DRAM) is full
-  MSHR_ENRTY_FAIL,
-  MSHR_MERGE_ENRTY_FAIL,
+  MSHR_ENTRY_FAIL,
+  MSHR_MERGE_ENTRY_FAIL,
   MSHR_RW_PENDING,
   NUM_CACHE_RESERVATION_FAIL_STATUS
 };
@@ -914,7 +914,9 @@ class mshr_table {
   void display(FILE *fp) const;
   // Returns true if there is a pending read after write
   bool is_read_after_write_pending(new_addr_type block_addr);
-
+  std::list<mem_fetch *> get_mf_list(new_addr_type block_addr);
+  unsigned num_entries() const { return m_data.size(); }
+  
   void check_mshr_parameters(unsigned num_entries, unsigned max_merged) {
     assert(m_num_entries == num_entries &&
            "Change of MSHR parameters between kernels is not allowed");
@@ -1180,6 +1182,17 @@ class baseline_cache : public cache_t {
   void invalidate() { m_tag_array->invalidate(); }
   void print(FILE *fp, unsigned &accesses, unsigned &misses) const;
   void display_state(FILE *fp) const;
+  
+  std::list<mem_fetch*> probe_mshr(new_addr_type block_addr) { 
+    if (m_mshrs.probe(block_addr))
+      return m_mshrs.get_mf_list(block_addr);
+    else 
+      return {};
+  }
+  
+  unsigned num_mshr_entries() {
+    return m_mshrs.num_entries();
+  }
 
   // Stat collection
   const cache_stats &get_stats() const { return m_stats; }
