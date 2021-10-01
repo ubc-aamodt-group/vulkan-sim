@@ -320,7 +320,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
 
     // Set thit to max
     float min_thit = ray.dir_tmax.w;
-    uint32_t min_geometry_id;
+    struct GEN_RT_BVH_QUAD_LEAF closest_leaf;
     {
         for (auto const& leaf_addr : leaf_stack)
         {
@@ -347,7 +347,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                 if(hit && thit < min_thit)
                 {
                     min_thit = thit;
-                    min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
+                    closest_leaf = leaf;
+                    // min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
                 }
             }
             else
@@ -359,9 +360,29 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
     }
 
     if (min_thit < ray.dir_tmax.w)
+    {
         *hit_geometry = 1;
+        thread->RT_thread_data->hit_geometry = 1;
+        thread->RT_thread_data->closest_hit.geometry_id = closest_leaf.LeafDescriptor.GeometryIndex;
+        float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
+        thread->RT_thread_data->closest_hit.intersection_point = intersection_point;
+
+        float3 p[3];
+        for(int i = 0; i < 3; i++)
+        {
+            p[i].x = closest_leaf.QuadVertex[i].X;
+            p[i].y = closest_leaf.QuadVertex[i].Y;
+            p[i].z = closest_leaf.QuadVertex[i].Z;
+        }
+        float3 barycentric = Barycentric(intersection_point, p[0], p[1], p[2]);
+        thread->RT_thread_data->closest_hit.barycentric_coordinates = barycentric;
+        thread->RT_thread_data->set_hitAttribute(barycentric);
+    }
     else
+    {
         *hit_geometry = 0;
+        thread->RT_thread_data->hit_geometry = 1;
+    }
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)
@@ -386,6 +407,25 @@ bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray
 
     *thit = dot(v0v2, qvec) * idet;
     return true;
+}
+
+float3 VulkanRayTracing::Barycentric(float3 p, float3 a, float3 b, float3 c)
+{
+    //source: https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
+    float3 v0 = b - a;
+    float3 v1 = c - a;
+    float3 v2 = p - a;
+    float d00 = dot(v0, v0);
+    float d01 = dot(v0, v1);
+    float d11 = dot(v1, v1);
+    float d20 = dot(v2, v0);
+    float d21 = dot(v2, v1);
+    float denom = d00 * d11 - d01 * d01;
+    float v = (d11 * d20 - d01 * d21) / denom;
+    float w = (d00 * d21 - d01 * d20) / denom;
+    float u = 1.0f - v - w;
+
+    return {u, v, w};
 }
 
 void VulkanRayTracing::load_descriptor(const ptx_instruction *pI, ptx_thread_info *thread)
@@ -735,25 +775,25 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
     return descriptors[setID][descID].address;
 }
 
-variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
-{
-    std::vector<variable_decleration_entry>& table = thread->RT_thread_data->variable_decleration_table;
-    for (int i = 0; i < table.size(); i++) {
-        if (table[i].name == name) {
-            assert (table[i].address != NULL);
-            return &(table[i]);
-        }
-    }
-    return NULL;
-}
+// variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
+// {
+//     std::vector<variable_decleration_entry>& table = thread->RT_thread_data->variable_decleration_table;
+//     for (int i = 0; i < table.size(); i++) {
+//         if (table[i].name == name) {
+//             assert (table[i].address != NULL);
+//             return &(table[i]);
+//         }
+//     }
+//     return NULL;
+// }
 
-void VulkanRayTracing::add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread)
-{
-    variable_decleration_entry entry;
+// void VulkanRayTracing::add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread)
+// {
+//     variable_decleration_entry entry;
 
-    entry.type = type;
-    entry.name = name;
-    entry.address = address;
-    entry.size = size;
-    thread->RT_thread_data->variable_decleration_table.push_back(entry);
-}
+//     entry.type = type;
+//     entry.name = name;
+//     entry.address = address;
+//     entry.size = size;
+//     thread->RT_thread_data->variable_decleration_table.push_back(entry);
+// }

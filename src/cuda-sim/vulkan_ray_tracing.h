@@ -39,9 +39,70 @@ typedef struct variable_decleration_entry{
   uint32_t size;
 } variable_decleration_entry;
 
+typedef struct Hit_data{
+    uint32_t geometry_id;
+    float3 intersection_point;
+    float3 barycentric_coordinates;
+} Hit_data;
+
 
 struct Vulkan_RT_thread_data{
     std::vector<variable_decleration_entry> variable_decleration_table;
+    bool hit_geometry;
+    Hit_data closest_hit;
+
+    variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
+        if(type == 8192)
+            return get_hitAttribute();
+        
+        for (int i = 0; i < variable_decleration_table.size(); i++) {
+            if (variable_decleration_table[i].name == name) {
+                assert (variable_decleration_table[i].address != NULL);
+                return &(variable_decleration_table[i]);
+            }
+        }
+        return NULL;
+    }
+
+    uint64_t add_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
+        variable_decleration_entry entry;
+        entry.type = type;
+        entry.name = name;
+        entry.address = (uint64_t) malloc(size);;
+        entry.size = size;
+        variable_decleration_table.push_back(entry);
+
+        return entry.address;
+    }
+
+    variable_decleration_entry* get_hitAttribute() {
+        variable_decleration_entry* hitAttribute = NULL;
+        for (int i = 0; i < variable_decleration_table.size(); i++) {
+            if (variable_decleration_table[i].type == 8192) {
+                assert (variable_decleration_table[i].address != NULL);
+                assert (hitAttribute == NULL); // There should be only 1 hitAttribute
+                hitAttribute = &(variable_decleration_table[i]);
+            }
+        }
+        return hitAttribute;
+    }
+
+    void set_hitAttribute(float3 barycentric) {
+        variable_decleration_entry* hitAttribute = get_hitAttribute();
+        float* address;
+        if(hitAttribute == NULL) {
+            address = (float*)add_variable_decleration_entry(8192, "attribs", 12);
+        }
+        else {
+            assert (hitAttribute->type == 8192);
+            assert (hitAttribute->address != NULL);
+            // hitAttribute->name = name;
+            address = (float*)(hitAttribute->address);
+        }
+        address[0] = barycentric.x;
+        address[1] = barycentric.y;
+        address[2] = barycentric.z;
+    }
 };
 
 class VulkanRayTracing
@@ -55,6 +116,7 @@ private:
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
+    static float3 Barycentric(float3 p, float3 a, float3 b, float3 c);
 
 public:
     static void traceRay( // called by raygen shader
@@ -98,8 +160,8 @@ public:
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t descID);
 
-    static variable_decleration_entry* get_variable_decleration_entry(std::string name, ptx_thread_info *thread);
-    static void add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread);
+    // static variable_decleration_entry* get_variable_decleration_entry(std::string name, ptx_thread_info *thread);
+    // static void add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */
