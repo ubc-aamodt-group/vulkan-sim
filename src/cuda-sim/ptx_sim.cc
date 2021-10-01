@@ -35,6 +35,7 @@ typedef void *yyscan_t;
 #include "../gpgpu-sim/gpu-sim.h"
 #include "../gpgpu-sim/shader.h"
 #include "ptx.tab.h"
+#include "vulkan_ray_tracing.h"
 
 void feature_not_implemented(const char *f);
 
@@ -145,6 +146,7 @@ void ptx_warp_info::reset_done_threads() { m_done_threads = 0; }
 
 ptx_thread_info::~ptx_thread_info() {
   m_gpu->gpgpu_ctx->func_sim->g_ptx_thread_info_delete_count++;
+  delete RT_thread_data;
 }
 
 ptx_thread_info::ptx_thread_info(kernel_info_t &kernel) : m_kernel(kernel) {
@@ -184,6 +186,8 @@ ptx_thread_info::ptx_thread_info(kernel_info_t &kernel) : m_kernel(kernel) {
   m_local_mem_stack_pointer = 0;
   m_gpu = NULL;
   m_last_set_operand_value = ptx_reg_t();
+  
+  RT_thread_data = new Vulkan_RT_thread_data;
 }
 
 const ptx_version &ptx_thread_info::get_ptx_version() const {

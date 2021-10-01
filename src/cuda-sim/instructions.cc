@@ -6864,22 +6864,16 @@ void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   uint32_t size = src1_data.u32;
   uint32_t type = src2_data.u32;
   uint64_t address = NULL;
-  for (int i = 0; i < thread->Vulkan_RT_decleration_table.size(); i++) {
-    if (thread->Vulkan_RT_decleration_table[i].name == name) {
-      assert(thread->Vulkan_RT_decleration_table[i].size == size);
-      // assert(thread->Vulkan_RT_decleration_table[i].type == type);
-      address = thread->Vulkan_RT_decleration_table[i].address;
-      assert (address != NULL);
-    }
-  }
-  if (address == NULL) {
+  
+  variable_decleration_entry* variable_decleration = VulkanRayTracing::get_variable_decleration_entry(name, thread);
+  if (variable_decleration != NULL) {
+    address = variable_decleration->address;
+    assert(variable_decleration->size == size);
+    assert (address != NULL);
+  } 
+  else {
     address = (uint64_t) malloc(src1_data.u32);
-    Vulkan_RT_decleration_entry entry;
-    entry.address = address;
-    entry.size = size;
-    entry.name = name;
-    entry.type = type;
-    thread->Vulkan_RT_decleration_table.push_back(entry);
+    VulkanRayTracing::add_variable_decleration_entry(type, name, address, size, thread);
   }
 
   data.u64 = address;

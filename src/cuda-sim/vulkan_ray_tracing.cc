@@ -734,3 +734,26 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
 
     return descriptors[setID][descID].address;
 }
+
+variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
+{
+    std::vector<variable_decleration_entry>& table = thread->RT_thread_data->variable_decleration_table;
+    for (int i = 0; i < table.size(); i++) {
+        if (table[i].name == name) {
+            assert (table[i].address != NULL);
+            return &(table[i]);
+        }
+    }
+    return NULL;
+}
+
+void VulkanRayTracing::add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread)
+{
+    variable_decleration_entry entry;
+
+    entry.type = type;
+    entry.name = name;
+    entry.address = address;
+    entry.size = size;
+    thread->RT_thread_data->variable_decleration_table.push_back(entry);
+}

@@ -32,6 +32,17 @@ typedef struct Descriptor
     VkDescriptorType type;
 } Descriptor;
 
+typedef struct variable_decleration_entry{
+  uint64_t type;
+  std::string name;
+  uint64_t address;
+  uint32_t size;
+} variable_decleration_entry;
+
+
+struct Vulkan_RT_thread_data{
+    std::vector<variable_decleration_entry> variable_decleration_table;
+};
 
 class VulkanRayTracing
 {
@@ -86,6 +97,9 @@ public:
     static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t descID);
+
+    static variable_decleration_entry* get_variable_decleration_entry(std::string name, ptx_thread_info *thread);
+    static void add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */
