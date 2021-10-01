@@ -6783,10 +6783,10 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   ptx_reg_t op14_data = thread->get_operand_value(op14, op14, F32_TYPE, thread, 1);
   float Tmax = op14_data.f32;
 
-  arg++;
-  const operand_info &op15 = pI->operand_lookup(arg);
-  ptx_reg_t op15_data = thread->get_operand_value(op15, op15, U32_TYPE, thread, 1);
-  uint32_t payload = op15_data.u32;
+  // arg++;
+  // const operand_info &op15 = pI->operand_lookup(arg);
+  // ptx_reg_t op15_data = thread->get_operand_value(op15, op15, U64_TYPE, thread, 1);
+  // uint32_t payload = op15_data.u64;
 
   arg++;
   const operand_info &op16 = pI->operand_lookup(arg);
@@ -6799,7 +6799,7 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
                    Tmin,
                    {directionX, directionY, directionZ},
                    Tmax,
-                   payload,
+                   NULL,
                    &(hit_geometry.u32),
                    pI,
                    thread);
