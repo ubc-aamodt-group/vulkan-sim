@@ -151,7 +151,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
     // direction.y = -0.5;
     // direction.z = -0.5;
 
-    std::vector<
+    // std::vector<
 
 
 	// Create ray
