@@ -1,3 +1,6 @@
+#ifndef VULKAN_ACCELERATION_STRUCTURE_UTIL_H
+#define VULKAN_ACCELERATION_STRUCTURE_UTIL_H
+
 #include "vulkan/vulkan.h"
 #include "vulkan/vulkan_intel.h"
 
@@ -487,3 +490,6 @@ void set_child_bounds(struct GEN_RT_BVH_INTERNAL_NODE *node, int child, float3 *
 //    uint32_t                             GeometryFlags;
 // #define GEOMETRY_OPAQUE                          1
 // };
+
+
+#endif /* VULKAN_ACCELERATION_STRUCTURE_UTIL_H*/

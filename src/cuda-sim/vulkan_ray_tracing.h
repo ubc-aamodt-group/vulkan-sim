@@ -160,8 +160,8 @@ public:
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t descID);
 
-    // static variable_decleration_entry* get_variable_decleration_entry(std::string name, ptx_thread_info *thread);
-    // static void add_variable_decleration_entry(uint64_t type, std::string name, uint64_t address, uint32_t size, ptx_thread_info *thread);
+    static void image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
+              float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

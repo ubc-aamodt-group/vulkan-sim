@@ -151,6 +151,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
     // direction.y = -0.5;
     // direction.z = -0.5;
 
+    std::vector<
+
 
 	// Create ray
 	Ray ray;
@@ -773,6 +775,11 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
     assert(descID < descriptors[setID].size());
 
     return descriptors[setID][descID].address;
+}
+
+void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
+              float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W)
+{
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)

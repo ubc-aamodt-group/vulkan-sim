@@ -5772,8 +5772,9 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   memory_space *mem = NULL;
   addr_t addr = addr_reg.u32;
+  float* address = (float*)(addr_reg.u64);
 
-  decode_space(space, thread, dst, mem, addr);
+  // decode_space(space, thread, dst, mem, addr);
 
   size_t size;
   int t;
@@ -5781,8 +5782,10 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   if (!vector_spec) {
     data = thread->get_operand_value(src1, dst, type, thread, 1);
-    mem->write(addr, size / 8, &data.s64, thread, pI);
+    //mem->write(addr, size / 8, &data.s64, thread, pI);
+    *address = data.f32;
   } else {
+    assert (0);
     if (vector_spec == V2_TYPE) {
       ptx_reg_t *ptx_regs = new ptx_reg_t[2];
       thread->get_vector_operand_values(src1, ptx_regs, 2);
@@ -6841,7 +6844,57 @@ void call_any_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread
 }
 
 void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  inst_not_implemented(pI);
+  int arg = 0;
+  const operand_info &op1 = pI->operand_lookup(arg);
+  ptx_reg_t op1_data = thread->get_operand_value(op1, op1, B64_TYPE, thread, 1);
+  void *image = (void *)(op1_data.s64);
+
+  arg++;
+  const operand_info &op2 = pI->operand_lookup(arg);
+  ptx_reg_t op2_data = thread->get_operand_value(op2, op2, U32_TYPE, thread, 1);
+  uint32_t gl_LaunchIDEXT_X = (op2_data.u32);
+
+  arg++;
+  const operand_info &op3 = pI->operand_lookup(arg);
+  ptx_reg_t op3_data = thread->get_operand_value(op3, op3, U32_TYPE, thread, 1);
+  uint32_t gl_LaunchIDEXT_Y = (op3_data.u32);
+
+  arg++;
+  const operand_info &op4 = pI->operand_lookup(arg);
+  ptx_reg_t op4_data = thread->get_operand_value(op4, op4, U32_TYPE, thread, 1);
+  uint32_t gl_LaunchIDEXT_Z = (op4_data.u32);
+
+  arg++;
+  const operand_info &op5 = pI->operand_lookup(arg);
+  ptx_reg_t op5_data = thread->get_operand_value(op5, op5, U32_TYPE, thread, 1);
+  uint32_t gl_LaunchIDEXT_W = (op5_data.u32);
+
+  arg++; //MRS_TODO: what is this operand?
+
+  arg++;
+  const operand_info &op6 = pI->operand_lookup(arg);
+  ptx_reg_t op6_data = thread->get_operand_value(op6, op6, F32_TYPE, thread, 1);
+  float hitValue_X = (op6_data.f32);
+
+  arg++;
+  const operand_info &op7 = pI->operand_lookup(arg);
+  ptx_reg_t op7_data = thread->get_operand_value(op7, op7, F32_TYPE, thread, 1);
+  float hitValue_Y = (op7_data.f32);
+
+  arg++;
+  const operand_info &op8 = pI->operand_lookup(arg);
+  ptx_reg_t op8_data = thread->get_operand_value(op8, op8, F32_TYPE, thread, 1);
+  float hitValue_Z = (op8_data.f32);
+
+  arg++;
+  const operand_info &op9 = pI->operand_lookup(arg);
+  ptx_reg_t op9_data = thread->get_operand_value(op9, op9, F32_TYPE, thread, 1);
+  float hitValue_W = (op9_data.f32);
+
+  //MRS_TODO: There are more operands
+
+  VulkanRayTracing::image_store(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_W, gl_LaunchIDEXT_W, 
+              hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
 }
 
 void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
