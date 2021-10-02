@@ -23,6 +23,23 @@
 #define MIN_MAX(a,b,c) MAX(MIN((a), (b)), (c))
 #define MAX_MIN(a,b,c) MIN(MAX((a), (b)), (c))
 
+enum class TransactionType {
+    BVH_STRUCTURE,
+    BVH_INTERNAL_NODE,
+    BVH_INSTANCE_LEAF,
+    BVH_PRIMITIVE_LEAF_DESCRIPTOR,
+    BVH_QUAD_LEAF,
+    BVH_PROCEDURAL_LEAF,
+};
+
+typedef struct MemoryTransactionRecord {
+    MemoryTransactionRecord(void* address, uint32_t size, TransactionType type)
+    : address(address), size(size), type(type) {}
+    void* address;
+    uint32_t size;
+    TransactionType type;
+} MemoryTransactionRecord;
+
 typedef struct Descriptor
 {
     uint32_t setID;

@@ -151,8 +151,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
     // direction.y = -0.5;
     // direction.z = -0.5;
 
-    // std::vector<
-
+    std::vector<MemoryTransactionRecord> transactions;
 
 	// Create ray
 	Ray ray;
@@ -165,6 +164,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
     uint8_t* topLevelASAddr = get_anv_accel_address(topLevelAS);
     GEN_RT_BVH topBVH; //TODO: test hit with world before traversal
     GEN_RT_BVH_unpack(&topBVH, topLevelASAddr);
+    transactions.push_back(MemoryTransactionRecord(topLevelASAddr, GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
     
     uint8_t* topRootAddr = topLevelASAddr + topBVH.RootNodeOffset;
 
@@ -183,6 +183,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             next_node_addr = NULL;
             struct GEN_RT_BVH_INTERNAL_NODE node;
             GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
+            transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
 
             bool child_hit[6];
             float thit[6];
@@ -242,11 +243,13 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             {
                 GEN_RT_BVH_INSTANCE_LEAF leaf;
                 GEN_RT_BVH_INSTANCE_LEAF_unpack(&leaf, leaf_addr);
+                transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_INSTANCE_LEAF_length * 4, TransactionType::BVH_INSTANCE_LEAF));
 
                 //TODO: apply transformation matrix
                 assert(leaf.BVHAddress != NULL);
                 GEN_RT_BVH botLevelASAddr;
                 GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf.BVHAddress));
+                transactions.push_back(MemoryTransactionRecord((void*)(leaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
                 traversal_stack.push_back(((uint8_t *)(leaf.BVHAddress)) + botLevelASAddr.RootNodeOffset);
             }
             leaf_stack.clear();
@@ -269,6 +272,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             next_node_addr = NULL;
             struct GEN_RT_BVH_INTERNAL_NODE node;
             GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
+            transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
 
             bool child_hit[6];
             float thit[6];
@@ -328,11 +332,14 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
         {
             struct GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR leaf_descriptor;
             GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_unpack(&leaf_descriptor, leaf_addr);
+            transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_length * 4, TransactionType::BVH_PRIMITIVE_LEAF_DESCRIPTOR));
+            
 
             if (leaf_descriptor.LeafType == TYPE_QUAD)
             {
                 struct GEN_RT_BVH_QUAD_LEAF leaf;
                 GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
+                transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_QUAD_LEAF_length * 4, TransactionType::BVH_QUAD_LEAF));
 
                 float3 p[3];
                 for(int i = 0; i < 3; i++)
@@ -357,6 +364,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
             {
                 struct GEN_RT_BVH_PROCEDURAL_LEAF leaf;
                 GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, leaf_addr);
+                transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PROCEDURAL_LEAF_length * 4, TransactionType::BVH_PROCEDURAL_LEAF));
             }
         }
     }
