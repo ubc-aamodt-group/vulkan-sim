@@ -13,7 +13,7 @@ extern "C" void gpgpusim_setGeometries(VkAccelerationStructureGeometryKHR* pGeom
     VulkanRayTracing::setGeometries(pGeometries, geometryCount);
 }
 
-extern "C" void gpgpusim_setAccelerationStructure(VkAccelerationStructureKHR accelerationStructure)
+extern "C" void gpgpusim_addTreelets(VkAccelerationStructureKHR accelerationStructure)
 {
     VulkanRayTracing::setAccelerationStructure(accelerationStructure);
 }

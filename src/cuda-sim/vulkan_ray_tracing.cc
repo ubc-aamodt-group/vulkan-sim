@@ -462,6 +462,12 @@ void VulkanRayTracing::setGeometries(VkAccelerationStructureGeometryKHR* pGeomet
 
 void VulkanRayTracing::setAccelerationStructure(VkAccelerationStructureKHR accelerationStructure)
 {
+    GEN_RT_BVH topBVH; //TODO: test hit with world before traversal
+    GEN_RT_BVH_unpack(&topBVH, (uint8_t *)accelerationStructure);
+
+
+
+
     std::cout << "gpgpusim: set AS" << std::endl;
     VulkanRayTracing::topLevelAS = accelerationStructure;
 }
@@ -690,8 +696,8 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
     static unsigned call_uid_next = 1;
 
   if (target_func->is_pdom_set()) {
-    printf("GPGPU-Sim PTX: PDOM analysis already done for %s \n",
-           target_func->get_name().c_str());
+    // printf("GPGPU-Sim PTX: PDOM analysis already done for %s \n",
+    //        target_func->get_name().c_str());
   } else {
     printf("GPGPU-Sim PTX: finding reconvergence points for \'%s\'...\n",
            target_func->get_name().c_str());
