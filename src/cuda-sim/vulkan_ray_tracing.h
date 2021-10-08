@@ -17,6 +17,7 @@
 #include "ptx_ir.h"
 //#include "vector-math.h"
 #include "../../libcuda/gpgpu_context.h"
+#include <fstream>
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -130,10 +131,13 @@ private:
     static uint32_t geometryCount;
     static VkAccelerationStructureKHR topLevelAS;
     static std::vector<std::vector<Descriptor> > descriptors;
+    static std::ofstream imageFile;
+    static bool firstTime;
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
     static float3 Barycentric(float3 p, float3 a, float3 b, float3 c);
+
 
 public:
     static void traceRay( // called by raygen shader
@@ -178,7 +182,7 @@ public:
     static void* getDescriptorAddress(uint32_t setID, uint32_t descID);
 
     static void image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
-              float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W);
+              float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

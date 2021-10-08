@@ -40,6 +40,8 @@ VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
 uint32_t VulkanRayTracing::geometryCount = 0;
 VkAccelerationStructureKHR VulkanRayTracing::topLevelAS = NULL;
 std::vector<std::vector<Descriptor> > VulkanRayTracing::descriptors;
+std::ofstream VulkanRayTracing::imageFile;
+bool VulkanRayTracing::firstTime = true;
 
 float magic_max7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
 {
@@ -132,8 +134,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
                    const ptx_instruction *pI,
                    ptx_thread_info *thread)
 {
-    printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
-            rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
+    // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
+    //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
 	// assert(cullMask == 0xff);
 	// assert(payload == 0);
 
@@ -586,6 +588,10 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
+    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
+    // return;
+
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -624,13 +630,20 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     gpgpu_ptx_sim_arg_list_t args;
     kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-      "raygen_shader", args, dim3(1, 1, 1), dim3(1, 1, 1),
+      "raygen_shader", args, dim3(1, 1, 1), dim3(launch_width, launch_height, launch_depth),
       context);
     
     struct CUstream_st *stream = 0;
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
     ctx->the_gpgpusim->g_stream_manager->push(op);
 
+    printf("%d\n", descriptors[0][1].address);
+
+    while(!op.is_done() && !op.get_kernel()->done()) {
+        printf("waiting for op to finish\n");
+        sleep(1);
+        continue;
+    }
     // for (unsigned i = 0; i < entry->num_args(); i++) {
     //     std::pair<size_t, unsigned> p = entry->get_param_config(i);
     //     cudaSetupArgumentInternal(args[i], p.first, p.second);
@@ -786,8 +799,31 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
 }
 
 void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
-              float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W)
+              float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
+    dim3 ntid = thread->get_ntid();
+    uint32_t offset = 0;
+    offset += gl_LaunchIDEXT_Y * ntid.x;
+    offset += gl_LaunchIDEXT_X;
+
+    // float data[4];
+    // data[0] = hitValue_X;
+    // data[1] = hitValue_Y;
+    // data[2] = hitValue_Z;
+    // data[3] = hitValue_W;
+    // imageFile.write((char*) data, 3 * sizeof(float));
+    // imageFile.write((char*) (&offset), sizeof(uint32_t));
+    // imageFile.flush();
+
+    uint8_t* p = ((uint8_t*)image) + offset * 4;
+    p[0] = (uint8_t)(hitValue_X * 255);
+    p[1] = (uint8_t)(hitValue_Y * 255);
+    p[2] = (uint8_t)(hitValue_Z * 255);
+    p[3] = (uint8_t)(0.5 * 255);
+    // p[0] = (uint8_t)(127);
+    // p[1] = (uint8_t)(127);
+    // p[2] = (uint8_t)(127);
+    // p[3] = (uint8_t)(127);
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)

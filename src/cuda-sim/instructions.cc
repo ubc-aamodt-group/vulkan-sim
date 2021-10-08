@@ -984,7 +984,8 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
+    printf("########## running inst at line %d\n", pI->source_line());
   ptx_reg_t src1_data, src2_data, data;
   int overflow = 0;
   int carry = 0;
@@ -3358,7 +3359,8 @@ void decode_space(memory_space_t &space, ptx_thread_info *thread,
 }
 
 void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
+    printf("########## running inst at line %d\n", pI->source_line());
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
@@ -3382,7 +3384,7 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
   if (!vector_spec) {
     // mem->read(addr, size / 8, &data.s64); // MRS_TODO: this is the correct one needed
     memcpy(&(data.s64), addr64, size / 8);
-    printf("float value = %f\n", *((float*)addr64));
+    // printf("float value = %f\n", *((float*)addr64));
     if (type == S16_TYPE || type == S32_TYPE) sign_extend(data, size, dst);
     thread->set_operand_value(dst, data, type, thread, pI);
   } else {
@@ -4117,7 +4119,8 @@ void min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 static int _count = 0;
 void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("########## running inst number %d at line %d\n", _count++, pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
+    printf("########## running inst number %d at line %d\n", _count++, pI->source_line());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -4289,7 +4292,8 @@ void mul24_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void mul_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
+    printf("########## running inst at line %d\n", pI->source_line());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -6795,7 +6799,7 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &op16 = pI->operand_lookup(arg);
   ptx_reg_t hit_geometry;
 
-  thread->dump_regs(stdout);
+  // thread->dump_regs(stdout);
 
   VulkanRayTracing::traceRay(_topLevelAS, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
                    {originX, originY, originZ},
@@ -6894,7 +6898,7 @@ void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   //MRS_TODO: There are more operands
 
   VulkanRayTracing::image_store(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_W, gl_LaunchIDEXT_W, 
-              hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
+              hitValue_X, hitValue_Y, hitValue_Z, hitValue_W, pI, thread);
 }
 
 void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
