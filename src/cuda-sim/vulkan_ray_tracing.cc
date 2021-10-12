@@ -119,7 +119,7 @@ bool ray_box_test(float3 low, float3 high, float3 idirection, float3 origin, flo
     return (min <= max);
 }
 
-void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
+void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
                    uint cullMask,
                    uint sbtRecordOffset,
@@ -163,12 +163,12 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR* _topLevelAS,
 	VkAccelerationStructureBuildGeometryInfoKHR* pInfos;
 
 	// Get bottom-level AS
-    uint8_t* topLevelASAddr = get_anv_accel_address(topLevelAS);
+    //uint8_t* topLevelASAddr = get_anv_accel_address((VkAccelerationStructureKHR)_topLevelAS);
     GEN_RT_BVH topBVH; //TODO: test hit with world before traversal
-    GEN_RT_BVH_unpack(&topBVH, topLevelASAddr);
-    transactions.push_back(MemoryTransactionRecord(topLevelASAddr, GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
+    GEN_RT_BVH_unpack(&topBVH, (uint8_t*)_topLevelAS);
+    transactions.push_back(MemoryTransactionRecord((uint8_t*)_topLevelAS, GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
     
-    uint8_t* topRootAddr = topLevelASAddr + topBVH.RootNodeOffset;
+    uint8_t* topRootAddr = (uint8_t*)_topLevelAS + topBVH.RootNodeOffset;
 
     std::list<uint8_t *> traversal_stack;
 	std::list<uint8_t *> leaf_stack;
@@ -437,7 +437,7 @@ float3 VulkanRayTracing::Barycentric(float3 p, float3 a, float3 b, float3 c)
     float w = (d00 * d21 - d01 * d20) / denom;
     float u = 1.0f - v - w;
 
-    return {u, v, w};
+    return {v, w, u};
 }
 
 void VulkanRayTracing::load_descriptor(const ptx_instruction *pI, ptx_thread_info *thread)
@@ -633,11 +633,22 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
+    dim3 blockDim = dim3(1, 1, 1);
+    dim3 gridDim = dim3(1, launch_height, launch_depth);
+    if(launch_width <= 32) {
+        blockDim.x = launch_width;
+        gridDim.x = 1;
+    }
+    else {
+        blockDim.x = 32;
+        gridDim.x = launch_width / 32;
+        if(launch_width % 32 != 0)
+            gridDim.x++;
+    }
 
     gpgpu_ptx_sim_arg_list_t args;
     kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-      "raygen_shader", args, dim3(1, 1, 1), dim3(launch_width, launch_height, launch_depth),
-      context);
+      "raygen_shader", args, gridDim, blockDim, context);
     
     struct CUstream_st *stream = 0;
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
@@ -807,9 +818,9 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
 void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
-    dim3 ntid = thread->get_ntid();
+    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
     uint32_t offset = 0;
-    offset += gl_LaunchIDEXT_Y * ntid.x;
+    offset += gl_LaunchIDEXT_Y * image_width;
     offset += gl_LaunchIDEXT_X;
 
     // float data[4];

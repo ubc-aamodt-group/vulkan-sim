@@ -141,7 +141,7 @@ private:
 
 public:
     static void traceRay( // called by raygen shader
-                       VkAccelerationStructureKHR* _topLevelAS,
+                       VkAccelerationStructureKHR _topLevelAS,
     				   uint rayFlags,
                        uint cullMask,
                        uint sbtRecordOffset,
