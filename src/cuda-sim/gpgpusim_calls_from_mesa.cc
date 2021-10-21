@@ -23,11 +23,16 @@ extern "C" void gpgpusim_testTraversal(struct anv_bvh_node* root)
     //VulkanRayTracing::
 }
 
+extern "C" uint32_t gpgpusim_registerShader(char * shaderPath, uint32_t shader_type)
+{
+    return VulkanRayTracing::registerShaders(shaderPath, gl_shader_stage(shader_type));
+}
+
 extern "C" void gpgpusim_vkCmdTraceRaysKHR(
-                      const VkStridedDeviceAddressRegionKHR *raygen_sbt,
-                      const VkStridedDeviceAddressRegionKHR *miss_sbt,
-                      const VkStridedDeviceAddressRegionKHR *hit_sbt,
-                      const VkStridedDeviceAddressRegionKHR *callable_sbt,
+                      void *raygen_sbt,
+                      void *miss_sbt,
+                      void *hit_sbt,
+                      void *callable_sbt,
                       bool is_indirect,
                       uint32_t launch_width,
                       uint32_t launch_height,

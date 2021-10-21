@@ -224,6 +224,13 @@ struct CUstream_st;
 extern std::map<void *, void **> pinned_memory;
 extern std::map<void *, size_t> pinned_memory_size;
 
+typedef struct vulkan_kernel_metadata {
+  void *raygen_sbt;
+  void *miss_sbt;
+  void *hit_sbt;
+  void *callable_sbt;
+} vulkan_kernel_metadata;
+
 class kernel_info_t {
  public:
   //   kernel_info_t()
@@ -375,6 +382,8 @@ class kernel_info_t {
 
   unsigned m_kernel_TB_latency;  // this used for any CPU-GPU kernel latency and
                                  // counted in the gpu_cycle
+
+  vulkan_kernel_metadata vulkan_metadata;
 };
 
 class core_config {

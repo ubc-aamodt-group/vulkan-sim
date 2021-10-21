@@ -42,6 +42,7 @@ VkAccelerationStructureKHR VulkanRayTracing::topLevelAS = NULL;
 std::vector<std::vector<Descriptor> > VulkanRayTracing::descriptors;
 std::ofstream VulkanRayTracing::imageFile;
 bool VulkanRayTracing::firstTime = true;
+std::vector<shader_stage_info> VulkanRayTracing::shaders;
 
 float magic_max7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
 {
@@ -474,7 +475,7 @@ void VulkanRayTracing::setAccelerationStructure(VkAccelerationStructureKHR accel
 
 static bool invoked = false;
 
-void VulkanRayTracing::registerShaders()
+uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
 {
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
@@ -492,82 +493,126 @@ void VulkanRayTracing::registerShaders()
     CUctx_st *context = GPGPUSim_Context(ctx);
 
     // Register all the ptx files in $MESA_ROOT/gpgpusimShaders by looping through them
-    std::vector <std::string> ptx_list;
+    // std::vector <std::string> ptx_list;
 
     // Add ptx file names in gpgpusimShaders folder to ptx_list
     char *mesa_root = getenv("MESA_ROOT");
     char *gpgpusim_root = getenv("GPGPUSIM_ROOT");
-    char *filePath = "gpgpusimShaders/";
-    char fullPath[200];
-    snprintf(fullPath, sizeof(fullPath), "%s%s", mesa_root, filePath);
-    std::string fullPathString(fullPath);
+    // char *filePath = "gpgpusimShaders/";
+    // char fullPath[200];
+    // snprintf(fullPath, sizeof(fullPath), "%s%s", mesa_root, filePath);
+    // std::string fullPathString(fullPath);
 
-    for (auto &p : fs::recursive_directory_iterator(fullPathString))
-    {
-        if (p.path().extension() == ".ptx")
-        {
-            //std::cout << p.path().string() << '\n';
-            ptx_list.push_back(p.path().string());
-        }
-    }
+    // for (auto &p : fs::recursive_directory_iterator(fullPathString))
+    // {
+    //     if (p.path().extension() == ".ptx")
+    //     {
+    //         //std::cout << p.path().string() << '\n';
+    //         ptx_list.push_back(p.path().string());
+    //     }
+    // }
     
     // Register each ptx file in ptx_list
+    shader_stage_info shader;
+    shader.ID = VulkanRayTracing::shaders.size();
+    shader.type = shaderType;
+    shader.function_name = (char*)malloc(200 * sizeof(char));
+
+    std::string deviceFunction;
+
+    switch(shaderType) {
+        case MESA_SHADER_RAYGEN:
+            // shader.function_name = "raygen_" + std::to_string(shader.ID);
+            strcpy(shader.function_name, "raygen_");
+            strcat(shader.function_name, std::to_string(shader.ID).c_str());
+            deviceFunction = "MESA_SHADER_RAYGEN_main";
+            break;
+        case MESA_SHADER_ANY_HIT:
+            // shader.function_name = "anyhit_" + std::to_string(shader.ID);
+            strcpy(shader.function_name, "anyhit_");
+            strcat(shader.function_name, std::to_string(shader.ID).c_str());
+            deviceFunction = "";
+            break;
+        case MESA_SHADER_CLOSEST_HIT:
+            // shader.function_name = "closesthit_" + std::to_string(shader.ID);
+            strcpy(shader.function_name, "closesthit_");
+            strcat(shader.function_name, std::to_string(shader.ID).c_str());
+            deviceFunction = "MESA_SHADER_CLOSEST_HIT_main";
+            break;
+        case MESA_SHADER_MISS:
+            // shader.function_name = "miss_" + std::to_string(shader.ID);
+            strcpy(shader.function_name, "miss_");
+            strcat(shader.function_name, std::to_string(shader.ID).c_str());
+            deviceFunction = "MESA_SHADER_MISS_main";
+            break;
+        case MESA_SHADER_INTERSECTION:
+            // shader.function_name = "intersection_" + std::to_string(shader.ID);
+            strcpy(shader.function_name, "intersection_");
+            strcat(shader.function_name, std::to_string(shader.ID).c_str());
+            deviceFunction = "";
+            break;
+        case MESA_SHADER_CALLABLE:
+            // shader.function_name = "callable_" + std::to_string(shader.ID);
+            strcpy(shader.function_name, "callable_");
+            strcat(shader.function_name, std::to_string(shader.ID).c_str());
+            deviceFunction = "";
+            break;
+
+    }
+
     symbol_table *symtab;
     unsigned num_ptx_versions = 0;
     unsigned max_capability = 20;
     unsigned selected_capability = 20;
     bool found = false;
     
-    unsigned source_num = 1;
-    unsigned long long fat_cubin_handle = 1;
+    unsigned long long fat_cubin_handle = shader.ID;
 
-    for(auto itr : ptx_list)
-    {
-        printf("############### adding %s\n", itr.c_str());
-        // PTX File
-        //std::cout << itr << std::endl;
-        symtab = ctx->gpgpu_ptx_sim_load_ptx_from_filename(itr.c_str());
-        context->add_binary(symtab, fat_cubin_handle);
-        // need to add all the magic registers to ptx.l to special_register, reference ayub ptx.l:225
+    // PTX File
+    //std::cout << itr << std::endl;
+    symtab = ctx->gpgpu_ptx_sim_load_ptx_from_filename(shaderPath);
+    context->add_binary(symtab, fat_cubin_handle);
+    // need to add all the magic registers to ptx.l to special_register, reference ayub ptx.l:225
 
-        // PTX info
-        // Run the python script and get ptxinfo
-        std::cout << "GPGPUSIM: Generating PTXINFO for" << itr.c_str() << "info" << std::endl;
-        char command[400];
-        snprintf(command, sizeof(command), "python3 %s/scripts/generate_rt_ptxinfo.py %s", gpgpusim_root, itr.c_str());
-        int result = system(command);
-        if (result != 0) {
-            printf("GPGPU-Sim PTX: ERROR ** while loading PTX (b) %d\n", result);
-            printf("               Ensure ptxas is in your path.\n");
-            exit(1);
-        }
-        
-        char ptxinfo_filename[400];
-        snprintf(ptxinfo_filename, sizeof(ptxinfo_filename), "%sinfo", itr.c_str());
-        ctx->gpgpu_ptx_info_load_from_external_file(ptxinfo_filename); // TODO: make a version where it just loads my ptxinfo instead of generating a new one
-
-        if (itr.find("RAYGEN") != std::string::npos)
-        {
-            printf("############### registering %s\n", itr.c_str());
-            context->register_function(fat_cubin_handle, "raygen_shader", "MESA_SHADER_RAYGEN_main");
-        }
-
-        if (itr.find("MISS") != std::string::npos)
-        {
-            printf("############### registering %s\n", itr.c_str());
-            context->register_function(fat_cubin_handle, "miss_shader", "MESA_SHADER_MISS_main");
-        }
-
-        if (itr.find("CLOSEST") != std::string::npos)
-        {
-            printf("############### registering %s\n", itr.c_str());
-            context->register_function(fat_cubin_handle, "closest_hit_shader", "MESA_SHADER_CLOSEST_HIT_main");
-        }
-
-        source_num++;
-        fat_cubin_handle++;
+    // PTX info
+    // Run the python script and get ptxinfo
+    std::cout << "GPGPUSIM: Generating PTXINFO for" << shaderPath << "info" << std::endl;
+    char command[400];
+    snprintf(command, sizeof(command), "python3 %s/scripts/generate_rt_ptxinfo.py %s", gpgpusim_root, shaderPath);
+    int result = system(command);
+    if (result != 0) {
+        printf("GPGPU-Sim PTX: ERROR ** while loading PTX (b) %d\n", result);
+        printf("               Ensure ptxas is in your path.\n");
+        exit(1);
     }
+    
+    char ptxinfo_filename[400];
+    snprintf(ptxinfo_filename, sizeof(ptxinfo_filename), "%sinfo", shaderPath);
+    ctx->gpgpu_ptx_info_load_from_external_file(ptxinfo_filename); // TODO: make a version where it just loads my ptxinfo instead of generating a new one
 
+    context->register_function(fat_cubin_handle, shader.function_name, deviceFunction.c_str());
+
+    VulkanRayTracing::shaders.push_back(shader);
+
+    return shader.ID;
+
+    // if (itr.find("RAYGEN") != std::string::npos)
+    // {
+    //     printf("############### registering %s\n", shaderPath);
+    //     context->register_function(fat_cubin_handle, "raygen_shader", "MESA_SHADER_RAYGEN_main");
+    // }
+
+    // if (itr.find("MISS") != std::string::npos)
+    // {
+    //     printf("############### registering %s\n", shaderPath);
+    //     context->register_function(fat_cubin_handle, "miss_shader", "MESA_SHADER_MISS_main");
+    // }
+
+    // if (itr.find("CLOSEST") != std::string::npos)
+    // {
+    //     printf("############### registering %s\n", shaderPath);
+    //     context->register_function(fat_cubin_handle, "closest_hit_shader", "MESA_SHADER_CLOSEST_HIT_main");
+    // }
 }
 
 
@@ -579,16 +624,16 @@ void VulkanRayTracing::invoke_gpgpusim()
 
     if(!invoked)
     {
-        registerShaders();
+        //registerShaders();
         invoked = true;
     }
 }
 
 void VulkanRayTracing::vkCmdTraceRaysKHR(
-                      const VkStridedDeviceAddressRegionKHR *raygen_sbt,
-                      const VkStridedDeviceAddressRegionKHR *miss_sbt,
-                      const VkStridedDeviceAddressRegionKHR *hit_sbt,
-                      const VkStridedDeviceAddressRegionKHR *callable_sbt,
+                      void *raygen_sbt,
+                      void *miss_sbt,
+                      void *hit_sbt,
+                      void *callable_sbt,
                       bool is_indirect,
                       uint32_t launch_width,
                       uint32_t launch_height,
@@ -602,8 +647,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    printf("vkCmdTraceRaysKHR\n");
-    function_info *entry = context->get_kernel("raygen_shader");
+    shader_stage_info raygen_shader = shaders[*(uint64_t*)raygen_sbt];
+    function_info *entry = context->get_kernel(raygen_shader.function_name);
     // printf("################ number of args = %d\n", entry->num_args());
 
     if (entry->is_pdom_set()) {
@@ -648,7 +693,11 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     gpgpu_ptx_sim_arg_list_t args;
     kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-      "raygen_shader", args, gridDim, blockDim, context);
+      raygen_shader.function_name, args, gridDim, blockDim, context);
+    grid->vulkan_metadata.raygen_sbt = raygen_sbt;
+    grid->vulkan_metadata.miss_sbt = miss_sbt;
+    grid->vulkan_metadata.hit_sbt = hit_sbt;
+    grid->vulkan_metadata.callable_sbt = callable_sbt;
     
     struct CUstream_st *stream = 0;
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
@@ -672,7 +721,9 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    function_info *entry = context->get_kernel("miss_shader");
+    shader_stage_info miss_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.miss_sbt)];
+
+    function_info *entry = context->get_kernel(miss_shader.function_name);
     callShader(pI, thread, entry);
 }
 
@@ -681,7 +732,8 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    function_info *entry = context->get_kernel("closest_hit_shader");
+    shader_stage_info closesthit_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt)];
+    function_info *entry = context->get_kernel(closesthit_shader.function_name);
     callShader(pI, thread, entry);
 }
 
@@ -690,6 +742,7 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
+    assert(0);
     function_info *entry = context->get_kernel("intersection_shader");
     callShader(pI, thread, entry);
 }
@@ -699,6 +752,7 @@ void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_in
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
+    assert(0);
     function_info *entry = context->get_kernel("any_hit_shader");
     callShader(pI, thread, entry);
 }

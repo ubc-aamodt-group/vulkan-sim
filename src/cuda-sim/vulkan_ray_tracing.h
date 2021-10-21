@@ -17,6 +17,7 @@
 #include "ptx_ir.h"
 //#include "vector-math.h"
 #include "../../libcuda/gpgpu_context.h"
+#include "compiler/shader_enums.h"
 #include <fstream>
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
@@ -62,6 +63,12 @@ typedef struct Hit_data{
     float3 intersection_point;
     float3 barycentric_coordinates;
 } Hit_data;
+
+typedef struct shader_stage_info {
+    uint32_t ID;
+    gl_shader_stage type;
+    char* function_name;
+} shader_stage_info;
 
 
 struct Vulkan_RT_thread_data{
@@ -137,6 +144,7 @@ private:
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
     static float3 Barycentric(float3 p, float3 a, float3 b, float3 c);
+    static std::vector<shader_stage_info> shaders;
 
 
 public:
@@ -162,12 +170,12 @@ public:
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
     static void setAccelerationStructure(VkAccelerationStructureKHR accelerationStructure);
     static void invoke_gpgpusim();
-    static void registerShaders();
+    static uint32_t registerShaders(char * shaderPath, gl_shader_stage shaderType);
     static void vkCmdTraceRaysKHR( // called by vulkan application
-                      const VkStridedDeviceAddressRegionKHR *raygen_sbt,
-                      const VkStridedDeviceAddressRegionKHR *miss_sbt,
-                      const VkStridedDeviceAddressRegionKHR *hit_sbt,
-                      const VkStridedDeviceAddressRegionKHR *callable_sbt,
+                      void *raygen_sbt,
+                      void *miss_sbt,
+                      void *hit_sbt,
+                      void *callable_sbt,
                       bool is_indirect,
                       uint32_t launch_width,
                       uint32_t launch_height,
