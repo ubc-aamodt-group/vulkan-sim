@@ -477,17 +477,7 @@ static bool invoked = false;
 
 uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
 {
-    // {
-    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    //     dst << src.rdbuf();
-    // }
-    // {
-    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
-    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_0.ptx",   std::ios::binary);
-    //     dst << src.rdbuf();
-    // }
-
+    VulkanRayTracing::invoke_gpgpusim();
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -624,6 +614,16 @@ void VulkanRayTracing::invoke_gpgpusim()
 
     if(!invoked)
     {
+        // {
+        //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+        //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+        //     dst << src.rdbuf();
+        // }
+        // {
+        //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
+        //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_0.ptx",   std::ios::binary);
+        //     dst << src.rdbuf();
+        // }
         //registerShaders();
         invoked = true;
     }
