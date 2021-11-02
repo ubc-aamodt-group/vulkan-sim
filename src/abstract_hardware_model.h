@@ -94,6 +94,7 @@ enum uarch_op_t {
   LOAD_OP,
   TENSOR_CORE_LOAD_OP,
   TENSOR_CORE_STORE_OP,
+  RT_CORE_OP,
   STORE_OP,
   BRANCH_OP,
   BARRIER_OP,
@@ -101,7 +102,6 @@ enum uarch_op_t {
   CALL_OPS,
   RET_OPS,
   EXIT_OPS,
-  RT_CORE_OP,
   SPECIALIZED_UNIT_1_OP = SPEC_UNIT_START_ID,
   SPECIALIZED_UNIT_2_OP,
   SPECIALIZED_UNIT_3_OP,
@@ -430,6 +430,7 @@ class core_config {
   bool gmem_skip_L1D;  // on = global memory access always skip the L1 cache
 
   bool adaptive_cache_config;
+  unsigned m_rt_intersection_latency;
 };
 
 // bounded stack that implements simt reconvergence using pdom mechanism from
@@ -837,6 +838,8 @@ class mem_access_t {
 
   new_addr_type get_addr() const { return m_addr; }
   void set_addr(new_addr_type addr) { m_addr = addr; }
+  new_addr_type get_uncoalesced_addr() const { return m_uncoalesced_addr; }
+  void set_uncoalesced_addr(new_addr_type addr) { m_uncoalesced_addr = addr; }
   unsigned get_size() const { return m_req_size; }
   const active_mask_t &get_warp_mask() const { return m_warp_mask; }
   bool is_write() const { return m_write; }
@@ -894,6 +897,7 @@ class mem_access_t {
   active_mask_t m_warp_mask;
   mem_access_byte_mask_t m_byte_mask;
   mem_access_sector_mask_t m_sector_mask;
+  new_addr_type m_uncoalesced_addr;
 };
 
 class mem_fetch;
@@ -967,6 +971,7 @@ class inst_t {
   }
   bool is_load() const {
     return (op == LOAD_OP || op == TENSOR_CORE_LOAD_OP ||
+            op == RT_CORE_OP ||
             memory_op == memory_load);
   }
   bool is_store() const {
@@ -1041,6 +1046,7 @@ class warp_inst_t : public inst_t {
     m_uid = 0;
     m_empty = true;
     m_config = NULL;
+    m_is_raytrace = false;
   }
   warp_inst_t(const core_config *config) {
     m_uid = 0;
@@ -1052,6 +1058,7 @@ class warp_inst_t : public inst_t {
     m_mem_accesses_created = false;
     m_cache_hit = false;
     m_is_printf = false;
+    m_is_raytrace = false;
     m_is_cdp = 0;
     should_do_atomic = true;
   }
@@ -1085,6 +1092,20 @@ class warp_inst_t : public inst_t {
     assert(num_addrs <= MAX_ACCESSES_PER_INSN_PER_THREAD);
     for (unsigned i = 0; i < num_addrs; i++)
       m_per_scalar_thread[n].memreqaddr[i] = addr[i];
+  }
+  
+  void set_addr(unsigned n, std::list<new_addr_type> addr, unsigned num_addrs) {
+    if (!m_per_scalar_thread_valid) {
+      m_per_scalar_thread.resize(m_config->warp_size);
+      m_per_scalar_thread_valid = true;
+    }
+    assert(num_addrs <= MAX_ACCESSES_PER_INSN_PER_THREAD);
+    assert(addr.size() > 0);
+    for (unsigned i = 0; i < num_addrs; i++) {
+      if (addr.size() == 0) return;
+      m_per_scalar_thread[n].memreqaddr[i] = addr.front();
+      addr.pop_front();
+    }
   }
   void print_m_accessq() {
     if (accessq_empty())
@@ -1194,6 +1215,110 @@ class warp_inst_t : public inst_t {
   unsigned get_uid() const { return m_uid; }
   unsigned get_schd_id() const { return m_scheduler_id; }
   active_mask_t get_warp_active_mask() const { return m_warp_active_mask; }
+  
+  void init_per_scalar_thread() {
+    m_per_scalar_thread.resize(m_config->warp_size);
+    m_per_scalar_thread_valid = true;
+  }
+
+  void set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses);
+  int update_rt_mem_accesses(unsigned int tid, bool valid, const std::deque<new_addr_type> &mem_accesses);
+  void set_rt_ray_properties(unsigned int tid, Ray ray, bool intersect, int num_nodes_accessed, int num_triangles_accessed);
+  bool rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
+  Ray rt_ray_properties(unsigned int tid) const { return m_per_scalar_thread[tid].ray_properties; }
+  int rt_num_nodes_accessed(unsigned int tid) const { return m_per_scalar_thread[tid].num_nodes_accessed; }
+  int rt_num_triangles_accessed(unsigned int tid) const { return m_per_scalar_thread[tid].num_triangles_accessed; }
+  void rt_mem_accesses_pop(new_addr_type addr);
+  bool rt_mem_accesses_empty();
+  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].raytrace_mem_accesses.empty(); };
+  
+  mem_access_t get_next_rt_mem_access(bool locked);
+  void fill_next_rt_mem_access(bool locked);
+  mem_access_t memory_coalescing_arch_rt(new_addr_type addr);
+  
+  bool mem_fetch_wait(bool locked);
+  
+  void clear_mem_fetch_wait(new_addr_type addr) { 
+    // printf("Clear Warp %d: 0x%x\t", m_warp_id, addr);
+    m_mf_awaiting_response.erase(addr);
+  }
+  void clear_mem_fetch_wait() {
+    m_mf_awaiting_response.clear();
+  }
+  unsigned clear_rt_awaiting_threads(new_addr_type addr, char cat);
+  void clear_rt_access(new_addr_type addr) {
+    m_next_rt_accesses_set.erase(addr);
+  }
+  void clear_rt_access() {
+    m_next_rt_accesses_set.clear();
+  }
+  
+  void undo_rt_access(new_addr_type addr) { 
+    // printf("Undo Warp %d: 0x%x\t", m_warp_id, addr);
+    m_mf_awaiting_response.erase(addr);
+    assert (m_next_rt_accesses_set.find(m_current_rt_access) == m_next_rt_accesses_set.end());
+    m_next_rt_accesses.push_front(m_current_rt_access);
+    m_next_rt_accesses_set.insert(m_current_rt_access);
+
+  }
+  
+  void set_mem_fetch_wait(new_addr_type addr) {
+    m_mf_awaiting_response.insert(addr);
+  }
+  
+  void print_rt_accesses();
+  
+  std::set<new_addr_type> get_rt_accesses() { return m_next_rt_accesses_set; }
+  
+  unsigned get_coalesce_count() { 
+    assert(m_coalesce_count <= warp_size());
+    return m_coalesce_count; 
+  }
+  
+  unsigned get_mshr_merged_count() { return m_mshr_merged_count; }
+  
+  unsigned get_rt_active_threads();
+  std::deque<unsigned> get_rt_active_thread_list();
+
+  // void dec_rt_warp_cycle() { m_rt_warp_cycle--; }
+  // void set_rt_warp_cycle() { m_rt_warp_cycle = m_config->rt_warp_cycle; }
+  // bool check_rt_warp_cycle() { return m_rt_warp_cycle <= 0; }
+  
+  struct per_thread_info {
+    per_thread_info() {
+      for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
+        memreqaddr[i] = 0;
+        
+        intersection_delay = 0;
+    }
+    dram_callback_t callback;
+    new_addr_type
+        memreqaddr[MAX_ACCESSES_PER_INSN_PER_THREAD];  // effective address,
+                                                       // upto 8 different
+                                                       // requests (to support
+                                                       // 32B access in 8 chunks
+                                                       // of 4B each)
+                                                   
+    // RT variables    
+    std::deque<new_addr_type> raytrace_mem_accesses;
+    bool ray_intersect;
+    Ray ray_properties;
+    unsigned intersection_delay;
+    int num_nodes_accessed;
+    int num_triangles_accessed;
+    
+    void clear_mem_accesses() {
+      raytrace_mem_accesses.clear();
+    }
+  };
+  
+  struct per_thread_info get_thread_info(unsigned tid) { return m_per_scalar_thread[tid]; }
+  void set_thread_info(unsigned tid, struct per_thread_info thread_info) { m_per_scalar_thread[tid] = thread_info; }
+  void clear_thread_info(unsigned tid) { m_per_scalar_thread[tid].clear_mem_accesses(); }
+  void add_thread_latency(unsigned tid, unsigned cycles) { m_per_scalar_thread[tid].intersection_delay += cycles; }
+  unsigned get_thread_latency(unsigned tid) const { return m_per_scalar_thread[tid].intersection_delay; }
+  void dec_thread_latency();
+  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].raytrace_mem_accesses.size(); }
 
  protected:
   unsigned m_uid;
@@ -1213,29 +1338,32 @@ class warp_inst_t : public inst_t {
       m_warp_issued_mask;  // active mask at issue (prior to predication test)
                            // -- for instruction counting
 
-  struct per_thread_info {
-    per_thread_info() {
-      for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
-        memreqaddr[i] = 0;
-    }
-    dram_callback_t callback;
-    new_addr_type
-        memreqaddr[MAX_ACCESSES_PER_INSN_PER_THREAD];  // effective address,
-                                                       // upto 8 different
-                                                       // requests (to support
-                                                       // 32B access in 8 chunks
-                                                       // of 4B each)
-  };
+   unsigned m_coalesce_count;
+   unsigned m_mshr_merged_count;
+
+  // Combined list + set to track insertion order with no duplicates (duplicates coalesced)
+  std::deque<new_addr_type> m_next_rt_accesses;
+  std::set<new_addr_type> m_next_rt_accesses_set;
+  
+  new_addr_type m_current_rt_access;
+  
+  // List of current memory requests awaiting response
+  std::set<new_addr_type> m_mf_awaiting_response;
   bool m_per_scalar_thread_valid;
   std::vector<per_thread_info> m_per_scalar_thread;
   bool m_mem_accesses_created;
   std::list<mem_access_t> m_accessq;
+
+  unsigned long long m_start_cycle;
+  
+  new_addr_type m_prev_mem_access[32];
 
   unsigned m_scheduler_id;  // the scheduler that issues this inst
 
   // Jin: cdp support
  public:
   int m_is_cdp;
+  bool m_is_raytrace;
 };
 
 void move_warp(warp_inst_t *&dst, warp_inst_t *&src);
