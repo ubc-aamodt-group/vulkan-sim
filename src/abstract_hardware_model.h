@@ -830,6 +830,7 @@ enum cache_operator_type {
 
 class mem_access_t {
  public:
+  mem_access_t() {}
   mem_access_t(gpgpu_context *ctx) { init(ctx); }
   mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
                bool wr, gpgpu_context *ctx) {
@@ -1055,6 +1056,21 @@ class inst_t {
 enum divergence_support_t { POST_DOMINATOR = 1, NUM_SIMD_MODEL };
 
 const unsigned MAX_ACCESSES_PER_INSN_PER_THREAD = 8;
+  
+typedef struct RTMemoryTransactionRecord {
+    RTMemoryTransactionRecord(new_addr_type address, uint32_t size, TransactionType type)
+    : address(address), size(size), type(type) {
+      mem_chunks.reset();
+      for (unsigned i=0; i<(size + 31)/32; i++) {
+        mem_chunks.set(i);
+      }
+    }
+    RTMemoryTransactionRecord() {}
+    new_addr_type address;
+    uint32_t size;
+    TransactionType type;
+    std::bitset<4> mem_chunks; 
+} RTMemoryTransactionRecord;
 
 class warp_inst_t : public inst_t {
  public:
@@ -1250,11 +1266,7 @@ class warp_inst_t : public inst_t {
   bool rt_mem_accesses_empty();
   bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
   
-  mem_access_t get_next_rt_mem_access(bool locked);
-  void fill_next_rt_mem_access(bool locked);
-  mem_access_t memory_coalescing_arch_rt(new_addr_type addr);
-  
-  bool mem_fetch_wait(bool locked);
+  bool mem_fetch_wait();
   
   void clear_mem_fetch_wait(new_addr_type addr) { 
     // printf("Clear Warp %d: 0x%x\t", m_warp_id, addr);
@@ -1263,7 +1275,7 @@ class warp_inst_t : public inst_t {
   void clear_mem_fetch_wait() {
     m_mf_awaiting_response.clear();
   }
-  unsigned clear_rt_awaiting_threads(new_addr_type addr, char cat);
+  unsigned clear_rt_awaiting_threads(new_addr_type base_addr, new_addr_type addr);
   void clear_rt_access(new_addr_type addr) {
     m_next_rt_accesses_set.erase(addr);
   }
@@ -1274,9 +1286,10 @@ class warp_inst_t : public inst_t {
   void undo_rt_access(new_addr_type addr) { 
     // printf("Undo Warp %d: 0x%x\t", m_warp_id, addr);
     m_mf_awaiting_response.erase(addr);
-    assert (m_next_rt_accesses_set.find(m_current_rt_access) == m_next_rt_accesses_set.end());
+    assert (m_next_rt_accesses_set.find(m_current_rt_access.address) == m_next_rt_accesses_set.end());
+
     m_next_rt_accesses.push_front(m_current_rt_access);
-    m_next_rt_accesses_set.insert(m_current_rt_access);
+    m_next_rt_accesses_set.insert(m_current_rt_access.address);
 
   }
   
@@ -1301,14 +1314,6 @@ class warp_inst_t : public inst_t {
   // void dec_rt_warp_cycle() { m_rt_warp_cycle--; }
   // void set_rt_warp_cycle() { m_rt_warp_cycle = m_config->rt_warp_cycle; }
   // bool check_rt_warp_cycle() { return m_rt_warp_cycle <= 0; }
-  
-  typedef struct RTMemoryTransactionRecord {
-      RTMemoryTransactionRecord(new_addr_type address, uint32_t size, TransactionType type)
-      : address(address), size(size), type(type) {}
-      new_addr_type address;
-      uint32_t size;
-      TransactionType type;
-  } RTMemoryTransactionRecord;
   
   struct per_thread_info {
     per_thread_info() {
@@ -1346,7 +1351,11 @@ class warp_inst_t : public inst_t {
   unsigned get_thread_latency(unsigned tid) const { return m_per_scalar_thread[tid].intersection_delay; }
   void dec_thread_latency();
   unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
-
+  
+  void get_next_rt_mem_access(std::deque<mem_access_t>&);
+  void fill_next_rt_mem_access();
+  std::deque<mem_access_t> memory_coalescing_arch_rt(RTMemoryTransactionRecord addr);
+  
  protected:
   unsigned m_uid;
   bool m_empty;
@@ -1369,10 +1378,10 @@ class warp_inst_t : public inst_t {
    unsigned m_mshr_merged_count;
 
   // Combined list + set to track insertion order with no duplicates (duplicates coalesced)
-  std::deque<new_addr_type> m_next_rt_accesses;
+  std::deque<RTMemoryTransactionRecord> m_next_rt_accesses;
   std::set<new_addr_type> m_next_rt_accesses_set;
   
-  new_addr_type m_current_rt_access;
+  RTMemoryTransactionRecord m_current_rt_access;
   
   // List of current memory requests awaiting response
   std::set<new_addr_type> m_mf_awaiting_response;

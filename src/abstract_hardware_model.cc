@@ -782,7 +782,9 @@ void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTr
   std::deque<RTMemoryTransactionRecord> mem_record_list;
   for (auto it=transactions.begin(); it!=transactions.end(); it++) {
     RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
-      (new_addr_type)it->address, it->size, it->type
+      (new_addr_type)it->address,
+      it->size,
+      it->type
     );
     mem_record_list.push_back(*mem_record);
   }
@@ -816,20 +818,23 @@ bool warp_inst_t::rt_mem_accesses_empty() {
 }
 
 // Clear any threads waiting on current address
-unsigned warp_inst_t::clear_rt_awaiting_threads(new_addr_type addr, char cat) {
+unsigned warp_inst_t::clear_rt_awaiting_threads(new_addr_type base_addr, new_addr_type addr) {
   unsigned thread_found = 0;
   for (unsigned i=0; i<m_config->warp_size; i++) {
     if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
       
       new_addr_type thread_addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
-      // Convert node address to address used to access cache
-      // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
-      new_addr_type block_addr = line_size_based_tag_func(thread_addr, 32);
       
-      if (block_addr == addr) {
+      if (thread_addr == base_addr) {
         // Only remove accesses from threads that have completed their previous intersection test
         if (m_per_scalar_thread[i].intersection_delay == 0) {
-          m_per_scalar_thread[i].RT_mem_accesses.pop_front();
+          unsigned position = (addr - base_addr) / 32;
+          m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.reset(position);
+          
+          // If all the bits are clear, the entire data has returned, pop from list
+          if (m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.none()) {
+            m_per_scalar_thread[i].RT_mem_accesses.pop_front();
+          }
           
           // Set up delay of next intersection test
           m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
@@ -863,7 +868,7 @@ std::deque<unsigned> warp_inst_t::get_rt_active_thread_list() {
   return active_threads;
 }
 
-bool warp_inst_t::mem_fetch_wait(bool locked) { 
+bool warp_inst_t::mem_fetch_wait() { 
 
   
   // Otherwise check if any thread has new requests
@@ -897,7 +902,7 @@ bool warp_inst_t::mem_fetch_wait(bool locked) {
     
 }
 
-void warp_inst_t::fill_next_rt_mem_access(bool locked) {
+void warp_inst_t::fill_next_rt_mem_access() {
   new_addr_type next_addr;
   m_coalesce_count = 0;
   m_mshr_merged_count = 0;
@@ -913,7 +918,7 @@ void warp_inst_t::fill_next_rt_mem_access(bool locked) {
       if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
           && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
       {
-        m_next_rt_accesses.push_back(addr);
+        m_next_rt_accesses.push_back(m_per_scalar_thread[i].RT_mem_accesses.front());
         m_next_rt_accesses_set.insert(addr);
         // Track total unique accesses
         m_coalesce_count++;
@@ -931,57 +936,62 @@ void warp_inst_t::fill_next_rt_mem_access(bool locked) {
   }
 }
 
-mem_access_t warp_inst_t::get_next_rt_mem_access(bool locked) {
+void warp_inst_t::get_next_rt_mem_access(std::deque<mem_access_t> &next_accesses) {
   
-  fill_next_rt_mem_access(locked);
+  fill_next_rt_mem_access();
   
   assert(!m_next_rt_accesses.empty());
   assert(!m_next_rt_accesses_set.empty());
   
   new_addr_type next_addr;
+  RTMemoryTransactionRecord next_req;
 
   do {
-    next_addr = m_next_rt_accesses.front();
+    next_req = m_next_rt_accesses.front();
+    next_addr = next_req.address;
     m_next_rt_accesses.pop_front();
   } while (m_next_rt_accesses_set.find(next_addr) == m_next_rt_accesses_set.end());
       
   m_next_rt_accesses_set.erase(next_addr);
 
   // Generate mem_access_t
-  mem_access_t next_access = memory_coalescing_arch_rt(next_addr);
-  m_mf_awaiting_response.insert(next_access.get_addr());
-  m_current_rt_access = next_addr;
-  
-  return next_access;
+  next_accesses = memory_coalescing_arch_rt(next_req);
+  m_current_rt_access = next_req;
 }
 
-mem_access_t warp_inst_t::memory_coalescing_arch_rt(new_addr_type addr) {
+std::deque<mem_access_t> warp_inst_t::memory_coalescing_arch_rt(RTMemoryTransactionRecord mem_request) {
   // RT-CORE NOTE Temporary hard coded values
   unsigned segment_size = 32;
-  unsigned data_size = 16;
+  unsigned data_size = mem_request.size;
   bool is_wr = false;
   
   unsigned warp_parts = m_config->mem_warp_parts;
   unsigned subwarp_size = m_config->warp_size / warp_parts;
   
-  unsigned block_address = line_size_based_tag_func(addr, segment_size);
-  unsigned chunk = (addr & 127) / 32;
+  unsigned block_address = line_size_based_tag_func(mem_request.address, segment_size);
+  unsigned chunk = (mem_request.address & 127) / 32;
   
   transaction_info info;
   info.chunks.set(chunk);
-  unsigned idx = (addr & 127);
+  unsigned idx = (mem_request.address & 127);
   for (unsigned i=0; i<data_size; i++) {
     if ((idx + i) < MAX_MEMORY_ACCESS_SIZE) info.bytes.set(idx + i);
   }
   
   assert((block_address & (segment_size - 1)) == 0);
   
-  mem_access_t *access = new mem_access_t(  GLOBAL_ACC_R, block_address, segment_size, is_wr,
-                        info.active, info.bytes, info.chunks,
-                        m_config->gpgpu_ctx);
+  std::deque<mem_access_t> accesses;
+  for (unsigned i=0; i < (data_size + segment_size - 1) / segment_size; i++) { // + segment_size - 1 is to round up
+    new_addr_type block_addr = block_address + i*segment_size;
+    mem_access_t *access = new mem_access_t(  GLOBAL_ACC_R, block_addr, segment_size, is_wr,
+                          info.active, info.bytes, info.chunks,
+                          m_config->gpgpu_ctx);
+    access->set_uncoalesced_addr(mem_request.address);
+    accesses.push_back(*access);
+    m_mf_awaiting_response.insert(block_addr);
+  }
                         
-  access->set_uncoalesced_addr(addr);
-  return *access;
+  return accesses;
 }
 
 kernel_info_t::kernel_info_t(dim3 gridDim, dim3 blockDim,

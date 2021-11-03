@@ -1287,7 +1287,7 @@ class rt_unit : public pipelined_simd_unit {
                           mem_stage_access_type &fail_type);
                           
       virtual mem_stage_stall_type process_cache_access(
-            cache_t *cache, new_addr_type address, warp_inst_t &inst,
+            cache_t *cache, warp_inst_t &inst,
             std::list<cache_event> &events, mem_fetch *mf,
             enum cache_request_status status);
             
@@ -1311,6 +1311,8 @@ class rt_unit : public pipelined_simd_unit {
       
       read_only_cache *m_L0_complet;
       read_only_cache *m_L0_tri;
+      
+      std::deque<mem_access_t> mem_access_q;
       
       std::map<unsigned /*warp_id*/,
            std::map<unsigned /*regnum*/, unsigned /*count*/>>
@@ -1697,7 +1699,6 @@ class shader_core_config : public core_config {
   unsigned m_rt_bandwidth;
   unsigned m_rt_max_warps;
   unsigned m_rt_max_mshr_entries;
-  bool m_rt_lock_threads;
   bool m_rt_coalesce_warps;
   bool bypassL0Complet;
 };
