@@ -396,6 +396,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         *hit_geometry = 0;
         thread->RT_thread_data->hit_geometry = 1;
     }
+    
+    thread->set_rt_transactions(transactions);
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)

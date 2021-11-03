@@ -2413,6 +2413,10 @@ void rt_unit::cycle() {
   
   occupied >>=1;
   
+  if (!pipe_reg.empty()) {
+    printf("A new warp has arrived!\n");
+  }
+  
   // Cycle intersection tests
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
     (it->second).dec_thread_latency();
@@ -2514,7 +2518,8 @@ void rt_unit::cycle() {
   m_L0_complet->cycle();
   
   bool done = true;
-  warp_inst_t rt_inst;
+  warp_inst_t rt_inst = pipe_reg;
+  m_dispatch_reg->clear();
   
   m_cache_hit_counter = 0;
 

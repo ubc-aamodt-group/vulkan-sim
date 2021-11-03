@@ -1871,7 +1871,8 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
     }
 
     if (pI->get_opcode() == TRACE_RAY_OP) { // TIMING_TODO: get list of addresses from functional sim
-      inst.set_rt_mem_accesses(lane_id, m_raytrace_mem_accesses);
+      // inst.set_rt_mem_accesses(lane_id, m_raytrace_mem_accesses);
+      inst.set_rt_mem_transactions(lane_id, RT_transactions);
       inst.set_rt_ray_properties(lane_id, m_ray, m_raytrace_intersect,
                                  m_num_nodes_accessed, m_num_triangles_accessed);
       insn_space.set_type(global_space);
@@ -1893,9 +1894,9 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
       //m_gpu->gpgpu_ctx->the_gpgpusim->g_the_gpu->rt_tri_start = m_tri_start;
       
       // insn_memaddr = m_raytrace_mem_accesses.front();
-      inst.set_addr(lane_id,
-        std::list<new_addr_type>(m_raytrace_mem_accesses.begin(), m_raytrace_mem_accesses.end()), 
-        MAX_ACCESSES_PER_INSN_PER_THREAD);
+      // inst.set_addr(lane_id,
+      //   std::list<new_addr_type>(m_raytrace_mem_accesses.begin(), m_raytrace_mem_accesses.end()), 
+      //   MAX_ACCESSES_PER_INSN_PER_THREAD);
     }
     
     // Output register information to file and stdout

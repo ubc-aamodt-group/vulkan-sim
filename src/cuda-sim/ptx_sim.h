@@ -475,7 +475,8 @@ class ptx_thread_info {
   // Jin: get corresponding kernel grid for CDP purpose
   kernel_info_t &get_kernel() { return m_kernel; }
   
-  void add_raytrace_mem_access(addr_t addr) { m_raytrace_mem_accesses.push_back(addr); }
+  // void add_raytrace_mem_access(addr_t addr) { m_raytrace_mem_accesses.push_back(addr); }
+  void set_rt_transactions(std::vector<MemoryTransactionRecord> transactions) { RT_transactions = transactions; }
   void add_ray_intersect() { m_raytrace_intersect = 1; }
   void add_ray_properties(Ray ray) { m_ray = ray; }
   void set_node_start(addr_t node_start) { m_node_start = node_start; }
@@ -496,6 +497,7 @@ class ptx_thread_info {
   ptx_cta_info *m_cta_info;
   ptx_reg_t m_last_set_operand_value;
   Vulkan_RT_thread_data* RT_thread_data;
+  std::vector<MemoryTransactionRecord> RT_transactions;
 
  private:
   bool m_functionalSimulationMode;

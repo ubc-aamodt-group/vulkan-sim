@@ -749,8 +749,8 @@ void warp_inst_t::completed(unsigned long long cycle) const {
 void warp_inst_t::print_rt_accesses() {
   for (unsigned i=0; i<m_config->warp_size; i++) {
     printf("%d: ", i);
-    for (auto it=m_per_scalar_thread[i].raytrace_mem_accesses.begin(); it!=m_per_scalar_thread[i].raytrace_mem_accesses.end(); it++) {
-      printf("0x%x\t", *it);
+    for (auto it=m_per_scalar_thread[i].RT_mem_accesses.begin(); it!=m_per_scalar_thread[i].RT_mem_accesses.end(); it++) {
+      printf("0x%x\t", it->address);
     }
     printf("\n");
   }
@@ -764,14 +764,32 @@ void warp_inst_t::dec_thread_latency() {
   }
 }
 
-void warp_inst_t::set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses) { 
+// void warp_inst_t::set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses) { 
+//   if (!m_per_scalar_thread_valid) {
+//     m_per_scalar_thread.resize(m_config->warp_size);
+//     m_per_scalar_thread_valid = true;
+//   }
+  
+//   m_per_scalar_thread[tid].raytrace_mem_accesses = mem_accesses; 
+// }
+void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions) {
+  // Initialize
   if (!m_per_scalar_thread_valid) {
     m_per_scalar_thread.resize(m_config->warp_size);
     m_per_scalar_thread_valid = true;
   }
   
-  m_per_scalar_thread[tid].raytrace_mem_accesses = mem_accesses; 
+  std::deque<RTMemoryTransactionRecord> mem_record_list;
+  for (auto it=transactions.begin(); it!=transactions.end(); it++) {
+    RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
+      (new_addr_type)it->address, it->size, it->type
+    );
+    mem_record_list.push_back(*mem_record);
+  }
+  
+  m_per_scalar_thread[tid].RT_mem_accesses = mem_record_list; 
 }
+
 
 void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray , bool intersect, int num_nodes_accessed, int num_triangles_accessed) {
   assert(m_per_scalar_thread_valid);
@@ -783,15 +801,15 @@ void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray , bool interse
 
 void warp_inst_t::rt_mem_accesses_pop(new_addr_type addr) {
   for (unsigned i = 0; i < m_config->warp_size; i++) {
-    if (m_per_scalar_thread[i].raytrace_mem_accesses.front() == addr) 
-      m_per_scalar_thread[i].raytrace_mem_accesses.pop_front();
+    if (m_per_scalar_thread[i].RT_mem_accesses.front().address == addr) 
+      m_per_scalar_thread[i].RT_mem_accesses.pop_front();
   }
 }
 
 bool warp_inst_t::rt_mem_accesses_empty() { 
   bool empty = true;
   for (unsigned i = 0; i < m_config->warp_size; i++) {
-    empty &= m_per_scalar_thread[i].raytrace_mem_accesses.empty();
+    empty &= m_per_scalar_thread[i].RT_mem_accesses.empty();
   }
   empty &= m_next_rt_accesses_set.empty();
   return empty;
@@ -801,9 +819,9 @@ bool warp_inst_t::rt_mem_accesses_empty() {
 unsigned warp_inst_t::clear_rt_awaiting_threads(new_addr_type addr, char cat) {
   unsigned thread_found = 0;
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].raytrace_mem_accesses.empty()) {
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
       
-      new_addr_type thread_addr = m_per_scalar_thread[i].raytrace_mem_accesses.front();
+      new_addr_type thread_addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
       // Convert node address to address used to access cache
       // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
       new_addr_type block_addr = line_size_based_tag_func(thread_addr, 32);
@@ -811,7 +829,7 @@ unsigned warp_inst_t::clear_rt_awaiting_threads(new_addr_type addr, char cat) {
       if (block_addr == addr) {
         // Only remove accesses from threads that have completed their previous intersection test
         if (m_per_scalar_thread[i].intersection_delay == 0) {
-          m_per_scalar_thread[i].raytrace_mem_accesses.pop_front();
+          m_per_scalar_thread[i].RT_mem_accesses.pop_front();
           
           // Set up delay of next intersection test
           m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
@@ -827,7 +845,7 @@ unsigned warp_inst_t::get_rt_active_threads() {
   assert(m_per_scalar_thread_valid);
   unsigned active_threads = 0;
   for (auto it=m_per_scalar_thread.begin(); it!=m_per_scalar_thread.end(); it++) {
-    if (!it->raytrace_mem_accesses.empty()) {
+    if (!it->RT_mem_accesses.empty()) {
       active_threads++;
     }
   }
@@ -838,7 +856,7 @@ std::deque<unsigned> warp_inst_t::get_rt_active_thread_list() {
   assert(m_per_scalar_thread_valid);
   std::deque<unsigned> active_threads;
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].raytrace_mem_accesses.empty()) {
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
       active_threads.push_back(i);
     }
   }
@@ -846,41 +864,35 @@ std::deque<unsigned> warp_inst_t::get_rt_active_thread_list() {
 }
 
 bool warp_inst_t::mem_fetch_wait(bool locked) { 
-  // Wait for response if all current next accesses have been sent
-  // and waiting for response list is not empty
-  if (locked) {
-    return m_next_rt_accesses_set.empty() && !m_mf_awaiting_response.empty(); 
-  } 
+
   
   // Otherwise check if any thread has new requests
+  // If there are still waiting requests, continue
+  if (!m_next_rt_accesses_set.empty()) {
+    return false;
+  }
+  // Check if done, continue
+  else if (m_mf_awaiting_response.empty() && rt_mem_accesses_empty()){
+    return false;
+  }
+  // Check for threads with new requests 
   else {
-    // If there are still waiting requests, continue
-    if (!m_next_rt_accesses_set.empty()) {
-      return false;
-    }
-    // Check if done, continue
-    else if (m_mf_awaiting_response.empty() && rt_mem_accesses_empty()){
-      return false;
-    }
-    // Check for threads with new requests 
-    else {
-      for (unsigned i=0; i<m_config->warp_size; i++) {
-        if (!m_per_scalar_thread[i].raytrace_mem_accesses.empty() && m_per_scalar_thread[i].intersection_delay == 0) {
-          new_addr_type addr = m_per_scalar_thread[i].raytrace_mem_accesses.front();
-          // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
-          new_addr_type block_addr = line_size_based_tag_func(addr, 32);
-          // Check if it's already waiting for a response or waiting to be sent
-          if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
-              && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
-          {
-            // If there are any new requests, don't wait
-            return false;
-          }
+    for (unsigned i=0; i<m_config->warp_size; i++) {
+      if (!m_per_scalar_thread[i].RT_mem_accesses.empty() && m_per_scalar_thread[i].intersection_delay == 0) {
+        new_addr_type addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
+        // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
+        new_addr_type block_addr = line_size_based_tag_func(addr, 32);
+        // Check if it's already waiting for a response or waiting to be sent
+        if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
+            && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
+        {
+          // If there are any new requests, don't wait
+          return false;
         }
       }
-      // If no new requests, no waiting requests, and not done, wait.
-      return true;
     }
+    // If no new requests, no waiting requests, and not done, wait.
+    return true;
   }
     
 }
@@ -889,52 +901,32 @@ void warp_inst_t::fill_next_rt_mem_access(bool locked) {
   new_addr_type next_addr;
   m_coalesce_count = 0;
   m_mshr_merged_count = 0;
-  
-  // Memory requests in lock step
-  if (locked) {
-    // Get current round of requests
-    if (m_next_rt_accesses_set.empty()) {
-      for (unsigned i=0; i<m_config->warp_size; i++) {
-        if (!m_per_scalar_thread[i].raytrace_mem_accesses.empty()) {
-          if (m_next_rt_accesses_set.find(m_per_scalar_thread[i].raytrace_mem_accesses.front()) == m_next_rt_accesses_set.end()) {
-            m_coalesce_count++;
-          }
-          m_next_rt_accesses_set.insert(m_per_scalar_thread[i].raytrace_mem_accesses.front());
-          m_per_scalar_thread[i].raytrace_mem_accesses.pop_front();
-        }
+
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    // Only add in accesses if the thread is ready (done predictor lookup or done intersection tests)
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty() && m_per_scalar_thread[i].intersection_delay == 0) {
+      new_addr_type addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
+      
+      // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
+      new_addr_type block_addr = line_size_based_tag_func(addr, 32);
+      // Check if it's already waiting for a response or waiting to be sent
+      if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
+          && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
+      {
+        m_next_rt_accesses.push_back(addr);
+        m_next_rt_accesses_set.insert(addr);
+        // Track total unique accesses
+        m_coalesce_count++;
       }
-    }  
-    assert(!m_next_rt_accesses_set.empty());
-  }
-  
-  // Not in lock step
-  else {
-    for (unsigned i=0; i<m_config->warp_size; i++) {
-      // Only add in accesses if the thread is ready (done predictor lookup or done intersection tests)
-      if (!m_per_scalar_thread[i].raytrace_mem_accesses.empty() && m_per_scalar_thread[i].intersection_delay == 0) {
-        new_addr_type addr = m_per_scalar_thread[i].raytrace_mem_accesses.front();
-        
-        // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
-        new_addr_type block_addr = line_size_based_tag_func(addr, 32);
-        // Check if it's already waiting for a response or waiting to be sent
-        if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
-            && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
-        {
-          m_next_rt_accesses.push_back(addr);
-          m_next_rt_accesses_set.insert(addr);
-          // Track total unique accesses
-          m_coalesce_count++;
-        }
-        
-        // Count "MSHR" merges
-        else if (m_prev_mem_access[i] != addr && m_mf_awaiting_response.find(block_addr) != m_mf_awaiting_response.end()) {
-          // Accesses should either by in mf awaiting response OR next rt access, not both
-          assert(m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end());
-          m_mshr_merged_count++;
-        }
-        
-        m_prev_mem_access[i] = addr;
+      
+      // Count "MSHR" merges
+      else if (m_prev_mem_access[i] != addr && m_mf_awaiting_response.find(block_addr) != m_mf_awaiting_response.end()) {
+        // Accesses should either by in mf awaiting response OR next rt access, not both
+        assert(m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end());
+        m_mshr_merged_count++;
       }
+      
+      m_prev_mem_access[i] = addr;
     }
   }
 }
@@ -943,26 +935,17 @@ mem_access_t warp_inst_t::get_next_rt_mem_access(bool locked) {
   
   fill_next_rt_mem_access(locked);
   
-  if (!locked) assert(!m_next_rt_accesses.empty());
+  assert(!m_next_rt_accesses.empty());
   assert(!m_next_rt_accesses_set.empty());
   
   new_addr_type next_addr;
-  
-  if (locked) {
-    auto it = m_next_rt_accesses_set.begin();
-    next_addr = *it;
-    m_next_rt_accesses_set.erase(next_addr);
-  } 
-  
-  else {
-    do {
-      next_addr = m_next_rt_accesses.front();
-      m_next_rt_accesses.pop_front();
-    } while (m_next_rt_accesses_set.find(next_addr) == m_next_rt_accesses_set.end());
+
+  do {
+    next_addr = m_next_rt_accesses.front();
+    m_next_rt_accesses.pop_front();
+  } while (m_next_rt_accesses_set.find(next_addr) == m_next_rt_accesses_set.end());
       
-    m_next_rt_accesses_set.erase(next_addr);
-    // assert(m_next_rt_accesses_set.size() == m_next_rt_accesses.size());
-  }
+  m_next_rt_accesses_set.erase(next_addr);
 
   // Generate mem_access_t
   mem_access_t next_access = memory_coalescing_arch_rt(next_addr);

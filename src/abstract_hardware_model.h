@@ -155,6 +155,15 @@ typedef enum mem_operation_t mem_operation;
 
 enum _memory_op_t { no_memory_op = 0, memory_load, memory_store };
 
+enum class TransactionType {
+    BVH_STRUCTURE,
+    BVH_INTERNAL_NODE,
+    BVH_INSTANCE_LEAF,
+    BVH_PRIMITIVE_LEAF_DESCRIPTOR,
+    BVH_QUAD_LEAF,
+    BVH_PROCEDURAL_LEAF,
+};
+
 #include <assert.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -179,6 +188,14 @@ struct dim3comp {
       return false;
   }
 };
+
+typedef struct MemoryTransactionRecord {
+    MemoryTransactionRecord(void* address, uint32_t size, TransactionType type)
+    : address(address), size(size), type(type) {}
+    void* address;
+    uint32_t size;
+    TransactionType type;
+} MemoryTransactionRecord;
 
 struct Ray
 {
@@ -1221,7 +1238,8 @@ class warp_inst_t : public inst_t {
     m_per_scalar_thread_valid = true;
   }
 
-  void set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses);
+  // void set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses);
+  void set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions);
   int update_rt_mem_accesses(unsigned int tid, bool valid, const std::deque<new_addr_type> &mem_accesses);
   void set_rt_ray_properties(unsigned int tid, Ray ray, bool intersect, int num_nodes_accessed, int num_triangles_accessed);
   bool rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
@@ -1230,7 +1248,7 @@ class warp_inst_t : public inst_t {
   int rt_num_triangles_accessed(unsigned int tid) const { return m_per_scalar_thread[tid].num_triangles_accessed; }
   void rt_mem_accesses_pop(new_addr_type addr);
   bool rt_mem_accesses_empty();
-  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].raytrace_mem_accesses.empty(); };
+  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
   
   mem_access_t get_next_rt_mem_access(bool locked);
   void fill_next_rt_mem_access(bool locked);
@@ -1284,6 +1302,14 @@ class warp_inst_t : public inst_t {
   // void set_rt_warp_cycle() { m_rt_warp_cycle = m_config->rt_warp_cycle; }
   // bool check_rt_warp_cycle() { return m_rt_warp_cycle <= 0; }
   
+  typedef struct RTMemoryTransactionRecord {
+      RTMemoryTransactionRecord(new_addr_type address, uint32_t size, TransactionType type)
+      : address(address), size(size), type(type) {}
+      new_addr_type address;
+      uint32_t size;
+      TransactionType type;
+  } RTMemoryTransactionRecord;
+  
   struct per_thread_info {
     per_thread_info() {
       for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
@@ -1300,7 +1326,8 @@ class warp_inst_t : public inst_t {
                                                        // of 4B each)
                                                    
     // RT variables    
-    std::deque<new_addr_type> raytrace_mem_accesses;
+    // std::deque<new_addr_type> raytrace_mem_accesses;
+    std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
     bool ray_intersect;
     Ray ray_properties;
     unsigned intersection_delay;
@@ -1308,7 +1335,7 @@ class warp_inst_t : public inst_t {
     int num_triangles_accessed;
     
     void clear_mem_accesses() {
-      raytrace_mem_accesses.clear();
+      RT_mem_accesses.clear();
     }
   };
   
@@ -1318,7 +1345,7 @@ class warp_inst_t : public inst_t {
   void add_thread_latency(unsigned tid, unsigned cycles) { m_per_scalar_thread[tid].intersection_delay += cycles; }
   unsigned get_thread_latency(unsigned tid) const { return m_per_scalar_thread[tid].intersection_delay; }
   void dec_thread_latency();
-  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].raytrace_mem_accesses.size(); }
+  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
 
  protected:
   unsigned m_uid;
