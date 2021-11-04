@@ -147,8 +147,8 @@ bool stream_operation::do_operation(gpgpu_sim *gpu) {
       break;
     case stream_kernel_launch:
       if (m_kernel->get_uid() > (m_kernel->m_max_simulated_kernels + 1)) {
-        printf("Max simulated kernels of %d has reached, aborting.", m_kernel->m_max_simulated_kernels);
-        abort();
+        printf("Max simulated kernels of %d has reached, aborting.\n", m_kernel->m_max_simulated_kernels);
+        exit(0);
       }
       if (m_sim_mode) {  // Functional Sim
         if (g_debug_execution >= 3) {

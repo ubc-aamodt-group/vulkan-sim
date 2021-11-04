@@ -751,20 +751,20 @@ void warp_inst_t::completed(unsigned long long cycle) const {
 
 void warp_inst_t::print_rt_accesses() {
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    printf("Thread %d: ", i);
+    RT_DPRINTF("Thread %d: ", i);
     for (auto it=m_per_scalar_thread[i].RT_mem_accesses.begin(); it!=m_per_scalar_thread[i].RT_mem_accesses.end(); it++) {
-      printf("0x%x\t", it->address);
+      RT_DPRINTF("0x%x\t", it->address);
     }
-    printf("\n");
+    RT_DPRINTF("\n");
   }
 }
 
 void warp_inst_t::print_intersection_delay() {
-  printf("Intersection Delays: [");
+  RT_DPRINTF("Intersection Delays: [");
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    printf("%d\t", m_per_scalar_thread[i].intersection_delay);
+    RT_DPRINTF("%d\t", m_per_scalar_thread[i].intersection_delay);
   }
-  printf("\n");
+  RT_DPRINTF("\n");
 }
 
 void warp_inst_t::dec_thread_latency() { 
@@ -898,7 +898,7 @@ RTMemoryTransactionRecord warp_inst_t::get_next_rt_mem_transaction() {
   
   m_next_rt_accesses_set.erase(address_size_pair);
   
-  printf("Next access chosen: 0x%x with %dB\n", next_access.address, next_access.size);
+  RT_DPRINTF("Next access chosen: 0x%x with %dB\n", next_access.address, next_access.size);
   return next_access;
 }
 
@@ -916,15 +916,15 @@ void warp_inst_t::undo_rt_access(new_addr_type addr){
 
   m_next_rt_accesses.push_front(*mem_record);
   m_next_rt_accesses_set.insert(address_size_pair);
-  printf("UNDO: 0x%x added back to queue\n", addr);
+  RT_DPRINTF("UNDO: 0x%x added back to queue\n", addr);
 }
 
 unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
-  printf("Processing returned data 0x%x (base 0x%x) for Warp %d\n", mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr(), m_warp_id);
-  printf("Current state:\n");
+  RT_DPRINTF("Processing returned data 0x%x (base 0x%x) for Warp %d\n", mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr(), m_warp_id);
+  RT_DPRINTF("Current state:\n");
   print_rt_accesses();
   print_intersection_delay();
-  printf("\n");
+  RT_DPRINTF("\n");
   
   // Count how many threads used this mf
   unsigned thread_found = 0;
@@ -944,7 +944,7 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
         if (m_per_scalar_thread[i].intersection_delay == 0) {
           new_addr_type coalesced_base_addr = line_size_based_tag_func(uncoalesced_base_addr, 32);
           unsigned position = (addr - coalesced_base_addr) / 32;
-          printf("Thread %d received chunk %d (of %d)\n", i, position, mem_record.mem_chunks.count());
+          RT_DPRINTF("Thread %d received chunk %d (of %d)\n", i, position, mem_record.mem_chunks.count());
           mem_record.mem_chunks.reset(position);
           
           // If all the bits are clear, the entire data has returned, pop from list
@@ -953,8 +953,8 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
             unsigned n_delay_cycles = m_config->m_rt_intersection_latency.at(mem_record.type);
             m_per_scalar_thread[i].intersection_delay += n_delay_cycles;
             
-            printf("Thread %d collected all chunks for address 0x%x (size %d)\n", i, mem_record.address, mem_record.size);
-            printf("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
+            RT_DPRINTF("Thread %d collected all chunks for address 0x%x (size %d)\n", i, mem_record.address, mem_record.size);
+            RT_DPRINTF("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
             m_per_scalar_thread[i].RT_mem_accesses.pop_front();
           }
           

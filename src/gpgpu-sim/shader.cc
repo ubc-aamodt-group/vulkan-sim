@@ -2415,13 +2415,13 @@ void rt_unit::cycle() {
   
   if (!pipe_reg.empty()) {
     n_warps++;
-    printf("Shader %d: A new warp has arrived! uid: %d, warp id: %d\n", m_sid, pipe_reg.get_uid(), pipe_reg.warp_id());
+    RT_DPRINTF("Shader %d: A new warp has arrived! uid: %d, warp id: %d\n", m_sid, pipe_reg.get_uid(), pipe_reg.warp_id());
     for (unsigned i=0; i<m_config->warp_size; i++) {
-      printf("\tThread %d (%d mem): ", i, pipe_reg.mem_list_length(i));
+      RT_DPRINTF("\tThread %d (%d mem): ", i, pipe_reg.mem_list_length(i));
       for (auto it=pipe_reg.get_thread_info(i).RT_mem_accesses.begin(); it!=pipe_reg.get_thread_info(i).RT_mem_accesses.end(); it++) {
-        printf("0x%x\t", it->address);
+        RT_DPRINTF("0x%x\t", it->address);
       }
-      printf("\n");
+      RT_DPRINTF("\n");
     }
   }
   
@@ -2440,7 +2440,7 @@ void rt_unit::cycle() {
     new_addr_type addr = mf->get_addr();
     new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
     
-    printf("Shader %d: Memory response for 0x%x\n", m_sid, uncoalesced_base_addr);
+    RT_DPRINTF("Shader %d: Memory response for 0x%x\n", m_sid, uncoalesced_base_addr);
     
     // Update MF
     mf->set_status(IN_SHADER_FETCHED,
@@ -2467,7 +2467,7 @@ void rt_unit::cycle() {
         // Make sure at least one thread accepted the response. (Other threads might still be completing intersection test)
         if (requester_thread_found == 0) {
           // Might occur in warp coalescing in rare cases when multiple requests were sent, but only 1 was necessary
-          printf("Requester not found for: 0x%x\n", mf->get_addr());
+          RT_DPRINTF("Requester not found for: 0x%x\n", mf->get_addr());
         }
       } 
       
@@ -2489,7 +2489,7 @@ void rt_unit::cycle() {
         
         // Make sure at least one thread accepted the response. (Other threads might still be completing intersection test)
         if (requester_thread_found == 0) {
-          printf("Requester not found for: 0x%x\n", mf->get_addr());
+          RT_DPRINTF("Requester not found for: 0x%x\n", mf->get_addr());
         }
       }
       
@@ -2548,7 +2548,7 @@ void rt_unit::cycle() {
     
     // A completed warp has no more memory accesses and all the intersection delays are complete
     if (it->second.rt_mem_accesses_empty() && it->second.rt_intersection_delay_done()) {
-      printf("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, it->second.warp_id(), it->first);
+      RT_DPRINTF("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, it->second.warp_id(), it->first);
       m_core->warp_inst_complete(it->second);
       m_core->dec_inst_in_pipeline(it->second.warp_id());
       
@@ -2577,7 +2577,7 @@ void rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem
   
   // If there are still accesses waiting in mem_access_q, send those first
   if (!mem_access_q.empty()) {
-    printf("Shader %d: Prioritizing mem_access_q entries (%d entries remaining)\n", m_sid, mem_access_q.size());
+    RT_DPRINTF("Shader %d: Prioritizing mem_access_q entries (%d entries remaining)\n", m_sid, mem_access_q.size());
     fail = process_memory_access_queue(m_L0_complet, inst);
   }
   
@@ -2689,7 +2689,7 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
     
     // If the size is larger than 32B, then split into chunks and add remaining chunks into mem_access_q
     if (next_access.size > 32) {
-      printf("Shader %d: Memory request > 32B. %dB request at 0x%x added chunks ", m_sid, next_access.size, next_access.address);
+      RT_DPRINTF("Shader %d: Memory request > 32B. %dB request at 0x%x added chunks ", m_sid, next_access.size, next_access.address);
       // Save the base address
       mem_access_q_base_addr = next_access.address;
       // Save the warp id
@@ -2698,9 +2698,9 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
       // Create the memory chunks and push to mem_access_q
       for (unsigned i=1; i<((next_access.size+31)/32); i++) {
         mem_access_q.push_back((new_addr_type)(next_access.address + (i * 32)));
-        printf("0x%x, ", next_access.address + (i * 32));
+        RT_DPRINTF("0x%x, ", next_access.address + (i * 32));
       }
-      printf("\n");
+      RT_DPRINTF("\n");
     }
   }
   
@@ -2714,7 +2714,7 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
   // Create the mem_access_t
   mem_access_t *access = create_mem_access(next_addr);
   access->set_uncoalesced_base_addr(base_addr);
-  printf("Shader %d: mem_access_t created for 0x%x (block address 0x%x)\n", m_sid, next_addr, access->get_addr());
+  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x)\n", m_sid, next_addr, access->get_addr());
   
   // Create mf
   mf = m_mf_allocator->alloc(
@@ -2738,7 +2738,7 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
   }
   
   else {
-    printf("Shader %d: Sending cache request for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
+    RT_DPRINTF("Shader %d: Sending cache request for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
     
     // Access cache
     status = cache->access(
@@ -2756,17 +2756,17 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
       
       // If using warp coalescing, this is irrelevant
       if (m_config->m_rt_coalesce_warps) {
-        printf("0x%x\n", mf->get_addr());
+        RT_DPRINTF("0x%x\n", mf->get_addr());
       }
       
       // Otherwise, the request cannot be handled this cycle
       else {
-        printf("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
+        RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
         inst.undo_rt_access(mf->get_uncoalesced_addr());
       }
     }
     else {
-      printf("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
+      RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
       inst.undo_rt_access(mf->get_uncoalesced_addr());
     }
   }
@@ -2792,7 +2792,7 @@ mem_stage_stall_type rt_unit::process_cache_access(
       unsigned found = 0;
       found += inst.process_returned_mem_access(mf);
       
-      printf("Shader %d: Cache hit for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
+      RT_DPRINTF("Shader %d: Cache hit for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
       
       if (m_config->m_rt_coalesce_warps) {
         for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
