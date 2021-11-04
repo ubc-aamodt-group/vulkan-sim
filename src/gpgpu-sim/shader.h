@@ -1282,7 +1282,7 @@ class rt_unit : public pipelined_simd_unit {
         void reset_rt_stats();
         
     protected:
-      bool memory_cycle(  warp_inst_t &inst, 
+      void memory_cycle(  warp_inst_t &inst, 
                           mem_stage_stall_type &rc_fail,
                           mem_stage_access_type &fail_type);
                           
@@ -1292,7 +1292,7 @@ class rt_unit : public pipelined_simd_unit {
             enum cache_request_status status);
             
       mem_stage_stall_type process_memory_access_queue(cache_t *cache, warp_inst_t &inst);
-      mem_access_t create_mem_access(new_addr_type addr);
+      mem_access_t* create_mem_access(new_addr_type addr);
       
       const memory_config *m_memory_config;
       class mem_fetch_interface *m_icnt;
@@ -1310,6 +1310,8 @@ class rt_unit : public pipelined_simd_unit {
       read_only_cache *m_L0_tri;
       
       std::deque<new_addr_type> mem_access_q;
+      unsigned mem_access_q_warp_uid;
+      new_addr_type mem_access_q_base_addr;
       
       std::map<unsigned /*warp_id*/,
            std::map<unsigned /*regnum*/, unsigned /*count*/>>

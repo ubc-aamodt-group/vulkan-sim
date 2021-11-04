@@ -861,6 +861,8 @@ class mem_access_t {
   void set_addr(new_addr_type addr) { m_addr = addr; }
   new_addr_type get_uncoalesced_addr() const { return m_uncoalesced_addr; }
   void set_uncoalesced_addr(new_addr_type addr) { m_uncoalesced_addr = addr; }
+  new_addr_type get_uncoalesced_base_addr() const { return m_uncoalesced_base_addr; }
+  void set_uncoalesced_base_addr(new_addr_type addr) { m_uncoalesced_base_addr = addr; }
   unsigned get_size() const { return m_req_size; }
   const active_mask_t &get_warp_mask() const { return m_warp_mask; }
   bool is_write() const { return m_write; }
@@ -919,6 +921,7 @@ class mem_access_t {
   mem_access_byte_mask_t m_byte_mask;
   mem_access_sector_mask_t m_sector_mask;
   new_addr_type m_uncoalesced_addr;
+  new_addr_type m_uncoalesced_base_addr;
 };
 
 class mem_fetch;
@@ -1285,10 +1288,12 @@ class warp_inst_t : public inst_t {
   bool get_rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
   Ray get_rt_ray_properties(unsigned int tid) const { return m_per_scalar_thread[tid].ray_properties; }
   bool rt_mem_accesses_empty();
+  bool rt_intersection_delay_done();
   bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
   bool is_stalled();
   void undo_rt_access(new_addr_type addr);
   void print_rt_accesses();
+  void print_intersection_delay();
   unsigned get_rt_active_threads();
   std::deque<unsigned> get_rt_active_thread_list();
   

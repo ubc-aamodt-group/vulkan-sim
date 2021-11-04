@@ -759,6 +759,14 @@ void warp_inst_t::print_rt_accesses() {
   }
 }
 
+void warp_inst_t::print_intersection_delay() {
+  printf("Intersection Delays: [");
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    printf("%d\t", m_per_scalar_thread[i].intersection_delay);
+  }
+  printf("\n");
+}
+
 void warp_inst_t::dec_thread_latency() { 
   for (unsigned i=0; i<m_config->warp_size; i++) {
     if (m_per_scalar_thread[i].intersection_delay > 0) {
@@ -819,6 +827,14 @@ bool warp_inst_t::rt_mem_accesses_empty() {
   return empty;
 }
 
+bool warp_inst_t::rt_intersection_delay_done() { 
+  bool done = true;
+  for (unsigned i = 0; i < m_config->warp_size; i++) {
+    done &= (m_per_scalar_thread[i].intersection_delay == 0);
+  }
+  return done;
+}
+
 unsigned warp_inst_t::get_rt_active_threads() {
   assert(m_per_scalar_thread_valid);
   unsigned active_threads = 0;
@@ -845,18 +861,20 @@ void warp_inst_t::update_next_rt_accesses() {
   
   // Iterate through every thread
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    RTMemoryTransactionRecord next_access = m_per_scalar_thread[i].RT_mem_accesses.front();
-    
-    // If "unmarked", this has not been added to queue yet (also make sure intersection is complete)
-    if (next_access.status == RTMemStatus::RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) {
-      std::pair<new_addr_type, unsigned> address_size_pair (next_access.address, next_access.size);
-      // Add to queue if the same address doesn't already exist
-      if (m_next_rt_accesses_set.find(address_size_pair) == m_next_rt_accesses_set.end()) {
-        m_next_rt_accesses.push_back(next_access);
-        m_next_rt_accesses_set.insert(address_size_pair);
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+      RTMemoryTransactionRecord next_access = m_per_scalar_thread[i].RT_mem_accesses.front();
+      
+      // If "unmarked", this has not been added to queue yet (also make sure intersection is complete)
+      if (next_access.status == RTMemStatus::RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) {
+        std::pair<new_addr_type, unsigned> address_size_pair (next_access.address, next_access.size);
+        // Add to queue if the same address doesn't already exist
+        if (m_next_rt_accesses_set.find(address_size_pair) == m_next_rt_accesses_set.end()) {
+          m_next_rt_accesses.push_back(next_access);
+          m_next_rt_accesses_set.insert(address_size_pair);
+        }
+        // Update status
+        m_per_scalar_thread[i].RT_mem_accesses.front().status = RTMemStatus::RT_MEM_AWAITING;
       }
-      // Update status
-      m_per_scalar_thread[i].RT_mem_accesses.front().status = RTMemStatus::RT_MEM_AWAITING;
     }
   }
   
@@ -880,6 +898,7 @@ RTMemoryTransactionRecord warp_inst_t::get_next_rt_mem_transaction() {
   
   m_next_rt_accesses_set.erase(address_size_pair);
   
+  printf("Next access chosen: 0x%x with %dB\n", next_access.address, next_access.size);
   return next_access;
 }
 
@@ -901,6 +920,12 @@ void warp_inst_t::undo_rt_access(new_addr_type addr){
 }
 
 unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
+  printf("Processing returned data 0x%x for Warp %d\n", mf->get_uncoalesced_addr(), m_warp_id);
+  printf("Current state:\n");
+  print_rt_accesses();
+  print_intersection_delay();
+  printf("\n");
+  
   // Count how many threads used this mf
   unsigned thread_found = 0;
   
@@ -916,18 +941,20 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
       if (thread_addr == uncoalesced_base_addr) {
         // Only remove accesses from threads that have completed their previous intersection test
         if (m_per_scalar_thread[i].intersection_delay == 0) {
-          unsigned position = (addr - uncoalesced_base_addr) / 32;
+          new_addr_type coalesced_base_addr = line_size_based_tag_func(uncoalesced_base_addr, 32);
+          unsigned position = (addr - coalesced_base_addr) / 32;
+          printf("Thread %d received chunk %d (of %d)\n", i, position, m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.count());
           m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.reset(position);
-          printf("Thread %d received chunk %d (of 0x%x)\n", i, position, m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks);
           
           // If all the bits are clear, the entire data has returned, pop from list
           if (m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.none()) {
             printf("Thread %d collected all chunks for address 0x%x (size %d)\n", i, m_per_scalar_thread[i].RT_mem_accesses.front().address, m_per_scalar_thread[i].RT_mem_accesses.front().size);
             m_per_scalar_thread[i].RT_mem_accesses.pop_front();
+            
+            // Set up delay of next intersection test
+            m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
           }
           
-          // Set up delay of next intersection test
-          m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
           thread_found++;
         }
       }

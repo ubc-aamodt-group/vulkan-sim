@@ -2414,6 +2414,7 @@ void rt_unit::cycle() {
   occupied >>=1;
   
   if (!pipe_reg.empty()) {
+    n_warps++;
     printf("Shader %d: A new warp has arrived! uid: %d, warp id: %d\n", m_sid, pipe_reg.get_uid(), pipe_reg.warp_id());
     for (unsigned i=0; i<m_config->warp_size; i++) {
       printf("\tThread %d (%d mem): ", i, pipe_reg.mem_list_length(i));
@@ -2515,45 +2516,63 @@ void rt_unit::cycle() {
   m_L0_complet->cycle();
   
   // Process memory requests
-  bool done = true;
-  warp_inst_t rt_inst = pipe_reg;
+  warp_inst_t rt_inst;
+  
+  // Check if there are outstanding chunks to request
+  if (!mem_access_q.empty()) {
+    // Find the appropriate warp
+    rt_inst = m_current_warps[mem_access_q_warp_uid];
+    m_current_warps.erase(mem_access_q_warp_uid);
+    // If there was a new incoming warp, save it
+    if (!pipe_reg.empty()) {
+      m_current_warps[pipe_reg.get_uid()] = pipe_reg;
+    }
+  }
+  // Otherwise use pipe_reg
+  else {
+    rt_inst = pipe_reg;
+  }
   m_dispatch_reg->clear();
-  done &= memory_cycle(rt_inst, rc_fail, type);
+  memory_cycle(rt_inst, rc_fail, type);
   m_mem_rc = rc_fail;
   
-  // Instruction not yet complete
-  if (!done && !rt_inst.empty()) {
-    // Move unconditionally to m_current_warps
+  // Place warp back into m_current_warps
+  if (!rt_inst.empty()) {
     m_current_warps[rt_inst.get_uid()] = rt_inst;
-    rt_inst.clear();
-    return;
-  }
-
-  // If "done" (no more mem accesses)
-  if (!rt_inst.empty() && !rt_inst.is_stalled()) {
-    assert(rt_inst.is_load());
-    assert(rt_inst.space.get_type() == global_space);
-    
-    unsigned warp_id = rt_inst.warp_id();
-    
-    printf("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, warp_id, rt_inst.get_uid());
-
-    // Skip checking for pending writes (no WAW hazard?)
-   
-    m_core->warp_inst_complete(rt_inst);
-    // RT-CORE NOTE check if this is still needed
-    // m_scoreboard->releaseRegisters(m_dispatch_reg);
-    
-    m_core->dec_inst_in_pipeline(warp_id);
-    
-    // Track number of warps in RT core
-    assert(n_warps >= 0);
     rt_inst.clear();
   }
   
+  // Check to see if any warps are complete
+  int completed_warp_uid = -1;
+  for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+    
+    // A completed warp has no more memory accesses and all the intersection delays are complete
+    if (it->second.rt_mem_accesses_empty() && it->second.rt_intersection_delay_done()) {
+      printf("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, it->second.warp_id(), it->first);
+      m_core->warp_inst_complete(it->second);
+      m_core->dec_inst_in_pipeline(it->second.warp_id());
+      
+      // Track number of warps in RT core
+      n_warps--;
+      assert(n_warps >= 0 && n_warps <= m_config->m_rt_max_warps);
+      
+      // Track completed warp uid
+      completed_warp_uid = it->first;
+      
+      // Complete max 1 warp per cycle (?)
+      break;
+    }
+  }
+  
+  // Remove complete warp
+  if (completed_warp_uid >= 0) {
+    m_current_warps.erase(completed_warp_uid);
+  }
+  
+  assert(n_warps == m_current_warps.size());
 }
 
-bool rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type) {
+void rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type) {
   mem_stage_stall_type fail;
   
   // If there are still accesses waiting in mem_access_q, send those first
@@ -2568,7 +2587,7 @@ bool rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem
       if (m_config->m_rt_max_warps > 0) {
         
         // Return if there are no warps in the RT unit
-        if (m_current_warps.empty()) return true;
+        if (m_current_warps.empty()) return;
         
         // Otherwise, find the first non-stalled warp
         else {
@@ -2582,24 +2601,24 @@ bool rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem
           }
           
           // Return if all warps are stalled
-          if (inst.empty()) return true;
+          if (inst.empty()) return;
         }
       } else {
-        return true;
+        return;
       }
     }
 
     // Return if there are no active threads
-    if (!inst.active_count()) return true;
+    if (!inst.active_count()) return;
     
     // If we make it here, there should be a valid warp to work with
     assert(inst.space.get_type() == global_space);
     
     // If waiting for responses, don't send new requests
-    if (inst.is_stalled()) return inst.rt_mem_accesses_empty();
+    if (inst.is_stalled()) return;
     
     // If MSHR is at the "limit" don't sent new requests
-    if (m_config->m_rt_max_warps > 0 && m_L0_complet->num_mshr_entries() > m_config->m_rt_max_mshr_entries) return inst.rt_mem_accesses_empty();
+    if (m_config->m_rt_max_warps > 0 && m_L0_complet->num_mshr_entries() > m_config->m_rt_max_mshr_entries) return;
     
     // Continue to next step
     fail = process_memory_access_queue(m_L0_complet, inst);
@@ -2611,9 +2630,6 @@ bool rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem
     fail_type = RT_C_MEM;
   }
   
-  // Done if no more rt mem accesses
-  if (inst.empty()) return true;
-  else return inst.rt_mem_accesses_empty();
 }
 
 
@@ -2627,7 +2643,7 @@ void rt_unit::writeback() {
 }
 
 
-mem_access_t rt_unit::create_mem_access(new_addr_type addr) {
+mem_access_t* rt_unit::create_mem_access(new_addr_type addr) {
   // RT-CORE NOTE Temporary hard coded values
   unsigned segment_size = 32;
   unsigned data_size = 32;
@@ -2651,17 +2667,16 @@ mem_access_t rt_unit::create_mem_access(new_addr_type addr) {
   mem_access_t *access = new mem_access_t(  GLOBAL_ACC_R, block_address, segment_size, is_wr,
                         info.active, info.bytes, info.chunks,
                         m_config->gpgpu_ctx);
-  access->set_uncoalesced_addr(addr);
   
-  return *access;
+  return access;
 }
 
 
 mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_inst_t &inst) {
   mem_stage_stall_type result = NO_RC_FAIL;
-  mem_access_t *access;
   mem_fetch *mf;
   new_addr_type next_addr; 
+  new_addr_type base_addr;
   
   // If queue is empty, then we got here because there is warp waiting to send memory requests
   if (mem_access_q.empty()) {  
@@ -2670,12 +2685,19 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
     
     RTMemoryTransactionRecord next_access = inst.get_next_rt_mem_transaction();
     next_addr = next_access.address;
+    base_addr = next_access.address;
     
     // If the size is larger than 32B, then split into chunks and add remaining chunks into mem_access_q
     if (next_access.size > 32) {
       printf("Shader %d: Memory request > 32B. %dB request at 0x%x added chunks ", m_sid, next_access.size, next_access.address);
+      // Save the base address
+      mem_access_q_base_addr = next_access.address;
+      // Save the warp id
+      mem_access_q_warp_uid = inst.get_uid();
+      
+      // Create the memory chunks and push to mem_access_q
       for (unsigned i=1; i<((next_access.size+31)/32); i++) {
-        mem_access_q.push_back(next_access.address + (i * 32));
+        mem_access_q.push_back((new_addr_type)(next_access.address + (i * 32)));
         printf("0x%x, ", next_access.address + (i * 32));
       }
       printf("\n");
@@ -2685,11 +2707,13 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
   // Otherwise, pop the next chunk from the queue
   else {
     next_addr = mem_access_q.front();
+    base_addr = mem_access_q_base_addr;
     mem_access_q.pop_front();
   }
   
   // Create the mem_access_t
-  *access = create_mem_access(next_addr);
+  mem_access_t *access = create_mem_access(next_addr);
+  access->set_uncoalesced_addr(base_addr);
   printf("Shader %d: mem_access_t created for 0x%x (block address 0x%x)\n", m_sid, next_addr, access->get_addr());
   
   // Create mf
