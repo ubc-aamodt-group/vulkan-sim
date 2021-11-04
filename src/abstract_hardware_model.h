@@ -1328,7 +1328,7 @@ class warp_inst_t : public inst_t {
 
   // Combined list + set to track insertion order with no duplicates (duplicates coalesced)
   std::deque<RTMemoryTransactionRecord> m_next_rt_accesses;
-  std::set<new_addr_type> m_next_rt_accesses_set;
+  std::set<std::pair<new_addr_type, unsigned> > m_next_rt_accesses_set;
   
   RTMemoryTransactionRecord m_current_rt_access;
   

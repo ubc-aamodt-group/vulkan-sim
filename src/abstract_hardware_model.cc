@@ -849,9 +849,12 @@ void warp_inst_t::update_next_rt_accesses() {
     
     // If "unmarked", this has not been added to queue yet (also make sure intersection is complete)
     if (next_access.status == RTMemStatus::RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) {
-      // Add to queue
-      m_next_rt_accesses.push_back(next_access);
-      m_next_rt_accesses_set.insert(next_access.address);
+      std::pair<new_addr_type, unsigned> address_size_pair (next_access.address, next_access.size);
+      // Add to queue if the same address doesn't already exist
+      if (m_next_rt_accesses_set.find(address_size_pair) == m_next_rt_accesses_set.end()) {
+        m_next_rt_accesses.push_back(next_access);
+        m_next_rt_accesses_set.insert(address_size_pair);
+      }
       // Update status
       m_per_scalar_thread[i].RT_mem_accesses.front().status = RTMemStatus::RT_MEM_AWAITING;
     }
@@ -863,22 +866,26 @@ RTMemoryTransactionRecord warp_inst_t::get_next_rt_mem_transaction() {
   // Update the list of next accesses
   update_next_rt_accesses();
   RTMemoryTransactionRecord next_access;
+  std::pair<new_addr_type, unsigned> address_size_pair;
   
   do {
     // Choose the next one on the list
     next_access = m_next_rt_accesses.front();
     m_next_rt_accesses.pop_front();
     
+    address_size_pair = std::pair<new_addr_type, unsigned>(next_access.address, next_access.size);
+    
   // Check that the address hasn't already been sent
-  } while (m_next_rt_accesses_set.find(next_access.address) == m_next_rt_accesses_set.end());
+  } while (m_next_rt_accesses_set.find(address_size_pair) == m_next_rt_accesses_set.end());
   
-  m_next_rt_accesses_set.erase(next_access.address);
+  m_next_rt_accesses_set.erase(address_size_pair);
   
   return next_access;
 }
 
 void warp_inst_t::undo_rt_access(new_addr_type addr){ 
-  assert (m_next_rt_accesses_set.find(m_current_rt_access.address) == m_next_rt_accesses_set.end());
+  std::pair<new_addr_type, unsigned> address_size_pair (addr, 32);
+  assert (m_next_rt_accesses_set.find(address_size_pair) == m_next_rt_accesses_set.end());
   
   // Repackage address into a transaction record
   RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
@@ -889,7 +896,7 @@ void warp_inst_t::undo_rt_access(new_addr_type addr){
   mem_record->status = RT_MEM_AWAITING;
 
   m_next_rt_accesses.push_front(*mem_record);
-  m_next_rt_accesses_set.insert(addr);
+  m_next_rt_accesses_set.insert(address_size_pair);
   printf("UNDO: 0x%x added back to queue\n", addr);
 }
 
