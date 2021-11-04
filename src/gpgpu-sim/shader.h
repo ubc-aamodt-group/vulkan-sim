@@ -1559,6 +1559,15 @@ class shader_core_config : public core_config {
       } else
         break;  // we only accept continuous specialized_units, i.e., 1,2,3,4
     }
+    
+    // Initialize RT unit latency delays
+    sscanf(m_rt_intersection_latency_str, "%u,%u,%u,%u,%u,%u", 
+      &m_rt_intersection_latency[TransactionType::BVH_STRUCTURE],
+      &m_rt_intersection_latency[TransactionType::BVH_INTERNAL_NODE],
+      &m_rt_intersection_latency[TransactionType::BVH_INSTANCE_LEAF],
+      &m_rt_intersection_latency[TransactionType::BVH_PRIMITIVE_LEAF_DESCRIPTOR],
+      &m_rt_intersection_latency[TransactionType::BVH_QUAD_LEAF],
+      &m_rt_intersection_latency[TransactionType::BVH_PROCEDURAL_LEAF]);
   }
   void reg_options(class OptionParser *opp);
   unsigned max_cta(const kernel_info_t &k) const;

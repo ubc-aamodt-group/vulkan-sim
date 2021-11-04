@@ -257,9 +257,9 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "try to coalesce memory requests between warps ",
       "0");
   option_parser_register(
-      opp, "-gpgpu_rt_intersection_latency", OPT_UINT32, &m_rt_intersection_latency,
-      "latency of pipelines intersection tests ",
-      "0");
+      opp, "-gpgpu_rt_intersection_latency", OPT_CSTR, &m_rt_intersection_latency_str,
+      "latency of pipelined intersection tests (6 types)",
+      "0,0,0,0,0,0");
   option_parser_register(opp, "-gpgpu_cache:il1", OPT_CSTR,
                          &m_L1I_config.m_config_string,
                          "shader L1 instruction cache config "
@@ -681,6 +681,10 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-gpgpu_TB_launch_latency", OPT_INT32,
                          &(gpgpu_ctx->device_runtime->g_TB_launch_latency),
                          "thread block launch latency in cycles. Default: 0",
+                         "0");
+  option_parser_register(opp, "-gpgpu_max_simulated_rt_kernels", OPT_INT32,
+                         &(gpgpu_ctx->device_runtime->g_max_sim_rt_kernels),
+                         "Max simulated kernels, used to limit how many frames we render. Default: 0",
                          "0");
 }
 

@@ -920,7 +920,7 @@ void warp_inst_t::undo_rt_access(new_addr_type addr){
 }
 
 unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
-  printf("Processing returned data 0x%x for Warp %d\n", mf->get_uncoalesced_addr(), m_warp_id);
+  printf("Processing returned data 0x%x (base 0x%x) for Warp %d\n", mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr(), m_warp_id);
   printf("Current state:\n");
   print_rt_accesses();
   print_intersection_delay();
@@ -931,28 +931,31 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
   
   // Get addresses
   new_addr_type addr = mf->get_addr();
-  new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_addr();
+  new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
   
   // Iterate through every thread in the warp
   for (unsigned i=0; i<m_config->warp_size; i++) {
     if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
-      new_addr_type thread_addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
+      RTMemoryTransactionRecord &mem_record = m_per_scalar_thread[i].RT_mem_accesses.front();
+      new_addr_type thread_addr = mem_record.address;
       
       if (thread_addr == uncoalesced_base_addr) {
         // Only remove accesses from threads that have completed their previous intersection test
         if (m_per_scalar_thread[i].intersection_delay == 0) {
           new_addr_type coalesced_base_addr = line_size_based_tag_func(uncoalesced_base_addr, 32);
           unsigned position = (addr - coalesced_base_addr) / 32;
-          printf("Thread %d received chunk %d (of %d)\n", i, position, m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.count());
-          m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.reset(position);
+          printf("Thread %d received chunk %d (of %d)\n", i, position, mem_record.mem_chunks.count());
+          mem_record.mem_chunks.reset(position);
           
           // If all the bits are clear, the entire data has returned, pop from list
-          if (m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.none()) {
-            printf("Thread %d collected all chunks for address 0x%x (size %d)\n", i, m_per_scalar_thread[i].RT_mem_accesses.front().address, m_per_scalar_thread[i].RT_mem_accesses.front().size);
-            m_per_scalar_thread[i].RT_mem_accesses.pop_front();
-            
+          if (mem_record.mem_chunks.none()) {
             // Set up delay of next intersection test
-            m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
+            unsigned n_delay_cycles = m_config->m_rt_intersection_latency.at(mem_record.type);
+            m_per_scalar_thread[i].intersection_delay += n_delay_cycles;
+            
+            printf("Thread %d collected all chunks for address 0x%x (size %d)\n", i, mem_record.address, mem_record.size);
+            printf("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
+            m_per_scalar_thread[i].RT_mem_accesses.pop_front();
           }
           
           thread_found++;
@@ -985,6 +988,8 @@ kernel_info_t::kernel_info_t(dim3 gridDim, dim3 blockDim,
   m_kernel_TB_latency =
       entry->gpgpu_ctx->device_runtime->g_kernel_launch_latency +
       num_blocks() * entry->gpgpu_ctx->device_runtime->g_TB_launch_latency;
+
+  m_max_simulated_kernels = entry->gpgpu_ctx->device_runtime->g_max_sim_rt_kernels;
 
   cache_config_set = false;
 }

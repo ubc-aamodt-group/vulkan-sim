@@ -398,6 +398,8 @@ class kernel_info_t {
   unsigned long long end_cycle;
   unsigned m_launch_latency;
 
+  unsigned m_max_simulated_kernels;
+
   mutable bool cache_config_set;
 
   unsigned m_kernel_TB_latency;  // this used for any CPU-GPU kernel latency and
@@ -450,7 +452,8 @@ class core_config {
   bool gmem_skip_L1D;  // on = global memory access always skip the L1 cache
 
   bool adaptive_cache_config;
-  unsigned m_rt_intersection_latency;
+  std::map<TransactionType, unsigned> m_rt_intersection_latency;
+  char *m_rt_intersection_latency_str;
 };
 
 // bounded stack that implements simt reconvergence using pdom mechanism from
@@ -1304,7 +1307,6 @@ class warp_inst_t : public inst_t {
   struct per_thread_info get_thread_info(unsigned tid) { return m_per_scalar_thread[tid]; }
   void set_thread_info(unsigned tid, struct per_thread_info thread_info) { m_per_scalar_thread[tid] = thread_info; }
   void clear_thread_info(unsigned tid) { m_per_scalar_thread[tid].clear_mem_accesses(); }
-  void add_thread_latency(unsigned tid, unsigned cycles) { m_per_scalar_thread[tid].intersection_delay += cycles; }
   unsigned get_thread_latency(unsigned tid) const { return m_per_scalar_thread[tid].intersection_delay; }
   void dec_thread_latency();
   unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }

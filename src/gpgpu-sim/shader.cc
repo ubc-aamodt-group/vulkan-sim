@@ -2438,7 +2438,7 @@ void rt_unit::cycle() {
     m_response_fifo.pop_front();
     
     new_addr_type addr = mf->get_addr();
-    new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_addr();
+    new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
     
     printf("Shader %d: Memory response for 0x%x\n", m_sid, uncoalesced_base_addr);
     
@@ -2667,7 +2667,7 @@ mem_access_t* rt_unit::create_mem_access(new_addr_type addr) {
   mem_access_t *access = new mem_access_t(  GLOBAL_ACC_R, block_address, segment_size, is_wr,
                         info.active, info.bytes, info.chunks,
                         m_config->gpgpu_ctx);
-  
+  access->set_uncoalesced_addr(addr);
   return access;
 }
 
@@ -2713,7 +2713,7 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
   
   // Create the mem_access_t
   mem_access_t *access = create_mem_access(next_addr);
-  access->set_uncoalesced_addr(base_addr);
+  access->set_uncoalesced_base_addr(base_addr);
   printf("Shader %d: mem_access_t created for 0x%x (block address 0x%x)\n", m_sid, next_addr, access->get_addr());
   
   // Create mf
@@ -2761,12 +2761,12 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(cache_t *cache, warp_i
       
       // Otherwise, the request cannot be handled this cycle
       else {
-        printf("Shader %d: Reservation fail, undoing request for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
+        printf("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
         inst.undo_rt_access(mf->get_uncoalesced_addr());
       }
     }
     else {
-      printf("Shader %d: Reservation fail, undoing request for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
+      printf("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
       inst.undo_rt_access(mf->get_uncoalesced_addr());
     }
   }
@@ -2784,7 +2784,7 @@ mem_stage_stall_type rt_unit::process_cache_access(
     mem_stage_stall_type result = NO_RC_FAIL;
     
     new_addr_type addr = mf->get_addr();
-    new_addr_type base_addr = mf->get_uncoalesced_addr();
+    new_addr_type base_addr = mf->get_uncoalesced_base_addr();
     
     // Assume no writes sent
     
@@ -2792,7 +2792,7 @@ mem_stage_stall_type rt_unit::process_cache_access(
       unsigned found = 0;
       found += inst.process_returned_mem_access(mf);
       
-      printf("Shader %d: Cache hit for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
+      printf("Shader %d: Cache hit for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
       
       if (m_config->m_rt_coalesce_warps) {
         for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
