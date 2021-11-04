@@ -746,9 +746,12 @@ void warp_inst_t::completed(unsigned long long cycle) const {
       pc, latency * active_count());
 }
 
+
+/* Start of RT unit functions */
+
 void warp_inst_t::print_rt_accesses() {
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    printf("%d: ", i);
+    printf("Thread %d: ", i);
     for (auto it=m_per_scalar_thread[i].RT_mem_accesses.begin(); it!=m_per_scalar_thread[i].RT_mem_accesses.end(); it++) {
       printf("0x%x\t", it->address);
     }
@@ -764,14 +767,6 @@ void warp_inst_t::dec_thread_latency() {
   }
 }
 
-// void warp_inst_t::set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses) { 
-//   if (!m_per_scalar_thread_valid) {
-//     m_per_scalar_thread.resize(m_config->warp_size);
-//     m_per_scalar_thread_valid = true;
-//   }
-  
-//   m_per_scalar_thread[tid].raytrace_mem_accesses = mem_accesses; 
-// }
 void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions) {
   // Initialize
   if (!m_per_scalar_thread_valid) {
@@ -779,33 +774,40 @@ void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTr
     m_per_scalar_thread_valid = true;
   }
   
-  std::deque<RTMemoryTransactionRecord> mem_record_list;
   for (auto it=transactions.begin(); it!=transactions.end(); it++) {
+    // Convert transaction type and add to thread
     RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
       (new_addr_type)it->address,
       it->size,
       it->type
     );
-    mem_record_list.push_back(*mem_record);
+    m_per_scalar_thread[tid].RT_mem_accesses.push_back(*mem_record);
   }
-  
-  m_per_scalar_thread[tid].RT_mem_accesses = mem_record_list; 
 }
 
+bool warp_inst_t::is_stalled() {
+  // If there are still memory requests waiting to be processed, not stalled
+  if (!m_next_rt_accesses_set.empty()) {
+    return false;
+  }
+  // Otherwise check every thread
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+      RTMemoryTransactionRecord mem_record = m_per_scalar_thread[i].RT_mem_accesses.front();
+      
+      // If there is an unprocessed record, not stalled
+      if (mem_record.status == RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) return false;
+    }
+  }
+  
+  // Otherwise stalled
+  return true;
+}
 
-void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray , bool intersect, int num_nodes_accessed, int num_triangles_accessed) {
+void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray , bool intersect) {
   assert(m_per_scalar_thread_valid);
   m_per_scalar_thread[tid].ray_properties = ray;
   m_per_scalar_thread[tid].ray_intersect = intersect;
-  m_per_scalar_thread[tid].num_nodes_accessed = num_nodes_accessed;
-  m_per_scalar_thread[tid].num_triangles_accessed = num_triangles_accessed;
-}
-
-void warp_inst_t::rt_mem_accesses_pop(new_addr_type addr) {
-  for (unsigned i = 0; i < m_config->warp_size; i++) {
-    if (m_per_scalar_thread[i].RT_mem_accesses.front().address == addr) 
-      m_per_scalar_thread[i].RT_mem_accesses.pop_front();
-  }
 }
 
 bool warp_inst_t::rt_mem_accesses_empty() { 
@@ -815,35 +817,6 @@ bool warp_inst_t::rt_mem_accesses_empty() {
   }
   empty &= m_next_rt_accesses_set.empty();
   return empty;
-}
-
-// Clear any threads waiting on current address
-unsigned warp_inst_t::clear_rt_awaiting_threads(new_addr_type base_addr, new_addr_type addr) {
-  unsigned thread_found = 0;
-  for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
-      
-      new_addr_type thread_addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
-      
-      if (thread_addr == base_addr) {
-        // Only remove accesses from threads that have completed their previous intersection test
-        if (m_per_scalar_thread[i].intersection_delay == 0) {
-          unsigned position = (addr - base_addr) / 32;
-          m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.reset(position);
-          
-          // If all the bits are clear, the entire data has returned, pop from list
-          if (m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.none()) {
-            m_per_scalar_thread[i].RT_mem_accesses.pop_front();
-          }
-          
-          // Set up delay of next intersection test
-          m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
-          thread_found++;
-        }
-      }
-    }
-  }
-  return thread_found;
 }
 
 unsigned warp_inst_t::get_rt_active_threads() {
@@ -868,130 +841,92 @@ std::deque<unsigned> warp_inst_t::get_rt_active_thread_list() {
   return active_threads;
 }
 
-bool warp_inst_t::mem_fetch_wait() { 
-
+void warp_inst_t::update_next_rt_accesses() {
   
-  // Otherwise check if any thread has new requests
-  // If there are still waiting requests, continue
-  if (!m_next_rt_accesses_set.empty()) {
-    return false;
+  // Iterate through every thread
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    RTMemoryTransactionRecord next_access = m_per_scalar_thread[i].RT_mem_accesses.front();
+    
+    // If "unmarked", this has not been added to queue yet (also make sure intersection is complete)
+    if (next_access.status == RTMemStatus::RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) {
+      // Add to queue
+      m_next_rt_accesses.push_back(next_access);
+      m_next_rt_accesses_set.insert(next_access.address);
+      // Update status
+      m_per_scalar_thread[i].RT_mem_accesses.front().status = RTMemStatus::RT_MEM_AWAITING;
+    }
   }
-  // Check if done, continue
-  else if (m_mf_awaiting_response.empty() && rt_mem_accesses_empty()){
-    return false;
-  }
-  // Check for threads with new requests 
-  else {
-    for (unsigned i=0; i<m_config->warp_size; i++) {
-      if (!m_per_scalar_thread[i].RT_mem_accesses.empty() && m_per_scalar_thread[i].intersection_delay == 0) {
-        new_addr_type addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
-        // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
-        new_addr_type block_addr = line_size_based_tag_func(addr, 32);
-        // Check if it's already waiting for a response or waiting to be sent
-        if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
-            && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
-        {
-          // If there are any new requests, don't wait
-          return false;
+  
+}
+
+RTMemoryTransactionRecord warp_inst_t::get_next_rt_mem_transaction() {
+  // Update the list of next accesses
+  update_next_rt_accesses();
+  RTMemoryTransactionRecord next_access;
+  
+  do {
+    // Choose the next one on the list
+    next_access = m_next_rt_accesses.front();
+    m_next_rt_accesses.pop_front();
+    
+  // Check that the address hasn't already been sent
+  } while (m_next_rt_accesses_set.find(next_access.address) == m_next_rt_accesses_set.end());
+  
+  m_next_rt_accesses_set.erase(next_access.address);
+  
+  return next_access;
+}
+
+void warp_inst_t::undo_rt_access(new_addr_type addr){ 
+  assert (m_next_rt_accesses_set.find(m_current_rt_access.address) == m_next_rt_accesses_set.end());
+  
+  // Repackage address into a transaction record
+  RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
+    addr, 32, TransactionType::UNDEFINED
+  );
+  
+  // Already in queue
+  mem_record->status = RT_MEM_AWAITING;
+
+  m_next_rt_accesses.push_front(*mem_record);
+  m_next_rt_accesses_set.insert(addr);
+  printf("UNDO: 0x%x added back to queue\n", addr);
+}
+
+unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
+  // Count how many threads used this mf
+  unsigned thread_found = 0;
+  
+  // Get addresses
+  new_addr_type addr = mf->get_addr();
+  new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_addr();
+  
+  // Iterate through every thread in the warp
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+      new_addr_type thread_addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
+      
+      if (thread_addr == uncoalesced_base_addr) {
+        // Only remove accesses from threads that have completed their previous intersection test
+        if (m_per_scalar_thread[i].intersection_delay == 0) {
+          unsigned position = (addr - uncoalesced_base_addr) / 32;
+          m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.reset(position);
+          printf("Thread %d received chunk %d (of 0x%x)\n", i, position, m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks);
+          
+          // If all the bits are clear, the entire data has returned, pop from list
+          if (m_per_scalar_thread[i].RT_mem_accesses.front().mem_chunks.none()) {
+            printf("Thread %d collected all chunks for address 0x%x (size %d)\n", i, m_per_scalar_thread[i].RT_mem_accesses.front().address, m_per_scalar_thread[i].RT_mem_accesses.front().size);
+            m_per_scalar_thread[i].RT_mem_accesses.pop_front();
+          }
+          
+          // Set up delay of next intersection test
+          m_per_scalar_thread[i].intersection_delay += m_config->m_rt_intersection_latency;
+          thread_found++;
         }
       }
     }
-    // If no new requests, no waiting requests, and not done, wait.
-    return true;
   }
-    
-}
-
-void warp_inst_t::fill_next_rt_mem_access() {
-  new_addr_type next_addr;
-  m_coalesce_count = 0;
-  m_mshr_merged_count = 0;
-
-  for (unsigned i=0; i<m_config->warp_size; i++) {
-    // Only add in accesses if the thread is ready (done predictor lookup or done intersection tests)
-    if (!m_per_scalar_thread[i].RT_mem_accesses.empty() && m_per_scalar_thread[i].intersection_delay == 0) {
-      new_addr_type addr = m_per_scalar_thread[i].RT_mem_accesses.front().address;
-      
-      // RT-CORE NOTE: Temporarily hard coded to 32, to be updated
-      new_addr_type block_addr = line_size_based_tag_func(addr, 32);
-      // Check if it's already waiting for a response or waiting to be sent
-      if (m_mf_awaiting_response.find(block_addr) == m_mf_awaiting_response.end()
-          && m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end()) 
-      {
-        m_next_rt_accesses.push_back(m_per_scalar_thread[i].RT_mem_accesses.front());
-        m_next_rt_accesses_set.insert(addr);
-        // Track total unique accesses
-        m_coalesce_count++;
-      }
-      
-      // Count "MSHR" merges
-      else if (m_prev_mem_access[i] != addr && m_mf_awaiting_response.find(block_addr) != m_mf_awaiting_response.end()) {
-        // Accesses should either by in mf awaiting response OR next rt access, not both
-        assert(m_next_rt_accesses_set.find(addr) == m_next_rt_accesses_set.end());
-        m_mshr_merged_count++;
-      }
-      
-      m_prev_mem_access[i] = addr;
-    }
-  }
-}
-
-void warp_inst_t::get_next_rt_mem_access(std::deque<mem_access_t> &next_accesses) {
-  
-  fill_next_rt_mem_access();
-  
-  assert(!m_next_rt_accesses.empty());
-  assert(!m_next_rt_accesses_set.empty());
-  
-  new_addr_type next_addr;
-  RTMemoryTransactionRecord next_req;
-
-  do {
-    next_req = m_next_rt_accesses.front();
-    next_addr = next_req.address;
-    m_next_rt_accesses.pop_front();
-  } while (m_next_rt_accesses_set.find(next_addr) == m_next_rt_accesses_set.end());
-      
-  m_next_rt_accesses_set.erase(next_addr);
-
-  // Generate mem_access_t
-  next_accesses = memory_coalescing_arch_rt(next_req);
-  m_current_rt_access = next_req;
-}
-
-std::deque<mem_access_t> warp_inst_t::memory_coalescing_arch_rt(RTMemoryTransactionRecord mem_request) {
-  // RT-CORE NOTE Temporary hard coded values
-  unsigned segment_size = 32;
-  unsigned data_size = mem_request.size;
-  bool is_wr = false;
-  
-  unsigned warp_parts = m_config->mem_warp_parts;
-  unsigned subwarp_size = m_config->warp_size / warp_parts;
-  
-  unsigned block_address = line_size_based_tag_func(mem_request.address, segment_size);
-  unsigned chunk = (mem_request.address & 127) / 32;
-  
-  transaction_info info;
-  info.chunks.set(chunk);
-  unsigned idx = (mem_request.address & 127);
-  for (unsigned i=0; i<data_size; i++) {
-    if ((idx + i) < MAX_MEMORY_ACCESS_SIZE) info.bytes.set(idx + i);
-  }
-  
-  assert((block_address & (segment_size - 1)) == 0);
-  
-  std::deque<mem_access_t> accesses;
-  for (unsigned i=0; i < (data_size + segment_size - 1) / segment_size; i++) { // + segment_size - 1 is to round up
-    new_addr_type block_addr = block_address + i*segment_size;
-    mem_access_t *access = new mem_access_t(  GLOBAL_ACC_R, block_addr, segment_size, is_wr,
-                          info.active, info.bytes, info.chunks,
-                          m_config->gpgpu_ctx);
-    access->set_uncoalesced_addr(mem_request.address);
-    accesses.push_back(*access);
-    m_mf_awaiting_response.insert(block_addr);
-  }
-                        
-  return accesses;
+  return thread_found;
 }
 
 kernel_info_t::kernel_info_t(dim3 gridDim, dim3 blockDim,

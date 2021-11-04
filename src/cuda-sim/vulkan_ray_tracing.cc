@@ -159,6 +159,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 	// Create ray
 	Ray ray;
 	ray.make_ray(origin, direction, Tmin, Tmax);
+    thread->add_ray_properties(ray);
 
 	// TODO: Get geometry data
 	VkAccelerationStructureBuildGeometryInfoKHR* pInfos;
@@ -360,6 +361,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                 {
                     min_thit = thit;
                     closest_leaf = leaf;
+                    thread->add_ray_intersect();
                     // min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
                 }
             }

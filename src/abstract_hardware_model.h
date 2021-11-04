@@ -162,10 +162,12 @@ enum class TransactionType {
     BVH_PRIMITIVE_LEAF_DESCRIPTOR,
     BVH_QUAD_LEAF,
     BVH_PROCEDURAL_LEAF,
+    UNDEFINED,
 };
 
 #include <assert.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <algorithm>
 #include <bitset>
 #include <deque>
@@ -231,6 +233,7 @@ struct Ray
 };
 
 void increment_x_then_y_then_z(dim3 &i, const dim3 &bound);
+address_type line_size_based_tag_func(new_addr_type address, new_addr_type line_size);
 
 // Jin: child kernel information for CDP
 #include "stream_manager.h"
@@ -1057,19 +1060,30 @@ enum divergence_support_t { POST_DOMINATOR = 1, NUM_SIMD_MODEL };
 
 const unsigned MAX_ACCESSES_PER_INSN_PER_THREAD = 8;
   
+enum RTMemStatus {
+  RT_MEM_UNMARKED,
+  RT_MEM_AWAITING,
+  RT_MEM_COMPLETE,
+};
+
 typedef struct RTMemoryTransactionRecord {
+    new_addr_type address;
+    uint32_t size;
+    TransactionType type;
+    std::bitset<4> mem_chunks;
+    RTMemStatus status;
+    RTMemoryTransactionRecord() {
+      status = RT_MEM_UNMARKED;
+    }
     RTMemoryTransactionRecord(new_addr_type address, uint32_t size, TransactionType type)
     : address(address), size(size), type(type) {
+      // Break into 32B chunks
       mem_chunks.reset();
       for (unsigned i=0; i<(size + 31)/32; i++) {
         mem_chunks.set(i);
       }
+      status = RT_MEM_UNMARKED;
     }
-    RTMemoryTransactionRecord() {}
-    new_addr_type address;
-    uint32_t size;
-    TransactionType type;
-    std::bitset<4> mem_chunks; 
 } RTMemoryTransactionRecord;
 
 class warp_inst_t : public inst_t {
@@ -1079,7 +1093,6 @@ class warp_inst_t : public inst_t {
     m_uid = 0;
     m_empty = true;
     m_config = NULL;
-    m_is_raytrace = false;
   }
   warp_inst_t(const core_config *config) {
     m_uid = 0;
@@ -1091,7 +1104,6 @@ class warp_inst_t : public inst_t {
     m_mem_accesses_created = false;
     m_cache_hit = false;
     m_is_printf = false;
-    m_is_raytrace = false;
     m_is_cdp = 0;
     should_do_atomic = true;
   }
@@ -1126,20 +1138,7 @@ class warp_inst_t : public inst_t {
     for (unsigned i = 0; i < num_addrs; i++)
       m_per_scalar_thread[n].memreqaddr[i] = addr[i];
   }
-  
-  void set_addr(unsigned n, std::list<new_addr_type> addr, unsigned num_addrs) {
-    if (!m_per_scalar_thread_valid) {
-      m_per_scalar_thread.resize(m_config->warp_size);
-      m_per_scalar_thread_valid = true;
-    }
-    assert(num_addrs <= MAX_ACCESSES_PER_INSN_PER_THREAD);
-    assert(addr.size() > 0);
-    for (unsigned i = 0; i < num_addrs; i++) {
-      if (addr.size() == 0) return;
-      m_per_scalar_thread[n].memreqaddr[i] = addr.front();
-      addr.pop_front();
-    }
-  }
+
   void print_m_accessq() {
     if (accessq_empty())
       return;
@@ -1254,67 +1253,6 @@ class warp_inst_t : public inst_t {
     m_per_scalar_thread_valid = true;
   }
 
-  // void set_rt_mem_accesses(unsigned int tid, const std::deque<new_addr_type>& mem_accesses);
-  void set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions);
-  int update_rt_mem_accesses(unsigned int tid, bool valid, const std::deque<new_addr_type> &mem_accesses);
-  void set_rt_ray_properties(unsigned int tid, Ray ray, bool intersect, int num_nodes_accessed, int num_triangles_accessed);
-  bool rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
-  Ray rt_ray_properties(unsigned int tid) const { return m_per_scalar_thread[tid].ray_properties; }
-  int rt_num_nodes_accessed(unsigned int tid) const { return m_per_scalar_thread[tid].num_nodes_accessed; }
-  int rt_num_triangles_accessed(unsigned int tid) const { return m_per_scalar_thread[tid].num_triangles_accessed; }
-  void rt_mem_accesses_pop(new_addr_type addr);
-  bool rt_mem_accesses_empty();
-  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
-  
-  bool mem_fetch_wait();
-  
-  void clear_mem_fetch_wait(new_addr_type addr) { 
-    // printf("Clear Warp %d: 0x%x\t", m_warp_id, addr);
-    m_mf_awaiting_response.erase(addr);
-  }
-  void clear_mem_fetch_wait() {
-    m_mf_awaiting_response.clear();
-  }
-  unsigned clear_rt_awaiting_threads(new_addr_type base_addr, new_addr_type addr);
-  void clear_rt_access(new_addr_type addr) {
-    m_next_rt_accesses_set.erase(addr);
-  }
-  void clear_rt_access() {
-    m_next_rt_accesses_set.clear();
-  }
-  
-  void undo_rt_access(new_addr_type addr) { 
-    // printf("Undo Warp %d: 0x%x\t", m_warp_id, addr);
-    m_mf_awaiting_response.erase(addr);
-    assert (m_next_rt_accesses_set.find(m_current_rt_access.address) == m_next_rt_accesses_set.end());
-
-    m_next_rt_accesses.push_front(m_current_rt_access);
-    m_next_rt_accesses_set.insert(m_current_rt_access.address);
-
-  }
-  
-  void set_mem_fetch_wait(new_addr_type addr) {
-    m_mf_awaiting_response.insert(addr);
-  }
-  
-  void print_rt_accesses();
-  
-  std::set<new_addr_type> get_rt_accesses() { return m_next_rt_accesses_set; }
-  
-  unsigned get_coalesce_count() { 
-    assert(m_coalesce_count <= warp_size());
-    return m_coalesce_count; 
-  }
-  
-  unsigned get_mshr_merged_count() { return m_mshr_merged_count; }
-  
-  unsigned get_rt_active_threads();
-  std::deque<unsigned> get_rt_active_thread_list();
-
-  // void dec_rt_warp_cycle() { m_rt_warp_cycle--; }
-  // void set_rt_warp_cycle() { m_rt_warp_cycle = m_config->rt_warp_cycle; }
-  // bool check_rt_warp_cycle() { return m_rt_warp_cycle <= 0; }
-  
   struct per_thread_info {
     per_thread_info() {
       for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
@@ -1331,18 +1269,32 @@ class warp_inst_t : public inst_t {
                                                        // of 4B each)
                                                    
     // RT variables    
-    // std::deque<new_addr_type> raytrace_mem_accesses;
     std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
     bool ray_intersect;
     Ray ray_properties;
     unsigned intersection_delay;
-    int num_nodes_accessed;
-    int num_triangles_accessed;
     
     void clear_mem_accesses() {
       RT_mem_accesses.clear();
     }
   };
+  
+  // RT functions
+  void set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions);
+  void set_rt_ray_properties(unsigned int tid, Ray ray, bool intersect);
+  bool get_rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
+  Ray get_rt_ray_properties(unsigned int tid) const { return m_per_scalar_thread[tid].ray_properties; }
+  bool rt_mem_accesses_empty();
+  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
+  bool is_stalled();
+  void undo_rt_access(new_addr_type addr);
+  void print_rt_accesses();
+  unsigned get_rt_active_threads();
+  std::deque<unsigned> get_rt_active_thread_list();
+  
+  void update_next_rt_accesses();
+  RTMemoryTransactionRecord get_next_rt_mem_transaction();
+  unsigned process_returned_mem_access(const mem_fetch *mf);
   
   struct per_thread_info get_thread_info(unsigned tid) { return m_per_scalar_thread[tid]; }
   void set_thread_info(unsigned tid, struct per_thread_info thread_info) { m_per_scalar_thread[tid] = thread_info; }
@@ -1352,9 +1304,6 @@ class warp_inst_t : public inst_t {
   void dec_thread_latency();
   unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
   
-  void get_next_rt_mem_access(std::deque<mem_access_t>&);
-  void fill_next_rt_mem_access();
-  std::deque<mem_access_t> memory_coalescing_arch_rt(RTMemoryTransactionRecord addr);
   
  protected:
   unsigned m_uid;
@@ -1384,7 +1333,6 @@ class warp_inst_t : public inst_t {
   RTMemoryTransactionRecord m_current_rt_access;
   
   // List of current memory requests awaiting response
-  std::set<new_addr_type> m_mf_awaiting_response;
   bool m_per_scalar_thread_valid;
   std::vector<per_thread_info> m_per_scalar_thread;
   bool m_mem_accesses_created;
@@ -1399,7 +1347,6 @@ class warp_inst_t : public inst_t {
   // Jin: cdp support
  public:
   int m_is_cdp;
-  bool m_is_raytrace;
 };
 
 void move_warp(warp_inst_t *&dst, warp_inst_t *&src);

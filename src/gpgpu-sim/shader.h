@@ -1292,10 +1292,7 @@ class rt_unit : public pipelined_simd_unit {
             enum cache_request_status status);
             
       mem_stage_stall_type process_memory_access_queue(cache_t *cache, warp_inst_t &inst);
-      // mem_stage_stall_type process_memory_access_queue_l1cache(l1_cache *cache, warp_inst_t &inst);
-      
-      void coalesce_warp_requests(mem_access_t access);
-      void track_warp_mem_accesses(warp_inst_t &inst);
+      mem_access_t create_mem_access(new_addr_type addr);
       
       const memory_config *m_memory_config;
       class mem_fetch_interface *m_icnt;
@@ -1312,7 +1309,7 @@ class rt_unit : public pipelined_simd_unit {
       read_only_cache *m_L0_complet;
       read_only_cache *m_L0_tri;
       
-      std::deque<mem_access_t> mem_access_q;
+      std::deque<new_addr_type> mem_access_q;
       
       std::map<unsigned /*warp_id*/,
            std::map<unsigned /*regnum*/, unsigned /*count*/>>
@@ -1320,23 +1317,10 @@ class rt_unit : public pipelined_simd_unit {
       std::list<mem_fetch *> m_response_fifo;
       enum mem_stage_stall_type m_mem_rc;
       
-      // std::vector<std::deque<mem_fetch *>> l0c_latency_queue;
-      // void l0c_latency_queue_cycle();
-      // std::vector<std::deque<mem_fetch *>> l0t_latency_queue;
-      // void l0t_latency_queue_cycle();
-      
       // {warp id, warp instruction}
       std::map<unsigned, warp_inst_t> m_current_warps;
       unsigned n_warps;
-      std::deque<warp_inst_t> m_predictor_queue;
-      std::set<unsigned> m_predictor_queue_set;
       
-      std::set<new_addr_type> m_reservation_fails;
-      new_addr_type m_prev_reservation_fail;
-    
-      std::set<new_addr_type> m_mem_access_list;
-      
-      unsigned m_cache_hit_counter;
 };
 
 class ldst_unit : public pipelined_simd_unit {
