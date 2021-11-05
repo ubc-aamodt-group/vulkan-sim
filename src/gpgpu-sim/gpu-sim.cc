@@ -243,7 +243,10 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       " {<nsets>:<bsize>:<assoc>,<rep>:<wr>:<alloc>:<wr_alloc>,<mshr>:<N>:<"
       "merge>,<mq>} ",
       "64:64:2,L:R:f:N,A:2:32,4");
-  //m_L0T_config = m_L0C_config;
+  option_parser_register(
+      opp, "-gpgpu_rt_use_l1", OPT_BOOL, &m_rt_use_l1d,
+      "use existing L1 cache instead of dedicated L0 cache ",
+      "1");
   option_parser_register(
       opp, "-gpgpu_rt_disable_rt_cache", OPT_BOOL, &bypassL0Complet,
       "bypass RT cache and connect RT unit directly to interconnect ",

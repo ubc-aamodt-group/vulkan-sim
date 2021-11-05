@@ -1291,7 +1291,7 @@ class rt_unit : public pipelined_simd_unit {
             std::list<cache_event> &events, mem_fetch *mf,
             enum cache_request_status status);
             
-      mem_stage_stall_type process_memory_access_queue(cache_t *cache, warp_inst_t &inst);
+      mem_stage_stall_type process_memory_access_queue(baseline_cache *cache, warp_inst_t &inst);
       mem_access_t* create_mem_access(new_addr_type addr);
       
       const memory_config *m_memory_config;
@@ -1308,6 +1308,7 @@ class rt_unit : public pipelined_simd_unit {
       
       read_only_cache *m_L0_complet;
       read_only_cache *m_L0_tri;
+      l1_cache *L1D;
       
       std::deque<new_addr_type> mem_access_q;
       unsigned mem_access_q_warp_uid;
@@ -1345,7 +1346,9 @@ class ldst_unit : public pipelined_simd_unit {
 
   // accessors
   virtual unsigned clock_multiplier() const;
-
+  
+  l1_cache * get_l1d() { return m_L1D; }
+  
   virtual bool can_issue(const warp_inst_t &inst) const {
     switch (inst.op) {
       case LOAD_OP:
@@ -1695,6 +1698,7 @@ class shader_core_config : public core_config {
   unsigned m_rt_max_warps;
   unsigned m_rt_max_mshr_entries;
   bool m_rt_coalesce_warps;
+  bool m_rt_use_l1d;
   bool bypassL0Complet;
 };
 
@@ -2048,7 +2052,8 @@ class shader_core_ctx : public core_t {
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
   void get_L1T_sub_stats(struct cache_sub_stats &css) const;
   void get_L0C_sub_stats(struct cache_sub_stats &css) const;
-
+  l1_cache * get_l1d() { return m_ldst_unit->get_l1d(); }
+  
   void get_icnt_power_stats(long &n_simt_to_mem, long &n_mem_to_simt) const;
 
   // debug:
