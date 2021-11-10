@@ -135,6 +135,11 @@ OP_DEF(NOP_OP,nop_impl,"nop",0,7)
 OP_DEF(BREAK_OP,break_impl,"break",0,3)
 OP_DEF(BREAKADDR_OP,breakaddr_impl,"breakaddr",0,3)
 OP_DEF(LD_RAY_LAUNCH_ID_OP,load_ray_launch_id_impl,"load_ray_launch_id",0,1)
+
+// Ray tracing ops
+OP_DEF(TRACE_RAY_OP,trace_ray_impl,"trace_ray",0,12)
+
+// Ray tracing setup ops
 OP_DEF(LD_RAY_LAUNCH_SIZE_OP,load_ray_launch_size_impl,"load_ray_launch_size",0,11)
 OP_DEF(VK_RESOURCE_INDEX_OP,vulkan_resource_index_impl,"vulkan_resource_index",0,11)
 OP_DEF(LD_VK_DESC_OP,load_vulkan_descriptor_impl,"load_vulkan_descriptor",0,11)
@@ -143,11 +148,6 @@ OP_DEF(DEREF_CAST_OP,deref_cast_impl,"deref_cast",0,11)
 OP_DEF(DEREF_STRUCT_OP,deref_struct_impl,"deref_struct",0,11)
 OP_DEF(DEREF_ARRAY_OP,deref_array_impl,"deref_array",0,11)
 OP_DEF(LD_DEREF_OP,load_deref_impl,"load_deref",0,11)
-OP_DEF(TRACE_RAY_OP,trace_ray_impl,"trace_ray",0,11)
-OP_DEF(CALL_MISS_SHADER_OP,call_miss_shader_impl,"call_miss_shader",0,11)
-OP_DEF(CALL_CLOSEST_HIT_SHADER_OP,call_closest_hit_shader_impl,"call_closest_hit_shader",0,11)
-OP_DEF(CALL_INTERSECTION_SHADER_OP,call_intersection_shader_impl,"call_intersection_shader",0,11)
-OP_DEF(CALL_ANY_HIT_SHADER_OP,call_any_hit_shader_impl,"call_any_hit_shader",0,11)
 OP_DEF(IMG_DEREF_ST_OP,image_deref_store_impl,"image_deref_store",0,11)
 OP_DEF(ST_DEREF_OP,store_deref_impl,"store_deref",0,11)
 OP_DEF(RT_ALLOC_MEM_OP,rt_alloc_mem_impl,"rt_alloc_mem",0,11)
@@ -155,3 +155,9 @@ OP_DEF(WRAP_32_4_OP,wrap_32_4_impl,"wrap_32_4",0,11)
 OP_DEF(UNWRAP_32_4_OP,unwrap_32_4_impl,"unwrap_32_4",0,11)
 OP_DEF(GET_ELEMENT_32_OP,get_element_32_impl,"get_element_32",0,11)
 OP_DEF(SET_ELEMENT_32_OP,set_element_32_impl,"set_element_32",0,11)
+
+// Shader calls
+OP_DEF(CALL_MISS_SHADER_OP,call_miss_shader_impl,"call_miss_shader",0,13)
+OP_DEF(CALL_CLOSEST_HIT_SHADER_OP,call_closest_hit_shader_impl,"call_closest_hit_shader",0,13)
+OP_DEF(CALL_INTERSECTION_SHADER_OP,call_intersection_shader_impl,"call_intersection_shader",0,13)
+OP_DEF(CALL_ANY_HIT_SHADER_OP,call_any_hit_shader_impl,"call_any_hit_shader",0,13)
