@@ -767,12 +767,18 @@ void warp_inst_t::print_intersection_delay() {
   RT_DPRINTF("\n");
 }
 
-void warp_inst_t::dec_thread_latency() { 
+unsigned warp_inst_t::dec_thread_latency() { 
+  // Track number of threads performing intersection tests
+  unsigned n_threads = 0;
+  
   for (unsigned i=0; i<m_config->warp_size; i++) {
     if (m_per_scalar_thread[i].intersection_delay > 0) {
       m_per_scalar_thread[i].intersection_delay--; 
+      n_threads++;
     }
   }
+  
+  return n_threads;
 }
 
 void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions) {

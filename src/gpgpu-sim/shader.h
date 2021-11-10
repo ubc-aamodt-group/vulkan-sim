@@ -1750,6 +1750,11 @@ struct shader_core_stats_pod {
   unsigned *m_active_fu_lanes;
   unsigned *m_active_fu_mem_lanes;
   unsigned *m_n_diverge;  // number of divergence occurring in this shader
+  
+  // Ray tracing aerialvision stats
+  unsigned *rt_nwarps;
+  unsigned *rt_nthreads_intersection;
+  
   unsigned gpgpu_n_load_insn;
   unsigned gpgpu_n_store_insn;
   unsigned gpgpu_n_shmem_insn;
@@ -1878,6 +1883,10 @@ class shader_core_stats : public shader_core_stats_pod {
     m_non_rf_operands =
         (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     m_n_diverge = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    
+    rt_nwarps = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    rt_nthreads_intersection = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    
     shader_cycle_distro =
         (unsigned *)calloc(config->warp_size + 3, sizeof(unsigned));
     last_shader_cycle_distro =

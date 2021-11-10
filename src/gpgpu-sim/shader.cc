@@ -842,6 +842,16 @@ void shader_core_stats::visualizer_print(gzFile visualizer_file) {
   for (unsigned i = 0; i < m_config->num_shader(); i++)
     gzprintf(visualizer_file, "%u ", m_n_diverge[i]);
   gzprintf(visualizer_file, "\n");
+  
+  // Ray tracing aerialvision stats
+  gzprintf(visualizer_file, "rt_nwarps:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", rt_nwarps[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "rt_nthreads_intersection:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", rt_nthreads_intersection[i]);
+  gzprintf(visualizer_file, "\n");
 }
 
 #define PROGRAM_MEM_START                                      \
@@ -2432,9 +2442,14 @@ void rt_unit::cycle() {
   }
   
   // Cycle intersection tests
+  unsigned n_threads = 0;
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
-    (it->second).dec_thread_latency();
+    n_threads += (it->second).dec_thread_latency();
   }
+  
+  // AerialVision stats
+  m_stats->rt_nwarps[m_sid] = n_warps;
+  m_stats->rt_nthreads_intersection[m_sid] = n_threads;
   
   // Check memory request responses
   if (!m_response_fifo.empty()) {
