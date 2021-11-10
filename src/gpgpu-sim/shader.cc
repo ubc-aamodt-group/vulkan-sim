@@ -703,6 +703,10 @@ void shader_core_stats::print(FILE *fout) const {
 
   fprintf(fout, "gpu_reg_bank_conflict_stalls = %d\n",
           gpu_reg_bank_conflict_stalls);
+          
+  // RT unit stats
+  fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
+  fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
 
   fprintf(fout, "Warp Occupancy Distribution:\n");
   fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
@@ -2429,6 +2433,9 @@ void rt_unit::cycle() {
   
   occupied >>=1;
   
+  unsigned long long current_cycle =  m_core->get_gpu()->gpu_sim_cycle +
+                                      m_core->get_gpu()->gpu_tot_sim_cycle;
+
   if (!pipe_reg.empty()) {
     n_warps++;
     RT_DPRINTF("Shader %d: A new warp has arrived! uid: %d, warp id: %d\n", m_sid, pipe_reg.get_uid(), pipe_reg.warp_id());
@@ -2439,6 +2446,8 @@ void rt_unit::cycle() {
       }
       RT_DPRINTF("\n");
     }
+    
+    pipe_reg.set_start_cycle(current_cycle);
   }
   
   // Cycle intersection tests
@@ -2590,6 +2599,22 @@ void rt_unit::cycle() {
       
       // Track completed warp uid
       completed_warp_uid = it->first;
+      
+      // Track warp latency in RT unit
+      unsigned long long start_cycle = it->second.get_start_cycle();
+      unsigned long long total_cycles = current_cycle - start_cycle;
+      m_stats->rt_total_warp_latency += total_cycles;
+      m_stats->rt_total_warps++;
+      
+      // Track thread latency in RT unit
+      unsigned long long total_thread_cycles = 0;
+      for (unsigned i=0; i<m_config->warp_size; i++) {
+        unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
+        unsigned n_total_cycles = end_cycle - start_cycle;
+        total_thread_cycles += n_total_cycles;
+      }
+      float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
+      m_stats->rt_total_thread_latency += avg_thread_cycles;
       
       // Complete max 1 warp per cycle (?)
       break;

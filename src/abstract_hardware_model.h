@@ -1286,6 +1286,7 @@ class warp_inst_t : public inst_t {
     bool ray_intersect;
     Ray ray_properties;
     unsigned intersection_delay;
+    unsigned long long end_cycle;
     
     void clear_mem_accesses() {
       RT_mem_accesses.clear();
@@ -1306,6 +1307,7 @@ class warp_inst_t : public inst_t {
   void print_intersection_delay();
   unsigned get_rt_active_threads();
   std::deque<unsigned> get_rt_active_thread_list();
+  unsigned long long get_thread_end_cycle(unsigned int tid) const { return m_per_scalar_thread[tid].end_cycle; }
   
   void update_next_rt_accesses();
   RTMemoryTransactionRecord get_next_rt_mem_transaction();
@@ -1318,6 +1320,8 @@ class warp_inst_t : public inst_t {
   unsigned dec_thread_latency();
   unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
   
+  void set_start_cycle(unsigned long long cycle) { m_start_cycle = cycle; }
+  unsigned long long get_start_cycle() const {return m_start_cycle; }
   
  protected:
   unsigned m_uid;

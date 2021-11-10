@@ -1787,6 +1787,11 @@ struct shader_core_stats_pod {
   
   // Ray tracing memory access classification
   unsigned gpgpu_n_rt_mem[static_cast<int>(TransactionType::UNDEFINED)];
+  
+  // Other ray tracing stats
+  unsigned long long rt_total_warp_latency;
+  unsigned long long rt_total_thread_latency;
+  unsigned rt_total_warps;
 
   int gpgpu_n_mem_l2_writeback;
   int gpgpu_n_mem_l1_write_allocate;

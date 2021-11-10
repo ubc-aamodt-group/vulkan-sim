@@ -967,6 +967,13 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
           thread_found++;
         }
       }
+      
+      // If the RT_mem_accesses is now empty, then the last memory request has returned and the thread is almost done
+      if (m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+        unsigned long long current_cycle =  GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle +
+                                            GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
+        m_per_scalar_thread[i].end_cycle = current_cycle + m_per_scalar_thread[i].intersection_delay;
+      }
     }
   }
   return thread_found;
