@@ -149,6 +149,10 @@ class cuda_sim {
   int cp_cta_resume;
   int g_ptxinfo_error_detected;
   unsigned g_ptx_sim_num_insn;
+  
+  // Ray tracing memory access type stats
+  unsigned g_rt_mem_access_type[static_cast<int>(TransactionType::UNDEFINED)];
+  
   char *cdp_latency_str;
   int g_ptx_kernel_count;  // used for classification stat collection purposes
   std::map<const void *, std::string>

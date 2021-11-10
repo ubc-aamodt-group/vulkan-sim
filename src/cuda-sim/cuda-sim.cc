@@ -2502,6 +2502,12 @@ void cuda_sim::gpgpu_cuda_ptx_sim_main_func(kernel_info_t &kernel,
     StatDisp(g_inst_classification_stat[g_ptx_kernel_count]);
     StatDisp(g_inst_op_classification_stat[g_ptx_kernel_count]);
   }
+  
+  printf("Ray tracing memory access distribution: \n");
+  for (unsigned i=0; i<static_cast<int>(TransactionType::UNDEFINED); i++) {
+      printf("%d\t", g_rt_mem_access_type[i]);
+  }
+  printf("\n");
 
   // time_t variables used to calculate the total simulation time
   // the start time of simulation is hold by the global variable
