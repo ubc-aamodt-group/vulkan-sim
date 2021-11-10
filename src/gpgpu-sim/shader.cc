@@ -707,6 +707,7 @@ void shader_core_stats::print(FILE *fout) const {
   // RT unit stats
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
   fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
+  fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_occupancy / rt_total_warps);
 
   fprintf(fout, "Warp Occupancy Distribution:\n");
   fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
@@ -2615,6 +2616,9 @@ void rt_unit::cycle() {
       }
       float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
       m_stats->rt_total_thread_latency += avg_thread_cycles;
+      
+      float rt_warp_occupancy = (float)total_thread_cycles / (m_config->warp_size * total_cycles);
+      m_stats->rt_total_warp_occupancy += rt_warp_occupancy;
       
       // Complete max 1 warp per cycle (?)
       break;
