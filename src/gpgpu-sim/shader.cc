@@ -610,6 +610,12 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "gpgpu_n_mem_write_global = %d\n", gpgpu_n_mem_write_global);
   fprintf(fout, "gpgpu_n_mem_texture = %d\n", gpgpu_n_mem_texture);
   fprintf(fout, "gpgpu_n_mem_const = %d\n", gpgpu_n_mem_const);
+  
+  fprintf(fout, "gpgpu_n_rt_mem:\n");
+  for (unsigned i=0; i<static_cast<int>(TransactionType::UNDEFINED); i++) {
+    fprintf(fout, "%d\t", gpgpu_n_rt_mem[i]);
+  }
+  fprintf(fout, "\n");
 
   fprintf(fout, "gpgpu_n_load_insn  = %d\n", gpgpu_n_load_insn);
   fprintf(fout, "gpgpu_n_store_insn = %d\n", gpgpu_n_store_insn);
@@ -2707,6 +2713,9 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
     next_addr = next_access.address;
     base_addr = next_access.address;
     
+    // Track memory access type stats
+    mem_access_q_type = static_cast<int>(next_access.type);
+    
     // If the size is larger than 32B, then split into chunks and add remaining chunks into mem_access_q
     if (next_access.size > 32) {
       RT_DPRINTF("Shader %d: Memory request > 32B. %dB request at 0x%x added chunks ", m_sid, next_access.size, next_access.address);
@@ -2740,6 +2749,8 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
   mf = m_mf_allocator->alloc(
     inst, *access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
   ); 
+  // Track type for each mf
+  m_stats->gpgpu_n_rt_mem[mem_access_q_type]++;
     
   enum cache_request_status status;
   std::list<cache_event> events;
@@ -2783,11 +2794,13 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
       else {
         RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
         inst.undo_rt_access(mf->get_uncoalesced_addr());
+        m_stats->gpgpu_n_rt_mem[mem_access_q_type]--;
       }
     }
     else {
       RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
       inst.undo_rt_access(mf->get_uncoalesced_addr());
+      m_stats->gpgpu_n_rt_mem[mem_access_q_type]--;
     }
   }
   

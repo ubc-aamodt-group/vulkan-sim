@@ -1313,6 +1313,7 @@ class rt_unit : public pipelined_simd_unit {
       std::deque<new_addr_type> mem_access_q;
       unsigned mem_access_q_warp_uid;
       new_addr_type mem_access_q_base_addr;
+      int mem_access_q_type;
       
       std::map<unsigned /*warp_id*/,
            std::map<unsigned /*regnum*/, unsigned /*count*/>>
@@ -1778,6 +1779,9 @@ struct shader_core_stats_pod {
   int gpgpu_n_mem_read_global;
   int gpgpu_n_mem_write_global;
   int gpgpu_n_mem_read_inst;
+  
+  // Ray tracing memory access classification
+  unsigned gpgpu_n_rt_mem[static_cast<int>(TransactionType::UNDEFINED)];
 
   int gpgpu_n_mem_l2_writeback;
   int gpgpu_n_mem_l1_write_allocate;
