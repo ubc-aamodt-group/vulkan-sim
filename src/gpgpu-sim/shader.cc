@@ -708,6 +708,7 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
   fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
   fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_occupancy / rt_total_warps);
+  fprintf(fout, "rt_avg_op_intensity = %f\n", (float)rt_total_intersection_stages / rt_total_cacheline_fetched);
 
   fprintf(fout, "Warp Occupancy Distribution:\n");
   fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
@@ -2456,6 +2457,8 @@ void rt_unit::cycle() {
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
     n_threads += (it->second).dec_thread_latency();
   }
+  // Number of threads currently completing intersection tests are the number of intersection operations this cycle
+  m_stats->rt_total_intersection_stages += n_threads;
   
   // AerialVision stats
   m_stats->rt_nwarps[m_sid] = n_warps;
@@ -2467,6 +2470,9 @@ void rt_unit::cycle() {
     // Retrieve mf from response fifo
     mem_fetch *mf = m_response_fifo.front();
     m_response_fifo.pop_front();
+    
+    // Every returned mf is a fetched cacheline
+    m_stats->rt_total_cacheline_fetched++;
     
     new_addr_type addr = mf->get_addr();
     new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
@@ -2870,6 +2876,9 @@ mem_stage_stall_type rt_unit::process_cache_access(
       found += inst.process_returned_mem_access(mf);
       
       RT_DPRINTF("Shader %d: Cache hit for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
+      
+      // Every cache hit is a returned cacheline
+      m_stats->rt_total_cacheline_fetched++;
       
       if (m_config->m_rt_coalesce_warps) {
         for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {

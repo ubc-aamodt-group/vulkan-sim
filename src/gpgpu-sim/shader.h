@@ -1793,6 +1793,8 @@ struct shader_core_stats_pod {
   unsigned long long rt_total_thread_latency;
   double rt_total_warp_occupancy;
   unsigned rt_total_warps;
+  unsigned long long rt_total_cacheline_fetched;
+  unsigned long long rt_total_intersection_stages;
 
   int gpgpu_n_mem_l2_writeback;
   int gpgpu_n_mem_l1_write_allocate;
