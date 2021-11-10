@@ -1038,6 +1038,8 @@ kernel_info_t::kernel_info_t(
   cache_config_set = false;
   m_NameToCudaArray = nameToCudaArray;
   m_NameToTextureInfo = nameToTextureInfo;
+
+  m_max_simulated_kernels = entry->gpgpu_ctx->device_runtime->g_max_sim_rt_kernels;
 }
 
 kernel_info_t::~kernel_info_t() {
