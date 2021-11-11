@@ -2629,7 +2629,7 @@ void rt_unit::cycle() {
         unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
         assert(end_cycle > 0);
         int n_total_cycles = end_cycle - start_cycle;
-        assert(n_total_cycles > 0);
+        assert(n_total_cycles >= 0);
         total_thread_cycles += n_total_cycles;
       }
       float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
