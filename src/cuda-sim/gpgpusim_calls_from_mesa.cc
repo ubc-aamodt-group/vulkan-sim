@@ -49,4 +49,38 @@ extern "C" void gpgpusim_setDescriptorSet(uint32_t setID, uint32_t descID, void 
     VulkanRayTracing::setDescriptor(setID, descID, address, size, type);
 }
 
+
+// CPP externs
+extern void gpgpusim_addTreelets_cpp(VkAccelerationStructureKHR accelerationStructure)
+{
+    VulkanRayTracing::setAccelerationStructure(accelerationStructure);
+}
+
+extern uint32_t gpgpusim_registerShader_cpp(char * shaderPath, uint32_t shader_type)
+{
+    return VulkanRayTracing::registerShaders(shaderPath, gl_shader_stage(shader_type));
+}
+
+extern void gpgpusim_vkCmdTraceRaysKHR_cpp(
+                      void *raygen_sbt,
+                      void *miss_sbt,
+                      void *hit_sbt,
+                      void *callable_sbt,
+                      bool is_indirect,
+                      uint32_t launch_width,
+                      uint32_t launch_height,
+                      uint32_t launch_depth,
+                      uint64_t launch_size_addr)
+{
+    VulkanRayTracing::invoke_gpgpusim();
+    VulkanRayTracing::vkCmdTraceRaysKHR(raygen_sbt, miss_sbt, hit_sbt, callable_sbt,
+            is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
+}
+
+extern void gpgpusim_setDescriptorSet_cpp(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
+{
+    VulkanRayTracing::setDescriptor(setID, descID, address, size, type);
+}
+
+
 #endif /* GPGPUSIM_CALLS_FROM_MESA_CC */
