@@ -2450,6 +2450,7 @@ void rt_unit::cycle() {
     }
     
     pipe_reg.set_start_cycle(current_cycle);
+    pipe_reg.set_thread_end_cycle(current_cycle);
   }
   
   // Cycle intersection tests
@@ -2617,7 +2618,9 @@ void rt_unit::cycle() {
       unsigned long long total_thread_cycles = 0;
       for (unsigned i=0; i<m_config->warp_size; i++) {
         unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
-        unsigned n_total_cycles = end_cycle - start_cycle;
+        assert(end_cycle > 0);
+        int n_total_cycles = end_cycle - start_cycle;
+        assert(n_total_cycles > 0);
         total_thread_cycles += n_total_cycles;
       }
       float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;

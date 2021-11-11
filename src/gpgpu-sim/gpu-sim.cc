@@ -1415,6 +1415,12 @@ void gpgpu_sim::gpu_print_stat() {
     StatDisp(gpgpu_ctx->func_sim->g_inst_op_classification_stat
                  [gpgpu_ctx->func_sim->g_ptx_kernel_count]);
   }
+    
+  printf("Ray tracing memory access distribution: \n");
+  for (unsigned i=0; i<static_cast<int>(TransactionType::UNDEFINED); i++) {
+      printf("%d\t", gpgpu_ctx->func_sim->g_rt_mem_access_type[i]);
+  }
+  printf("\n");
 
 #ifdef GPGPUSIM_POWER_MODEL
   if (m_config.g_power_simulation_enabled) {

@@ -1272,6 +1272,7 @@ class warp_inst_t : public inst_t {
         memreqaddr[i] = 0;
         
         intersection_delay = 0;
+        end_cycle = 0;
     }
     dram_callback_t callback;
     new_addr_type
@@ -1308,6 +1309,7 @@ class warp_inst_t : public inst_t {
   unsigned get_rt_active_threads();
   std::deque<unsigned> get_rt_active_thread_list();
   unsigned long long get_thread_end_cycle(unsigned int tid) const { return m_per_scalar_thread[tid].end_cycle; }
+  void set_thread_end_cycle(unsigned long long cycle);
   
   void update_next_rt_accesses();
   RTMemoryTransactionRecord get_next_rt_mem_transaction();

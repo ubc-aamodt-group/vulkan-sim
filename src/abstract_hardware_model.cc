@@ -863,6 +863,12 @@ std::deque<unsigned> warp_inst_t::get_rt_active_thread_list() {
   return active_threads;
 }
 
+void warp_inst_t::set_thread_end_cycle(unsigned long long cycle) {
+    for (unsigned i=0; i<m_config->warp_size; i++) {
+        m_per_scalar_thread[i].end_cycle = cycle;
+    }
+}
+
 void warp_inst_t::update_next_rt_accesses() {
   
   // Iterate through every thread
