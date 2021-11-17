@@ -485,6 +485,11 @@ void VulkanRayTracing::setAccelerationStructure(VkAccelerationStructureKHR accel
     VulkanRayTracing::topLevelAS = accelerationStructure;
 }
 
+std::string base_name(std::string & path)
+{
+  return path.substr(path.find_last_of("/") + 1);
+}
+
 static bool invoked = false;
 
 uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
@@ -513,10 +518,18 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
     //         ptx_list.push_back(p.path().string());
     //     }
     // }
-    
+
+    std::string fullpath(shaderPath);
+    std::string fullfilename = base_name(fullpath);
+    std::string filenameNoExt;
+    size_t start = fullfilename.find_first_not_of('.', 0);
+    size_t end = fullfilename.find('.', start);
+    filenameNoExt = fullfilename.substr(start, end - start);
+    std::string idInString = filenameNoExt.substr(filenameNoExt.find_last_of("_") + 1);
     // Register each ptx file in ptx_list
     shader_stage_info shader;
-    shader.ID = VulkanRayTracing::shaders.size();
+    //shader.ID = VulkanRayTracing::shaders.size();
+    shader.ID = std::stoi(idInString);
     shader.type = shaderType;
     shader.function_name = (char*)malloc(200 * sizeof(char));
 
