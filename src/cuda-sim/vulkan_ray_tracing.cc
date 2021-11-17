@@ -672,7 +672,16 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    shader_stage_info raygen_shader = shaders[*(uint64_t*)raygen_sbt];
+    unsigned long shaderId = *(uint64_t*)raygen_sbt;
+    int index = 0;
+    for (int i = 0; i < shaders.size(); i++) {
+        if (shaders[i].ID == 0){
+            index = i;
+            break;
+        }
+    }
+
+    shader_stage_info raygen_shader = shaders[index];
     function_info *entry = context->get_kernel(raygen_shader.function_name);
     // printf("################ number of args = %d\n", entry->num_args());
 
