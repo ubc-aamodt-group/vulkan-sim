@@ -755,7 +755,15 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    shader_stage_info miss_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.miss_sbt)];
+    int index = 0;
+    for (int i = 0; i < shaders.size(); i++) {
+        if (shaders[i].ID == *(uint64_t *)(thread->get_kernel().vulkan_metadata.miss_sbt)){
+            index = i;
+            break;
+        }
+    }
+
+    shader_stage_info miss_shader = shaders[index];
 
     function_info *entry = context->get_kernel(miss_shader.function_name);
     callShader(pI, thread, entry);
@@ -766,7 +774,15 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    shader_stage_info closesthit_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt)];
+    int index = 0;
+    for (int i = 0; i < shaders.size(); i++) {
+        if (shaders[i].ID == *(uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt)){
+            index = i;
+            break;
+        }
+    }
+
+    shader_stage_info closesthit_shader = shaders[index];
     function_info *entry = context->get_kernel(closesthit_shader.function_name);
     callShader(pI, thread, entry);
 }
