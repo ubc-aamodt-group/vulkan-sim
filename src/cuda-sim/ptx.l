@@ -166,6 +166,11 @@ breakaddr  TC; yylval->int_value = BREAKADDR_OP; return OPCODE;
 
 load_ray_launch_id  TC; yylval->int_value = LD_RAY_LAUNCH_ID_OP; return OPCODE;
 load_ray_launch_size    TC; yylval->int_value = LD_RAY_LAUNCH_SIZE_OP; return OPCODE;
+load_ray_instance_custom_index    TC; yylval->int_value = LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP; return OPCODE;
+load_primitive_id    TC; yylval->int_value = LOAD_PRIMITIVE_ID_OP; return OPCODE;
+load_ray_world_to_object    TC; yylval->int_value = LOAD_RAY_WORLD_TO_OBJECT_OP; return OPCODE;
+load_ray_object_to_world    TC; yylval->int_value = LOAD_RAY_OBJECT_TO_WORLD_OP; return OPCODE;
+load_ray_world_direction    TC; yylval->int_value = LOAD_RAY_WORLD_DIRECTION_OP; return OPCODE;
 vulkan_resource_index   TC; yylval->int_value = VK_RESOURCE_INDEX_OP; return OPCODE;
 load_vulkan_descriptor  TC; yylval->int_value = LD_VK_DESC_OP; return OPCODE;
 deref_var   TC; yylval->int_value = DEREF_VAR_OP; return OPCODE;

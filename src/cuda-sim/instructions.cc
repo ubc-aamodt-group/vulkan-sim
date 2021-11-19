@@ -6670,6 +6670,36 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   thread->set_operand_value(src2, data, U32_TYPE, thread, pI);
 }
 
+void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 1);
+  const operand_info &dst = pI->dst();
+
+  ptx_reg_t data;
+  data.u32 = thread->RT_thread_data->closest_hit.instanceIndex;
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 1);
+  const operand_info &dst = pI->dst();
+
+  ptx_reg_t data;
+  data.u32 = thread->RT_thread_data->closest_hit.geometry_id;
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  
+}
+
+void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  
+}
+
+void load_ray_world_direction_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  
+}
+
 void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   inst_not_implemented(pI);
 }

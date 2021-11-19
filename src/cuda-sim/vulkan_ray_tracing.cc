@@ -120,6 +120,12 @@ bool ray_box_test(float3 low, float3 high, float3 idirection, float3 origin, flo
     return (min <= max);
 }
 
+typedef struct stackEntry {
+    uint8_t* addr;
+    bool topLevel;
+    stackEntry(uint8_t* addr, bool topLevel): addr(addr), topLevel(topLevel) {}
+} stackEntry;
+
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
                    uint cullMask,
@@ -183,6 +189,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         while (next_node_addr > 0)
         {
             node_addr = next_node_addr;
+            assert ((void *)_topLevelAS < node_addr &&  node_addr < (void *)_topLevelAS + 448);
             next_node_addr = NULL;
             struct GEN_RT_BVH_INTERNAL_NODE node;
             GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
@@ -259,7 +266,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         }
     }
 
-
+    uint32_t topLevel_intersection_count = traversal_stack.size();
 
     //traverse bottom AS
     if(!traversal_stack.empty())
@@ -362,6 +369,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     closest_leaf = leaf;
                     // min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
                 }
+
             }
             else
             {
@@ -377,6 +385,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         *hit_geometry = 1;
         thread->RT_thread_data->hit_geometry = 1;
         thread->RT_thread_data->closest_hit.geometry_id = closest_leaf.LeafDescriptor.GeometryIndex;
+        thread->RT_thread_data->closest_hit.instanceIndex = closest_leaf.PrimitiveIndex0;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
         thread->RT_thread_data->closest_hit.intersection_point = intersection_point;
 
@@ -475,8 +484,36 @@ void VulkanRayTracing::setAccelerationStructure(VkAccelerationStructureKHR accel
 
 static bool invoked = false;
 
+void copyHardCodedShaders()
+{
+    std::ifstream  src;
+    std::ofstream  dst;
+    
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
+
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
+
+    // {
+    //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
+    //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_1.ptx",   std::ios::binary);
+    //     dst << src.rdbuf();
+    //     src.close();
+    //     dst.close();
+    // }
+}
+
 uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
 {
+    copyHardCodedShaders();
+
     VulkanRayTracing::invoke_gpgpusim();
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
@@ -614,16 +651,6 @@ void VulkanRayTracing::invoke_gpgpusim()
 
     if(!invoked)
     {
-        // {
-        //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-        //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-        //     dst << src.rdbuf();
-        // }
-        // {
-        //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
-        //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_0.ptx",   std::ios::binary);
-        //     dst << src.rdbuf();
-        // }
         //registerShaders();
         invoked = true;
     }

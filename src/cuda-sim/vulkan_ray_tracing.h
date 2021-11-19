@@ -60,6 +60,7 @@ typedef struct variable_decleration_entry{
 
 typedef struct Hit_data{
     uint32_t geometry_id;
+    uint32_t instanceIndex;
     float3 intersection_point;
     float3 barycentric_coordinates;
 } Hit_data;
