@@ -59,10 +59,13 @@ typedef struct variable_decleration_entry{
 } variable_decleration_entry;
 
 typedef struct Hit_data{
-    uint32_t geometry_id;
-    uint32_t instanceIndex;
+    uint32_t geometry_index;
+    uint32_t primitive_index;
     float3 intersection_point;
     float3 barycentric_coordinates;
+
+    uint32_t instance_index;
+    
 } Hit_data;
 
 typedef struct shader_stage_info {
@@ -76,6 +79,8 @@ struct Vulkan_RT_thread_data{
     std::vector<variable_decleration_entry> variable_decleration_table;
     bool hit_geometry;
     Hit_data closest_hit;
+    float3 ray_world_direction;
+    float3 ray_world_origin;
 
     variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
         if(type == 8192)

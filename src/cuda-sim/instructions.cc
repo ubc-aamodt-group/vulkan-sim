@@ -1751,6 +1751,8 @@ void bfind_impl(const ptx_instruction *pI, ptx_thread_info *thread)
 }
 
 void bra_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
+  //   printf("########## running inst at line %d\n", pI->source_line());
   const operand_info &target = pI->dst();
   ptx_reg_t target_pc =
       thread->get_operand_value(target, target, U32_TYPE, thread, 1);
@@ -6675,7 +6677,7 @@ void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_i
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u32 = thread->RT_thread_data->closest_hit.instanceIndex;
+  data.u32 = thread->RT_thread_data->closest_hit.instance_index;
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
@@ -6684,20 +6686,67 @@ void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u32 = thread->RT_thread_data->closest_hit.geometry_id;
+  data.u32 = thread->RT_thread_data->closest_hit.primitive_index;
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  
+  assert(pI->get_num_operands() == 4); // TODO: this is loading identity matrix
+  const operand_info &dst0 = pI->dst();
+  const operand_info &dst1 = pI->src1();
+  const operand_info &dst2 = pI->src2();
+  const operand_info &src = pI->src3();
+
+  ptx_reg_t data[4];
+  ptx_reg_t src_data;
+
+  src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
+
+  for(int i = 0; i < 3; i++)
+    data[i].f32 = 0;
+  data[src_data.u32].f32 = 1;
+
+  thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst2, data[2], F32_TYPE, thread, pI);
 }
 
 void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  
+  assert(pI->get_num_operands() == 4); // TODO: this is loading identity matrix
+  const operand_info &dst0 = pI->dst();
+  const operand_info &dst1 = pI->src1();
+  const operand_info &dst2 = pI->src2();
+  const operand_info &src = pI->src3();
+
+  ptx_reg_t data[4];
+  ptx_reg_t src_data;
+
+  src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
+
+  for(int i = 0; i < 3; i++)
+    data[i].f32 = 0;
+  data[src_data.u32].f32 = 1;
+
+  thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst2, data[2], F32_TYPE, thread, pI);
 }
 
 void load_ray_world_direction_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  
+  assert(pI->get_num_operands() == 3);
+  const operand_info &dst0 = pI->dst();
+  const operand_info &dst1 = pI->src1();
+  const operand_info &dst2 = pI->src2();
+
+  ptx_reg_t data;
+  data.f32 = thread->RT_thread_data->ray_world_direction.x;
+  thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
+
+  data.f32 = thread->RT_thread_data->ray_world_direction.y;
+  thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
+
+  data.f32 = thread->RT_thread_data->ray_world_direction.z;
+  thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
 }
 
 void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {

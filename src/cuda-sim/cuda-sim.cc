@@ -575,7 +575,10 @@ void ptx_instruction::set_fp_or_int_archop() {
       (m_opcode == LD_RAY_LAUNCH_SIZE_OP) || (m_opcode == LD_VK_DESC_OP) ||
       (m_opcode == IMG_DEREF_ST_OP) || (m_opcode == RT_ALLOC_MEM_OP) ||
       (m_opcode == DEREF_VAR_OP) || (m_opcode == WRAP_32_4_OP) || (m_opcode == UNWRAP_32_4_OP) ||
-      (m_opcode == GET_ELEMENT_32_OP) || (m_opcode == SET_ELEMENT_32_OP)) {
+      (m_opcode == GET_ELEMENT_32_OP) || (m_opcode == SET_ELEMENT_32_OP) ||
+      (m_opcode == LOAD_RAY_WORLD_TO_OBJECT_OP) || (m_opcode == LOAD_RAY_OBJECT_TO_WORLD_OP) ||
+      (m_opcode == LOAD_RAY_WORLD_DIRECTION_OP) || (m_opcode == LOAD_PRIMITIVE_ID_OP) ||
+      (m_opcode == LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP)) {
     // do nothing
   } else if ((m_opcode == CVT_OP || m_opcode == SET_OP ||
               m_opcode == SLCT_OP)) {
@@ -604,7 +607,10 @@ void ptx_instruction::set_mul_div_or_other_archop() {
       (m_opcode != LD_RAY_LAUNCH_SIZE_OP) && (m_opcode != LD_VK_DESC_OP) &&
       (m_opcode != IMG_DEREF_ST_OP) && (m_opcode != RT_ALLOC_MEM_OP) &&
       (m_opcode != DEREF_VAR_OP) && (m_opcode != WRAP_32_4_OP) && (m_opcode != UNWRAP_32_4_OP) && 
-      (m_opcode != GET_ELEMENT_32_OP) && (m_opcode != SET_ELEMENT_32_OP)) {
+      (m_opcode != GET_ELEMENT_32_OP) && (m_opcode != SET_ELEMENT_32_OP) &&
+      (m_opcode != LOAD_RAY_WORLD_TO_OBJECT_OP) && (m_opcode != LOAD_RAY_OBJECT_TO_WORLD_OP) &&
+      (m_opcode != LOAD_RAY_WORLD_DIRECTION_OP) && (m_opcode != LOAD_PRIMITIVE_ID_OP) &&
+      (m_opcode != LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP)) {
     if (get_type() == F32_TYPE || get_type() == F64_TYPE ||
         get_type() == FF64_TYPE) {
       switch (get_opcode()) {
