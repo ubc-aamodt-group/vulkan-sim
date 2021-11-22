@@ -984,8 +984,9 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
   ptx_reg_t src1_data, src2_data, data;
   int overflow = 0;
   int carry = 0;
@@ -1751,8 +1752,9 @@ void bfind_impl(const ptx_instruction *pI, ptx_thread_info *thread)
 }
 
 void bra_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
   const operand_info &target = pI->dst();
   ptx_reg_t target_pc =
       thread->get_operand_value(target, target, U32_TYPE, thread, 1);
@@ -3361,8 +3363,9 @@ void decode_space(memory_space_t &space, ptx_thread_info *thread,
 }
 
 void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
@@ -4121,8 +4124,9 @@ void min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 static int _count = 0;
 void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst number %d at line %d\n", _count++, pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -4294,8 +4298,9 @@ void mul24_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void mul_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -5768,6 +5773,9 @@ void ssy_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();  // may be scalar or vector of regs
   unsigned type = pI->get_type();
@@ -5778,7 +5786,7 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   memory_space *mem = NULL;
   addr_t addr = addr_reg.u32;
-  float* address = (float*)(addr_reg.u64);
+  void* address = (void*)(addr_reg.u64);
 
   // decode_space(space, thread, dst, mem, addr);
 
@@ -5789,7 +5797,9 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   if (!vector_spec) {
     data = thread->get_operand_value(src1, dst, type, thread, 1);
     //mem->write(addr, size / 8, &data.s64, thread, pI);
-    *address = data.f32;
+    assert(size == 32);
+    memcpy(address, &data.s64, size / 8);
+    // *address = data.f32;
   } else {
     assert (0);
     if (vector_spec == V2_TYPE) {
@@ -6640,6 +6650,10 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
+  // v[0] = 236;
+  // v[1] = 392;
+  // v[2] = 0;
+
   ptx_reg_t data;
   data.u32 = v[0];
   thread->set_operand_value(src0, data, U32_TYPE, thread, pI);
@@ -6660,6 +6674,10 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[0] = thread->get_ntid().x * thread->get_nctaid().x;
   v[1] = thread->get_nctaid().y;
   v[2] = thread->get_nctaid().z;
+
+  // v[0] = 612;
+  // v[1] = 436;
+  // v[2] = 0;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6806,29 +6824,29 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   arg++;
   const operand_info &op2 = pI->operand_lookup(arg);
-  ptx_reg_t op2_data = thread->get_operand_value(op2, op2, F32_TYPE, thread, 1);
-  uint rayFlags = (uint)(op2_data.f32);
+  ptx_reg_t op2_data = thread->get_operand_value(op2, op2, U32_TYPE, thread, 1);
+  uint rayFlags = op2_data.u32;
 
 
   arg++;
   const operand_info &op3 = pI->operand_lookup(arg);
-  ptx_reg_t op3_data = thread->get_operand_value(op3, op3, F32_TYPE, thread, 1);
-  uint cullMask = (uint)(op3_data.f32);
+  ptx_reg_t op3_data = thread->get_operand_value(op3, op3, U32_TYPE, thread, 1);
+  uint cullMask = op3_data.u32;
 
   arg++;
   const operand_info &op4 = pI->operand_lookup(arg);
-  ptx_reg_t op4_data = thread->get_operand_value(op4, op4, F32_TYPE, thread, 1);
-  uint sbtRecordOffset = (uint)(op4_data.f32);
+  ptx_reg_t op4_data = thread->get_operand_value(op4, op4, U32_TYPE, thread, 1);
+  uint sbtRecordOffset = op4_data.u32;
 
   arg++;
   const operand_info &op5 = pI->operand_lookup(arg);
-  ptx_reg_t op5_data = thread->get_operand_value(op5, op5, F32_TYPE, thread, 1);
-  uint sbtRecordStride = (uint)(op5_data.f32);
+  ptx_reg_t op5_data = thread->get_operand_value(op5, op5, U32_TYPE, thread, 1);
+  uint sbtRecordStride = op5_data.u32;
 
   arg++;
   const operand_info &op6 = pI->operand_lookup(arg);
-  ptx_reg_t op6_data = thread->get_operand_value(op6, op6, F32_TYPE, thread, 1);
-  uint missIndex = (uint)(op6_data.f32);
+  ptx_reg_t op6_data = thread->get_operand_value(op6, op6, U32_TYPE, thread, 1);
+  uint missIndex = op6_data.u32;
 
   arg++;
   const operand_info &op7 = pI->operand_lookup(arg);
@@ -6877,7 +6895,11 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   arg++;
   const operand_info &op16 = pI->operand_lookup(arg);
-  ptx_reg_t hit_geometry;
+  bool run_closest_hit;
+
+  arg++;
+  const operand_info &op17 = pI->operand_lookup(arg);
+  bool run_miss;
 
   // thread->dump_regs(stdout);
 
@@ -6887,12 +6909,18 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
                    {directionX, directionY, directionZ},
                    Tmax,
                    NULL,
-                   &(hit_geometry.u32),
+                   run_closest_hit,
+                   run_miss,
                    pI,
                    thread);
   
+  ptx_reg_t data;
 
-  thread->set_operand_value(op16, hit_geometry, U32_TYPE, thread, pI);
+  data.u32 = run_closest_hit;
+  thread->set_operand_value(op16, data, U32_TYPE, thread, pI);
+
+  data.u32 = run_miss;
+  thread->set_operand_value(op17, data, U32_TYPE, thread, pI);
 }
 
 // VkAccelerationStructureKHR* _topLevelAS,

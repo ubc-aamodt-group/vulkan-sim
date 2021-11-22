@@ -138,14 +138,23 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                    float3 direction,
                    float Tmax,
                    int payload,
-                   uint32_t *hit_geometry,
+                   bool &run_closest_hit,
+                   bool &run_miss,
                    const ptx_instruction *pI,
                    ptx_thread_info *thread)
 {
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
-	// assert(cullMask == 0xff);
-	// assert(payload == 0);
+
+    thread->RT_thread_data->ray_world_direction = direction;
+    thread->RT_thread_data->ray_world_origin = origin;
+    thread->RT_thread_data->sbtRecordOffset = sbtRecordOffset;
+    thread->RT_thread_data->sbtRecordStride = sbtRecordStride;
+    thread->RT_thread_data->missIndex = missIndex;
+
+
+    bool terminateOnFirstHit = rayFlags & SpvRayFlagsTerminateOnFirstHitKHRMask;
+    bool skipClosestHitShader = rayFlags & SpvRayFlagsSkipClosestHitShaderKHRMask;
 
     std::vector<MemoryTransactionRecord> transactions;
 
@@ -337,6 +346,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             min_thit = thit;
                             closest_leaf = leaf;
                             closest_instanceLeaf = instanceLeaf;
+
+                            if(terminateOnFirstHit)
+                            {
+                                stack.clear();
+                            }
                         }
                     }
                     else
@@ -350,220 +364,14 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         }
     }
 
-    // std::list<uint8_t *> traversal_stack;
-	// std::list<uint8_t *> leaf_stack;
-
-    // // start traversing top level BVH
-    // {
-    //     uint8_t *node_addr = NULL;
-    //     uint8_t *next_node_addr = topRootAddr;
-        
-
-    //     while (next_node_addr > 0)
-    //     {
-    //         node_addr = next_node_addr;
-    //         assert ((void *)_topLevelAS < node_addr &&  node_addr < (void *)_topLevelAS + 448);
-    //         next_node_addr = NULL;
-    //         struct GEN_RT_BVH_INTERNAL_NODE node;
-    //         GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
-    //         transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
-
-    //         bool child_hit[6];
-    //         float thit[6];
-    //         for(int i = 0; i < 6; i++)
-    //         {
-    //             if (node.ChildSize[i] > 0)
-    //             {
-    //                 float3 idir = calculate_idir(ray.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
-    //                 float3 lo, hi;
-    //                 set_child_bounds(&node, i, &lo, &hi);
-
-    //                 child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
-    //             }
-    //             else
-    //                 child_hit[i] = false;
-    //         }
-
-    //         uint8_t *child_addr = node_addr + (node.ChildOffset * 64);
-    //         for(int i = 0; i < 6; i++)
-    //         {
-    //             if(child_hit[i])
-    //             {
-    //                 if(node.ChildType[i] != NODE_TYPE_INTERNAL)
-    //                 {
-    //                     assert(node.ChildType[i] == NODE_TYPE_INSTANCE);
-    //                     leaf_stack.push_back(child_addr);
-    //                 }
-    //                 else
-    //                 {
-    //                     if(next_node_addr == 0)
-    //                         next_node_addr = child_addr; // TODO: sort by thit
-    //                     else
-    //                         traversal_stack.push_back(child_addr);
-    //                 }
-    //             }
-    //             child_addr += node.ChildSize[i] * 64;
-    //         }
-
-    //         // Miss
-    //         if (next_node_addr == NULL) {
-    //             if (traversal_stack.empty()) {
-    //                 break;
-    //             }
-
-    //             // Pop next node from stack
-    //             next_node_addr = traversal_stack.back();
-    //             traversal_stack.pop_back();
-    //         }
-    //     }
-
-    //     { // leaf nodes
-    //         // Set thit to max
-    //         float min_thit = ray.dir_tmax.w;
-    //         uint32_t min_geometry_id;
-
-    //         for (auto const& leaf_addr : leaf_stack)
-    //         {
-    //             GEN_RT_BVH_INSTANCE_LEAF leaf;
-    //             GEN_RT_BVH_INSTANCE_LEAF_unpack(&leaf, leaf_addr);
-    //             transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_INSTANCE_LEAF_length * 4, TransactionType::BVH_INSTANCE_LEAF));
-
-    //             //TODO: apply transformation matrix
-    //             assert(leaf.BVHAddress != NULL);
-    //             GEN_RT_BVH botLevelASAddr;
-    //             GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf.BVHAddress));
-    //             transactions.push_back(MemoryTransactionRecord((void*)(leaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
-    //             traversal_stack.push_back(((uint8_t *)(leaf.BVHAddress)) + botLevelASAddr.RootNodeOffset);
-    //         }
-    //         leaf_stack.clear();
-    //     }
-    // }
-
-    // uint32_t topLevel_intersection_count = traversal_stack.size();
-
-    // //traverse bottom AS
-    // if(!traversal_stack.empty())
-    // {
-    //     uint8_t* node_addr = NULL;
-    //     uint8_t* next_node_addr = traversal_stack.back();
-    //     traversal_stack.pop_back();
-        
-
-    //     while (next_node_addr > 0)
-    //     {
-    //         node_addr = next_node_addr;
-    //         next_node_addr = NULL;
-    //         struct GEN_RT_BVH_INTERNAL_NODE node;
-    //         GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
-    //         transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
-
-    //         bool child_hit[6];
-    //         float thit[6];
-    //         for(int i = 0; i < 6; i++)
-    //         {
-    //             if (node.ChildSize[i] > 0)
-    //             {
-    //                 float3 idir = calculate_idir(ray.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
-    //                 float3 lo, hi;
-    //                 set_child_bounds(&node, i, &lo, &hi);
-
-    //                 child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
-    //             }
-    //             else
-    //                 child_hit[i] = false;
-    //         }
-
-    //         uint8_t *child_addr = node_addr + (node.ChildOffset * 64);
-    //         for(int i = 0; i < 6; i++)
-    //         {
-    //             if(child_hit[i])
-    //             {
-    //                 if(node.ChildType[i] != NODE_TYPE_INTERNAL)
-    //                 {
-    //                     assert(node.ChildType[i] != NODE_TYPE_INSTANCE);
-    //                     leaf_stack.push_back(child_addr);
-    //                 }
-    //                 else
-    //                 {
-    //                     if(next_node_addr == 0)
-    //                         next_node_addr = child_addr; // TODO: sort by thit
-    //                     else
-    //                         traversal_stack.push_back(child_addr);
-    //                 }
-    //             }
-    //             child_addr += node.ChildSize[i] * 64;
-    //         }
-
-    //         // Miss
-    //         if (next_node_addr == NULL) {
-    //             if (traversal_stack.empty()) {
-    //                 break;
-    //             }
-
-    //             // Pop next node from stack
-    //             next_node_addr = traversal_stack.back();
-    //             traversal_stack.pop_back();
-    //         }
-    //     }
-    // }
-
-    // // Set thit to max
-    // float min_thit = ray.dir_tmax.w;
-    // struct GEN_RT_BVH_QUAD_LEAF closest_leaf;
-    // {
-    //     for (auto const& leaf_addr : leaf_stack)
-    //     {
-    //         struct GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR leaf_descriptor;
-    //         GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_unpack(&leaf_descriptor, leaf_addr);
-    //         transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_length * 4, TransactionType::BVH_PRIMITIVE_LEAF_DESCRIPTOR));
-            
-
-    //         if (leaf_descriptor.LeafType == TYPE_QUAD)
-    //         {
-    //             struct GEN_RT_BVH_QUAD_LEAF leaf;
-    //             GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
-    //             transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_QUAD_LEAF_length * 4, TransactionType::BVH_QUAD_LEAF));
-
-    //             float3 p[3];
-    //             for(int i = 0; i < 3; i++)
-    //             {
-    //                 p[i].x = leaf.QuadVertex[i].X;
-    //                 p[i].y = leaf.QuadVertex[i].Y;
-    //                 p[i].z = leaf.QuadVertex[i].Z;
-    //             }
-
-    //             // Triangle intersection algorithm
-    //             float thit;
-    //             bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], ray, &thit);
-
-    //             if(hit && thit < min_thit)
-    //             {
-    //                 min_thit = thit;
-    //                 closest_leaf = leaf;
-    //                 // min_geometry_id = leaf.LeafDescriptor.GeometryIndex;
-    //             }
-
-    //         }
-    //         else
-    //         {
-    //             struct GEN_RT_BVH_PROCEDURAL_LEAF leaf;
-    //             GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, leaf_addr);
-    //             transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PROCEDURAL_LEAF_length * 4, TransactionType::BVH_PROCEDURAL_LEAF));
-    //         }
-    //     }
-    // }
-
     if (min_thit < ray.dir_tmax.w)
     {
-        *hit_geometry = 1;
-        thread->RT_thread_data->hit_geometry = 1;
+        thread->RT_thread_data->hit_geometry = true;
         thread->RT_thread_data->closest_hit.geometry_index = closest_leaf.LeafDescriptor.GeometryIndex;
         thread->RT_thread_data->closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         thread->RT_thread_data->closest_hit.instance_index = closest_instanceLeaf.InstanceID;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
         thread->RT_thread_data->closest_hit.intersection_point = intersection_point;
-        thread->RT_thread_data->ray_world_direction = ray.get_direction();
-        thread->RT_thread_data->ray_world_origin = ray.get_origin();
 
         float3 p[3];
         for(int i = 0; i < 3; i++)
@@ -575,11 +383,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         float3 barycentric = Barycentric(intersection_point, p[0], p[1], p[2]);
         thread->RT_thread_data->closest_hit.barycentric_coordinates = barycentric;
         thread->RT_thread_data->set_hitAttribute(barycentric);
+
+        run_closest_hit = skipClosestHitShader ? 0 : 1;
+        run_miss = 0;
     }
     else
     {
-        *hit_geometry = 0;
-        thread->RT_thread_data->hit_geometry = 1;
+        thread->RT_thread_data->hit_geometry = false;
+
+        run_closest_hit = 0;
+        run_miss = 1;
     }
 }
 
@@ -728,7 +541,7 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
             // shader.function_name = "raygen_" + std::to_string(shader.ID);
             strcpy(shader.function_name, "raygen_");
             strcat(shader.function_name, std::to_string(shader.ID).c_str());
-            deviceFunction = "MESA_SHADER_RAYGEN_main";
+            deviceFunction = "MESA_SHADER_RAYGEN";
             break;
         case MESA_SHADER_ANY_HIT:
             // shader.function_name = "anyhit_" + std::to_string(shader.ID);
@@ -740,13 +553,13 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
             // shader.function_name = "closesthit_" + std::to_string(shader.ID);
             strcpy(shader.function_name, "closesthit_");
             strcat(shader.function_name, std::to_string(shader.ID).c_str());
-            deviceFunction = "MESA_SHADER_CLOSEST_HIT_main";
+            deviceFunction = "MESA_SHADER_CLOSEST_HIT";
             break;
         case MESA_SHADER_MISS:
             // shader.function_name = "miss_" + std::to_string(shader.ID);
             strcpy(shader.function_name, "miss_");
             strcat(shader.function_name, std::to_string(shader.ID).c_str());
-            deviceFunction = "MESA_SHADER_MISS_main";
+            deviceFunction = "MESA_SHADER_MISS";
             break;
         case MESA_SHADER_INTERSECTION:
             // shader.function_name = "intersection_" + std::to_string(shader.ID);
@@ -760,8 +573,8 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
             strcat(shader.function_name, std::to_string(shader.ID).c_str());
             deviceFunction = "";
             break;
-
     }
+    deviceFunction += "_func" + std::to_string(shader.ID) + "_main";
 
     symbol_table *symtab;
     unsigned num_ptx_versions = 0;
@@ -926,7 +739,9 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    shader_stage_info miss_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.miss_sbt)];
+    uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.miss_sbt) + 8 * thread->RT_thread_data->missIndex);
+
+    shader_stage_info miss_shader = shaders[shaderID];
 
     function_info *entry = context->get_kernel(miss_shader.function_name);
     callShader(pI, thread, entry);

@@ -6,6 +6,7 @@
 
 #include "vulkan/anv_acceleration_structure.h"
 #include "vulkan/anv_public.h"
+#include "compiler/spirv/spirv.h"
 
 // #define HAVE_PTHREAD
 // #define UTIL_ARCH_LITTLE_ENDIAN 1
@@ -65,7 +66,7 @@ typedef struct Hit_data{
     float3 barycentric_coordinates;
 
     uint32_t instance_index;
-    
+
 } Hit_data;
 
 typedef struct shader_stage_info {
@@ -81,6 +82,13 @@ struct Vulkan_RT_thread_data{
     Hit_data closest_hit;
     float3 ray_world_direction;
     float3 ray_world_origin;
+
+    uint32_t rayFlags;
+    uint32_t cullMask;
+    uint32_t sbtRecordOffset;
+    uint32_t sbtRecordStride;
+    uint32_t missIndex;
+
 
     variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
         if(type == 8192)
@@ -166,7 +174,8 @@ public:
                        float3 direction,
                        float Tmax,
                        int payload,
-                       uint32_t *hit_geometry,
+                       bool &run_closest_hit,
+                       bool &run_miss,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
     
