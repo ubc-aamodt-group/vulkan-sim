@@ -180,6 +180,26 @@ struct dim3comp {
   }
 };
 
+// float4 operator*(float4x4 mat, float4 _vec)
+// {
+//     float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
+//     float res[] = {0, 0, 0, 0};
+//     for(int i = 0; i < 4; i++)
+//         for(int j = 0; j < 4; j++)
+//             res[i] += mat.m[i][j] * vec[j];
+//     return {res[0], res[1], res[2], res[3]};
+// }
+
+// float4 mul_float4_float4x4(float4 _vec, float4x4 mat)
+// {
+//     float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
+//     float res[] = {0, 0, 0, 0};
+//     for(int i = 0; i < 4; i++)
+//         for(int j = 0; j < 4; j++)
+//             res[i] += mat.m[j][i] * vec[j];
+//     return {res[0], res[1], res[2], res[3]};
+// }
+
 struct Ray
 {
 	float4 origin_tmin;
@@ -198,6 +218,11 @@ struct Ray
 
   void print() const {
     printf("Direction: %f %f %f \tOrigin: %f %f %f\tTmin: %f\tTmax: %f\n", dir_tmax.x, dir_tmax.y, dir_tmax.z, origin_tmin.x, origin_tmin.y, origin_tmin.z, origin_tmin.w, dir_tmax.w);
+  }
+
+  float3 at(float t)
+  {
+    return {origin_tmin.x + dir_tmax.x * t, origin_tmin.y + dir_tmax.y * t, origin_tmin.z + dir_tmax.z * t};
   }
 
   void make_ray(float3 o, float3 d, float t_min, float t_max)

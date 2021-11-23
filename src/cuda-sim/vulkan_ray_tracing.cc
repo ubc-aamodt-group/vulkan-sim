@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <cmath>
 #define BOOST_FILESYSTEM_VERSION 3
 #define BOOST_FILESYSTEM_NO_DEPRECATED 
 #include <boost/filesystem.hpp>
@@ -43,6 +44,41 @@ std::vector<std::vector<Descriptor> > VulkanRayTracing::descriptors;
 std::ofstream VulkanRayTracing::imageFile;
 bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
+
+float get_norm(float4 v)
+{
+    return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+}
+float get_norm(float3 v)
+{
+    return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+float4 normalized(float4 v)
+{
+    float norm = get_norm(v);
+    return {v.x / norm, v.y / norm, v.z / norm, v.w / norm};
+}
+float3 normalized(float3 v)
+{
+    float norm = get_norm(v);
+    return {v.x / norm, v.y / norm, v.z / norm};
+}
+
+Ray make_transformed_ray(Ray &ray, float4x4 matrix, float *worldToObject_tMultiplier)
+{
+    Ray transformedRay;
+    float4 transformedOrigin4 = matrix * float4({ray.get_origin().x, ray.get_origin().y, ray.get_origin().z, 1});
+    float4 transformedDirection4 = matrix * float4({ray.get_direction().x, ray.get_direction().y, ray.get_direction().z, 0});
+
+    float3 transformedOrigin = {transformedOrigin4.x / transformedOrigin4.w, transformedOrigin4.y / transformedOrigin4.w, transformedOrigin4.z / transformedOrigin4.w};
+    float3 transformedDirection = {transformedDirection4.x, transformedDirection4.y, transformedDirection4.z};
+    *worldToObject_tMultiplier = get_norm(transformedDirection);
+    transformedDirection = normalized(transformedDirection);
+
+    transformedRay.make_ray(transformedOrigin, transformedDirection, ray.get_tmin() * (*worldToObject_tMultiplier), ray.get_tmax() * (*worldToObject_tMultiplier));
+    return transformedRay;
+}
 
 float magic_max7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
 {
@@ -166,6 +202,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     float min_thit = ray.dir_tmax.w;
     struct GEN_RT_BVH_QUAD_LEAF closest_leaf;
     struct GEN_RT_BVH_INSTANCE_LEAF closest_instanceLeaf;    
+    float4x4 closest_worldToObject, closest_objectToWorld;
+    Ray closest_objectRay;
+    float min_thit_object;
 
 	// Get bottom-level AS
     //uint8_t* topLevelASAddr = get_anv_accel_address((VkAccelerationStructureKHR)_topLevelAS);
@@ -250,13 +289,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             GEN_RT_BVH_INSTANCE_LEAF_unpack(&instanceLeaf, leaf_addr);
             transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_INSTANCE_LEAF_length * 4, TransactionType::BVH_INSTANCE_LEAF));
 
+            float4x4 worldToObjectMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.WorldToObjectm00);
+            float4x4 objectToWorldMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.ObjectToWorldm00);
+
             assert(instanceLeaf.BVHAddress != NULL);
             GEN_RT_BVH botLevelASAddr;
             GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(instanceLeaf.BVHAddress));
             transactions.push_back(MemoryTransactionRecord((void*)(instanceLeaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
 
-            // TODO: apply transformation matrix to ray
-            Ray BLASRay = ray;
+            float worldToObject_tMultiplier;
+            Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
 
             stack.push_back(StackEntry(((uint8_t *)(instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset, false, false));
 
@@ -283,11 +325,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     {
                         if (node.ChildSize[i] > 0)
                         {
-                            float3 idir = calculate_idir(ray.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
+                            float3 idir = calculate_idir(objectRay.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
                             float3 lo, hi;
                             set_child_bounds(&node, i, &lo, &hi);
 
-                            child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+                            child_hit[i] = ray_box_test(lo, hi, idir, objectRay.get_origin(), objectRay.get_tmin(), objectRay.get_tmax(), thit[i]);
                         }
                         else
                             child_hit[i] = false;
@@ -339,13 +381,17 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
                         // Triangle intersection algorithm
                         float thit;
-                        bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], ray, &thit);
+                        bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], objectRay, &thit);
 
-                        if(hit && thit < min_thit)
+                        if(hit && thit / worldToObject_tMultiplier < min_thit)
                         {
-                            min_thit = thit;
+                            min_thit = thit / worldToObject_tMultiplier;
                             closest_leaf = leaf;
                             closest_instanceLeaf = instanceLeaf;
+                            closest_worldToObject = worldToObjectMatrix;
+                            closest_objectToWorld = objectToWorldMatrix;
+                            closest_objectRay = objectRay;
+                            min_thit_object = thit;
 
                             if(terminateOnFirstHit)
                             {
@@ -371,7 +417,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         thread->RT_thread_data->closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         thread->RT_thread_data->closest_hit.instance_index = closest_instanceLeaf.InstanceID;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
+        assert(intersection_point.x == ray.at(min_thit).x && intersection_point.y == ray.at(min_thit).y && intersection_point.z == ray.at(min_thit).z);
         thread->RT_thread_data->closest_hit.intersection_point = intersection_point;
+        thread->RT_thread_data->closest_hit.worldToObjectMatrix = closest_worldToObject;
+        thread->RT_thread_data->closest_hit.objectToWorldMatrix = closest_objectToWorld;
 
         float3 p[3];
         for(int i = 0; i < 3; i++)
@@ -380,7 +429,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             p[i].y = closest_leaf.QuadVertex[i].Y;
             p[i].z = closest_leaf.QuadVertex[i].Z;
         }
-        float3 barycentric = Barycentric(intersection_point, p[0], p[1], p[2]);
+        float3 barycentric = Barycentric(closest_objectRay.at(min_thit_object), p[0], p[1], p[2]);
         thread->RT_thread_data->closest_hit.barycentric_coordinates = barycentric;
         thread->RT_thread_data->set_hitAttribute(barycentric);
 
@@ -708,10 +757,10 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     }
 
     gpgpu_ptx_sim_arg_list_t args;
-    // kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-    //   raygen_shader.function_name, args, dim3(1, 1, 1), dim3(1, 1, 1), context);
     kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-      raygen_shader.function_name, args, gridDim, blockDim, context);
+      raygen_shader.function_name, args, dim3(1, 128, 1), dim3(128, 1, 1), context);
+    // kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
+    //   raygen_shader.function_name, args, gridDim, blockDim, context);
     grid->vulkan_metadata.raygen_sbt = raygen_sbt;
     grid->vulkan_metadata.miss_sbt = miss_sbt;
     grid->vulkan_metadata.hit_sbt = hit_sbt;

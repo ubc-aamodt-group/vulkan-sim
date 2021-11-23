@@ -984,9 +984,11 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
+  //     printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  //     fflush(stdout);
+  //   }
   ptx_reg_t src1_data, src2_data, data;
   int overflow = 0;
   int carry = 0;
@@ -1752,9 +1754,11 @@ void bfind_impl(const ptx_instruction *pI, ptx_thread_info *thread)
 }
 
 void bra_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
+      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+      // fflush(stdout);
+    // }
   const operand_info &target = pI->dst();
   ptx_reg_t target_pc =
       thread->get_operand_value(target, target, U32_TYPE, thread, 1);
@@ -3363,9 +3367,11 @@ void decode_space(memory_space_t &space, ptx_thread_info *thread,
 }
 
 void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
-  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
+      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+      // fflush(stdout);
+    // }
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
@@ -4124,9 +4130,11 @@ void min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 static int _count = 0;
 void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
+      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+      // fflush(stdout);
+    // }
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -4298,9 +4306,11 @@ void mul24_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void mul_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
+      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+      // fflush(stdout);
+    // }
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -5773,9 +5783,11 @@ void ssy_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-    if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-      printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
+      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
+      // fflush(stdout);
+    // }
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();  // may be scalar or vector of regs
   unsigned type = pI->get_type();
@@ -6650,8 +6662,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 236;
-  // v[1] = 392;
+  // v[0] = 440;
+  // v[1] = 100;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6675,8 +6687,8 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_nctaid().y;
   v[2] = thread->get_nctaid().z;
 
-  // v[0] = 612;
-  // v[1] = 436;
+  // v[0] = 1280;
+  // v[1] = 720;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6721,8 +6733,7 @@ void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *t
   src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
 
   for(int i = 0; i < 3; i++)
-    data[i].f32 = 0;
-  data[src_data.u32].f32 = 1;
+    data[i].f32 = thread->RT_thread_data->closest_hit.worldToObjectMatrix.m[src_data.u32][i];
 
   thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
   thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
@@ -6739,11 +6750,10 @@ void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *t
   ptx_reg_t data[4];
   ptx_reg_t src_data;
 
-  src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
+  src_data = thread->get_operand_value(src, dst0, U32_TYPE, thread, 1);
 
   for(int i = 0; i < 3; i++)
-    data[i].f32 = 0;
-  data[src_data.u32].f32 = 1;
+    data[i].f32 = thread->RT_thread_data->closest_hit.objectToWorldMatrix.m[src_data.u32][i];;
 
   thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
   thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);

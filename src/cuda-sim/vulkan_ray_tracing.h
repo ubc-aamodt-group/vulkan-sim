@@ -26,6 +26,34 @@
 #define MIN_MAX(a,b,c) MAX(MIN((a), (b)), (c))
 #define MAX_MIN(a,b,c) MIN(MAX((a), (b)), (c))
 
+// typedef struct float4 {
+//     float x, y, z, w;
+// } float4;
+
+typedef struct float4x4 {
+  float m[4][4];
+
+  float4 operator*(const float4& _vec) const
+  {
+    float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
+    float res[] = {0, 0, 0, 0};
+    for(int i = 0; i < 4; i++)
+        for(int j = 0; j < 4; j++)
+            res[i] += this->m[j][i] * vec[j];
+    return {res[0], res[1], res[2], res[3]};
+  }
+} float4x4;
+
+// float4 operator*(const float4& _vec, const float4x4& matrix)
+// {
+//     float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
+//     float res[] = {0, 0, 0, 0};
+//     for(int i = 0; i < 4; i++)
+//         for(int j = 0; j < 4; j++)
+//             res[i] += matrix.m[j][i] * vec[j];
+//     return {res[0], res[1], res[2], res[3]};
+// }
+
 enum class TransactionType {
     BVH_STRUCTURE,
     BVH_INTERNAL_NODE,
@@ -66,7 +94,8 @@ typedef struct Hit_data{
     float3 barycentric_coordinates;
 
     uint32_t instance_index;
-
+    float4x4 worldToObjectMatrix;
+    float4x4 objectToWorldMatrix;
 } Hit_data;
 
 typedef struct shader_stage_info {
@@ -107,7 +136,7 @@ struct Vulkan_RT_thread_data{
         variable_decleration_entry entry;
         entry.type = type;
         entry.name = name;
-        entry.address = (uint64_t) malloc(size);;
+        entry.address = (uint64_t) malloc(size);
         entry.size = size;
         variable_decleration_table.push_back(entry);
 
