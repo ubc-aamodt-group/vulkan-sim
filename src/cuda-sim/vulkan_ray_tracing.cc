@@ -44,6 +44,7 @@ std::vector<std::vector<Descriptor> > VulkanRayTracing::descriptors;
 std::ofstream VulkanRayTracing::imageFile;
 bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
+RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
 
 float get_norm(float4 v)
 {
@@ -250,6 +251,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     set_child_bounds(&node, i, &lo, &hi);
 
                     child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
+                    child_hit[i] = true;
                 }
                 else
                     child_hit[i] = false;
@@ -429,7 +431,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             p[i].y = closest_leaf.QuadVertex[i].Y;
             p[i].z = closest_leaf.QuadVertex[i].Z;
         }
-        float3 barycentric = Barycentric(closest_objectRay.at(min_thit_object), p[0], p[1], p[2]);
+        float3 object_intersection_point = closest_objectRay.get_origin() + make_float3(closest_objectRay.get_direction().x * min_thit_object, closest_objectRay.get_direction().y * min_thit_object, closest_objectRay.get_direction().z * min_thit_object);
+        //closest_objectRay.at(min_thit_object);
+        float3 barycentric = Barycentric(object_intersection_point, p[0], p[1], p[2]);
         thread->RT_thread_data->closest_hit.barycentric_coordinates = barycentric;
         thread->RT_thread_data->set_hitAttribute(barycentric);
 
@@ -526,18 +530,24 @@ void copyHardCodedShaders()
 {
     std::ifstream  src;
     std::ofstream  dst;
-    
-    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
-    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
-    // dst << src.rdbuf();
-    // src.close();
-    // dst.close();
 
-    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_MISS_2.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_2.ptx", std::ios::binary);
     // dst << src.rdbuf();
     // src.close();
     // dst.close();
+    
+    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
+    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
+
+    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
 
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
@@ -708,6 +718,23 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
+    // {
+    //     std::ifstream infile("debug_printf.log");
+    //     std::string line;
+    //     while (std::getline(infile, line))
+    //     {
+    //         if(line == "")
+    //             continue;
+
+    //         RayDebugGPUData data;
+    //         sscanf(line.c_str(), "LaunchID:(%d,%d), InstanceCustomIndex = %d, primitiveID = %d, v0 = (%f, %f, %f), v1 = (%f, %f, %f), v2 = (%f, %f, %f), hitAttribute = (%f, %f), normalWorld = (%f, %f, %f), objectIntersection = (%f, %f, %f), worldIntersection = (%f, %f, %f), objectNormal = (%f, %f, %f), worldNormal = (%f, %f, %f), NdotL = %f",
+    //                     &data.launchIDx, &data.launchIDy, &data.instanceCustomIndex, &data.primitiveID, &data.v0pos.x, &data.v0pos.y, &data.v0pos.z, &data.v1pos.x, &data.v1pos.y, &data.v1pos.z, &data.v2pos.x, &data.v2pos.y, &data.v2pos.z, &data.attribs.x, &data.attribs.y, &data.N.x, &data.N.y, &data.N.z, &data.P_object.x, &data.P_object.y, &data.P_object.z, &data.P.x, &data.P.y, &data.P.z, &data.N_object.x, &data.N_object.y, &data.N_object.z, &data.N.x, &data.N.y, &data.N.z, &data.NdotL);
+    //         data.valid = true;
+    //         rayDebugGPUData[data.launchIDx][data.launchIDy] = data;
+
+    //     }
+    // }
+
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -743,6 +770,9 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
+    // launch_width = 256;
+    // launch_height = 256;
+
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
     if(launch_width <= 32) {
@@ -757,10 +787,10 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     }
 
     gpgpu_ptx_sim_arg_list_t args;
-    kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-      raygen_shader.function_name, args, dim3(1, 128, 1), dim3(128, 1, 1), context);
     // kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
-    //   raygen_shader.function_name, args, gridDim, blockDim, context);
+    //   raygen_shader.function_name, args, dim3(4, 128, 1), dim3(32, 1, 1), context);
+    kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
+      raygen_shader.function_name, args, gridDim, blockDim, context);
     grid->vulkan_metadata.raygen_sbt = raygen_sbt;
     grid->vulkan_metadata.miss_sbt = miss_sbt;
     grid->vulkan_metadata.hit_sbt = hit_sbt;
@@ -794,6 +824,22 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
 
     function_info *entry = context->get_kernel(miss_shader.function_name);
     callShader(pI, thread, entry);
+
+    // if (entry->is_pdom_set()) {
+    //     // printf("GPGPU-Sim PTX: PDOM analysis already done for %s \n",
+    //     //        target_func->get_name().c_str());
+    // } else {
+    //     printf("GPGPU-Sim PTX: finding reconvergence points for \'%s\'...\n",
+    //         entry->get_name().c_str());
+    //     /*
+    //     * Some of the instructions like printf() gives the gpgpusim the wrong
+    //     * impression that it is a function call. As printf() doesnt have a body
+    //     * like functions do, doing pdom analysis for printf() causes a crash.
+    //     */
+    //     if (entry->get_function_size() > 0) entry->do_pdom();
+    //     entry->set_pdom();
+    // }
+    // *pc = entry->get_start_PC();
 }
 
 void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -804,6 +850,22 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     shader_stage_info closesthit_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt)];
     function_info *entry = context->get_kernel(closesthit_shader.function_name);
     callShader(pI, thread, entry);
+
+    // if (entry->is_pdom_set()) {
+    //     // printf("GPGPU-Sim PTX: PDOM analysis already done for %s \n",
+    //     //        target_func->get_name().c_str());
+    // } else {
+    //     printf("GPGPU-Sim PTX: finding reconvergence points for \'%s\'...\n",
+    //         entry->get_name().c_str());
+    //     /*
+    //     * Some of the instructions like printf() gives the gpgpusim the wrong
+    //     * impression that it is a function call. As printf() doesnt have a body
+    //     * like functions do, doing pdom analysis for printf() causes a crash.
+    //     */
+    //     if (entry->get_function_size() > 0) entry->do_pdom();
+    //     entry->set_pdom();
+    // }
+    // *pc = entry->get_start_PC();
 }
 
 void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -843,6 +905,8 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
     if (target_func->get_function_size() > 0) target_func->do_pdom();
     target_func->set_pdom();
   }
+
+  thread->set_npc(target_func->get_start_PC());
 
   // check that number of args and return match function requirements
   if (pI->has_return() ^ target_func->has_return()) {
@@ -956,10 +1020,10 @@ void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint3
     // imageFile.flush();
 
     uint8_t* p = ((uint8_t*)image) + offset * 4;
-    p[0] = (uint8_t)(hitValue_X * 255);
+    p[0] = (uint8_t)(hitValue_Z * 255);
     p[1] = (uint8_t)(hitValue_Y * 255);
-    p[2] = (uint8_t)(hitValue_Z * 255);
-    p[3] = (uint8_t)(0.5 * 255);
+    p[2] = (uint8_t)(hitValue_X * 255);
+    p[3] = (uint8_t)(hitValue_W * 255);
     // p[0] = (uint8_t)(127);
     // p[1] = (uint8_t)(127);
     // p[2] = (uint8_t)(127);

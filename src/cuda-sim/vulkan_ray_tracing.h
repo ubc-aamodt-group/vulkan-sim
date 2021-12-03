@@ -44,6 +44,24 @@ typedef struct float4x4 {
   }
 } float4x4;
 
+typedef struct RayDebugGPUData
+{
+    bool valid;
+    int launchIDx;
+    int launchIDy;
+    int instanceCustomIndex;
+    int primitiveID;
+    float3 v0pos;
+    float3 v1pos;
+    float3 v2pos;
+    float3 attribs;
+    float3 P_object;
+    float3 P; //world intersection point
+    float3 N_object;
+    float3 N;
+    float NdotL;
+} RayDebugGPUData;
+
 // float4 operator*(const float4& _vec, const float4x4& matrix)
 // {
 //     float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
@@ -183,6 +201,8 @@ private:
     static std::vector<std::vector<Descriptor> > descriptors;
     static std::ofstream imageFile;
     static bool firstTime;
+public:
+    static RayDebugGPUData rayDebugGPUData[2000][2000];
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);

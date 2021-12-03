@@ -985,10 +985,14 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
-  //     printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
-  //     fflush(stdout);
-  //   }
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
+
   ptx_reg_t src1_data, src2_data, data;
   int overflow = 0;
   int carry = 0;
@@ -1755,10 +1759,17 @@ void bfind_impl(const ptx_instruction *pI, ptx_thread_info *thread)
 
 void bra_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
-      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
-      // fflush(stdout);
-    // }
+  // //   if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+  //   {
+  //     printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+  //                                       thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+  //                                       thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+  //     fflush(stdout);
+  //   }
+  
+  // if(pI->source_line() == 940)
+  //   printf("this is where things actuallyn go wrong\n");
+  
   const operand_info &target = pI->dst();
   ptx_reg_t target_pc =
       thread->get_operand_value(target, target, U32_TYPE, thread, 1);
@@ -3368,10 +3379,13 @@ void decode_space(memory_space_t &space, ptx_thread_info *thread,
 
 void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
-      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
-      // fflush(stdout);
-    // }
+  // //   if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+  //   {
+  //     printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+  //                                       thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+  //                                       thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+  //     fflush(stdout);
+  //   }
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
@@ -4131,10 +4145,17 @@ void min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 static int _count = 0;
 void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
-      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
-      // fflush(stdout);
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
     // }
+  // if(thread->get_tid().x == 6)
+  //   if(pI->dst().name() == "%ssa_233")
+  //     if(pI->src1().name() == "%ssa_166")
+  //     printf("this is wrong\n");
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -4307,9 +4328,12 @@ void mul24_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 void mul_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
-      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
-      // fflush(stdout);
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
     // }
   ptx_reg_t data;
 
@@ -4820,6 +4844,39 @@ void rem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void ret_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    // if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
+  
+  // if(thread->get_tid().x == 1 && thread->get_tid().y == 0 && thread->get_tid().z == 0 &&
+  //               thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+  //     printf("this is where things go wrong\n");
+
+  if(thread->func_info()->get_name() == "MESA_SHADER_MISS_func2_main")
+  {
+    // printf("here we go\n");
+  }
+  
+
+  // if(thread->func_info()->get_name() == "MESA_SHADER_CLOSEST_HIT_func3_main")
+  // {
+  //   float NdotL = thread->get_reg("%ssa_162").f32;
+  //   RayDebugGPUData &rayDebugGPUData = VulkanRayTracing::rayDebugGPUData[thread->get_tid().x + thread->get_ctaid().x * 32][thread->get_ctaid().y];
+  //   if(rayDebugGPUData.valid)
+  //     if(std::abs(rayDebugGPUData.P.x - thread->get_reg("%ssa_153").f32) > 0.0001 ||
+  //             std::abs(rayDebugGPUData.P.y - thread->get_reg("%ssa_154").f32) > 0.0001 || 
+  //             std::abs(rayDebugGPUData.P.z - thread->get_reg("%ssa_155").f32) > 0.0001)
+  //     {
+  //       printf("###### bad ray: (%d, %d)\n", thread->get_tid().x + thread->get_ctaid().x * 32, thread->get_ctaid().y);
+  //       fflush(stdout);
+  //     }
+  // }
+
   bool empty = thread->callstack_pop();
   if (empty) {
     thread->set_done();
@@ -5784,9 +5841,12 @@ void ssy_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
-  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0) {
-      // printf("########## running inst at line %d of file %s\n", pI->source_line(), pI->source_file());
-      // fflush(stdout);
+    // if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
     // }
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();  // may be scalar or vector of regs
@@ -6662,8 +6722,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 440;
-  // v[1] = 100;
+  // v[0] = 64 + thread->get_tid().x;
+  // v[1] = 89;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6689,6 +6749,10 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
 
   // v[0] = 1280;
   // v[1] = 720;
+  // v[2] = 0;
+
+  // v[0] = 128;
+  // v[1] = 128;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6727,7 +6791,7 @@ void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *t
   const operand_info &dst2 = pI->src2();
   const operand_info &src = pI->src3();
 
-  ptx_reg_t data[4];
+  ptx_reg_t data[3];
   ptx_reg_t src_data;
 
   src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
@@ -6747,7 +6811,7 @@ void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *t
   const operand_info &dst2 = pI->src2();
   const operand_info &src = pI->src3();
 
-  ptx_reg_t data[4];
+  ptx_reg_t data[3];
   ptx_reg_t src_data;
 
   src_data = thread->get_operand_value(src, dst0, U32_TYPE, thread, 1);
@@ -6816,6 +6880,15 @@ void load_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
+
   // const operand_info &target = pI->func_addr();
   // const symbol *func_addr = target.get_symbol();
   // function_info *target_func = func_addr->get_pc();
@@ -6927,10 +7000,10 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   ptx_reg_t data;
 
   data.u32 = run_closest_hit;
-  thread->set_operand_value(op16, data, U32_TYPE, thread, pI);
+  thread->set_operand_value(op16, data, PRED_TYPE, thread, pI);
 
   data.u32 = run_miss;
-  thread->set_operand_value(op17, data, U32_TYPE, thread, pI);
+  thread->set_operand_value(op17, data, PRED_TYPE, thread, pI);
 }
 
 // VkAccelerationStructureKHR* _topLevelAS,
@@ -6947,14 +7020,68 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 // const ptx_instruction *pI,
 // ptx_thread_info *thread
 
+void call_pc_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+  static unsigned call_uid_next = 1;
+
+  const operand_info &target = pI->dst();
+  ptx_reg_t target_pc =
+      thread->get_operand_value(target, target, U32_TYPE, thread, 1);
+
+  const symbol *return_var_src = NULL;
+  const symbol *return_var_dst = NULL;
+
+  gpgpu_sim *gpu = thread->get_gpu();
+  unsigned callee_pc = 0, callee_rpc = 0;
+  /*if (gpu->simd_model() == POST_DOMINATOR)*/ {
+    thread->get_core()->get_pdom_stack_top_info(thread->get_hw_wid(),
+                                                &callee_pc, &callee_rpc);
+    assert(callee_pc == thread->get_pc());
+  }
+
+  thread->callstack_push_plus(callee_pc + pI->inst_size(), callee_rpc,
+                              return_var_src, return_var_dst, call_uid_next++);
+  thread->set_npc(target_pc);
+}
+
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
+  
+  // const operand_info &dst = pI->dst();
+  
   VulkanRayTracing::callMissShader(pI, thread);
   // printf("calling miss shader\n");
+
+  // ptx_reg_t data;
+  // data.u32 = pc;
+  // thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
+  
+  // const operand_info &dst = pI->dst();
+  
   VulkanRayTracing::callClosestHitShader(pI, thread);
   // printf("calling closest hit shader\n");
+
+  // ptx_reg_t data;
+  // data.u32 = pc;
+  // thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -6966,6 +7093,14 @@ void call_any_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread
 }
 
 void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+    // if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
   int arg = 0;
   const operand_info &op1 = pI->operand_lookup(arg);
   ptx_reg_t op1_data = thread->get_operand_value(op1, op1, B64_TYPE, thread, 1);

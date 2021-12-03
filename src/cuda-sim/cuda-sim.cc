@@ -802,6 +802,8 @@ void ptx_instruction::set_opcode_and_latency() {
     case MEMBAR_OP:
       op = MEMORY_BARRIER_OP;
       break;
+    case CALL_MISS_SHADER_OP:
+    case CALL_CLOSEST_HIT_SHADER_OP:
     case CALL_OP: {
       if (m_is_printf || m_is_cdp) {
         op = ALU_OP;
