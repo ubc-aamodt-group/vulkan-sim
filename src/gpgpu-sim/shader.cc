@@ -2765,6 +2765,7 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
   mem_fetch *mf;
   new_addr_type next_addr; 
   new_addr_type base_addr;
+  bool mem_chunk = false;
   
   // If queue is empty, then we got here because there is warp waiting to send memory requests
   if (mem_access_q.empty()) {  
@@ -2800,17 +2801,19 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
     next_addr = mem_access_q.front();
     base_addr = mem_access_q_base_addr;
     mem_access_q.pop_front();
+    mem_chunk = true;
   }
   
   // Create the mem_access_t
   mem_access_t *access = create_mem_access(next_addr);
   access->set_uncoalesced_base_addr(base_addr);
-  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x)\n", m_sid, next_addr, access->get_addr());
+  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x, base address 0x%x)\n", m_sid, next_addr, access->get_addr(), base_addr);
   
   // Create mf
   mf = m_mf_allocator->alloc(
     inst, *access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
   ); 
+  mf->set_raytrace();
   // Track type for each mf
   m_stats->gpgpu_n_rt_mem[mem_access_q_type]++;
     
@@ -2855,13 +2858,23 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
       // Otherwise, the request cannot be handled this cycle
       else {
         RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
-        inst.undo_rt_access(mf->get_uncoalesced_addr());
+        if (mem_chunk) {
+            mem_access_q.push_front(mf->get_uncoalesced_addr());
+        }
+        else {
+            inst.undo_rt_access(mf->get_uncoalesced_addr());
+        }
         m_stats->gpgpu_n_rt_mem[mem_access_q_type]--;
       }
     }
     else {
       RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
-      inst.undo_rt_access(mf->get_uncoalesced_addr());
+      if (mem_chunk) {
+          mem_access_q.push_front(mf->get_uncoalesced_addr());
+      }
+      else {
+          inst.undo_rt_access(mf->get_uncoalesced_addr());
+      }
       m_stats->gpgpu_n_rt_mem[mem_access_q_type]--;
     }
   }

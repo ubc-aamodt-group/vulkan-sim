@@ -852,6 +852,8 @@ class mem_access_t {
     m_addr = address;
     m_req_size = size;
     m_write = wr;
+    m_uncoalesced_addr = 0;
+    m_uncoalesced_base_addr = 0;
   }
   mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
                bool wr, const active_mask_t &active_mask,
@@ -865,6 +867,8 @@ class mem_access_t {
     m_addr = address;
     m_req_size = size;
     m_write = wr;
+    m_uncoalesced_addr = 0;
+    m_uncoalesced_base_addr = 0;
   }
 
   new_addr_type get_addr() const { return m_addr; }

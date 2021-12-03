@@ -2040,6 +2040,12 @@ void gpgpu_sim::perf_memcpy_to_gpu(size_t dst_start_addr, size_t count) {
   }
 }
 
+void gpgpu_sim::dump_rt_pipeline(int sid) const {
+  printf("Dumping RT core pipeline state...\n");
+  m_cluster[m_shader_config->sid_to_cluster(sid)]->display_rt_pipeline(
+          sid, stdout, 0x40 & 0x2E);
+}
+
 void gpgpu_sim::dump_pipeline(int mask, int s, int m) const {
   /*
      You may want to use this function while running GPGPU-Sim in gdb.

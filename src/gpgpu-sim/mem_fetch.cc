@@ -69,6 +69,7 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
     m_raw_addr.chip = m_original_mf->get_tlx_addr().chip;
     m_raw_addr.sub_partition = m_original_mf->get_tlx_addr().sub_partition;
   }
+  m_israytrace = false;
 }
 
 mem_fetch::~mem_fetch() { m_status = MEM_FETCH_DELETED; }

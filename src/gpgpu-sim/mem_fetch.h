@@ -103,7 +103,8 @@ class mem_fetch {
   bool isconst() const;
   enum mf_type get_type() const { return m_type; }
   bool isatomic() const;
-  bool israytrace() const { return m_inst.op == RT_CORE_OP; }
+  bool israytrace() const { return m_inst.op == RT_CORE_OP || m_israytrace; }
+  void set_raytrace() {m_israytrace = true; }
 
   void set_return_timestamp(unsigned t) { m_timestamp2 = t; }
   void set_icnt_receive_time(unsigned t) { m_icnt_receive_time = t; }
@@ -167,6 +168,8 @@ class mem_fetch {
 
   // requesting instruction (put last so mem_fetch prints nicer in gdb)
   warp_inst_t m_inst;
+  
+  bool m_israytrace;
 
   static unsigned sm_next_mf_request_uid;
 
