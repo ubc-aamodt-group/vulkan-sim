@@ -3389,6 +3389,12 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
+  // if(thread->func_info()->get_name() == "MESA_SHADER_RAYGEN_func0_main")
+  //   if(dst.get_symbol()->name() == "%ssa_108_0")
+  //   {
+  //     printf("this is where we should break\n");
+  //   }
+
   unsigned type = pI->get_type();
 
   ptx_reg_t src1_data = thread->get_operand_value(src1, dst, type, thread, 1);
@@ -4857,9 +4863,9 @@ void ret_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   //               thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
   //     printf("this is where things go wrong\n");
 
-  if(thread->func_info()->get_name() == "MESA_SHADER_MISS_func2_main")
+  if(thread->func_info()->get_name() == "MESA_SHADER_CLOSEST_HIT_func3_main")
   {
-    // printf("here we go\n");
+    // printf("This is the other place\n");
   }
   
 
@@ -6722,8 +6728,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 64 + thread->get_tid().x;
-  // v[1] = 89;
+  // v[0] = 1024 + thread->get_tid().x;
+  // v[1] = 230;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6751,10 +6757,6 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   // v[1] = 720;
   // v[2] = 0;
 
-  // v[0] = 128;
-  // v[1] = 128;
-  // v[2] = 0;
-
   ptx_reg_t data;
   data.u32 = v[0];
   thread->set_operand_value(src0, data, U32_TYPE, thread, pI);
@@ -6771,7 +6773,7 @@ void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_i
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u32 = thread->RT_thread_data->closest_hit.instance_index;
+  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
@@ -6780,7 +6782,7 @@ void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u32 = thread->RT_thread_data->closest_hit.primitive_index;
+  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.primitive_index;
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
@@ -6797,7 +6799,7 @@ void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *t
   src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
 
   for(int i = 0; i < 3; i++)
-    data[i].f32 = thread->RT_thread_data->closest_hit.worldToObjectMatrix.m[src_data.u32][i];
+    data[i].f32 = thread->RT_thread_data->traversal_data.back().closest_hit.worldToObjectMatrix.m[src_data.u32][i];
 
   thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
   thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
@@ -6817,7 +6819,7 @@ void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *t
   src_data = thread->get_operand_value(src, dst0, U32_TYPE, thread, 1);
 
   for(int i = 0; i < 3; i++)
-    data[i].f32 = thread->RT_thread_data->closest_hit.objectToWorldMatrix.m[src_data.u32][i];;
+    data[i].f32 = thread->RT_thread_data->traversal_data.back().closest_hit.objectToWorldMatrix.m[src_data.u32][i];;
 
   thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
   thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
@@ -6831,13 +6833,13 @@ void load_ray_world_direction_impl(const ptx_instruction *pI, ptx_thread_info *t
   const operand_info &dst2 = pI->src2();
 
   ptx_reg_t data;
-  data.f32 = thread->RT_thread_data->ray_world_direction.x;
+  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.x;
   thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
 
-  data.f32 = thread->RT_thread_data->ray_world_direction.y;
+  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.y;
   thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
 
-  data.f32 = thread->RT_thread_data->ray_world_direction.z;
+  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.z;
   thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
 }
 
@@ -7006,6 +7008,10 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(op17, data, PRED_TYPE, thread, pI);
 }
 
+void end_trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VulkanRayTracing::endTraceRay(pI, thread);
+}
+
 // VkAccelerationStructureKHR* _topLevelAS,
 // uint rayFlags,
 // uint cullMask,
@@ -7149,6 +7155,11 @@ void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   float hitValue_W = (op9_data.f32);
 
   //MRS_TODO: There are more operands
+
+  // if (thread->get_tid().x + thread->get_ctaid().x * 32 == 1024 && thread->get_ctaid().y == 230)
+  // {
+  //   printf("this is where we should break\n");
+  // }
 
   VulkanRayTracing::image_store(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_W, gl_LaunchIDEXT_W, 
               hitValue_X, hitValue_Y, hitValue_Z, hitValue_W, pI, thread);

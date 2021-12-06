@@ -60,6 +60,7 @@ typedef struct RayDebugGPUData
     float3 N_object;
     float3 N;
     float NdotL;
+    float3 hitValue;
 } RayDebugGPUData;
 
 // float4 operator*(const float4& _vec, const float4x4& matrix)
@@ -122,9 +123,7 @@ typedef struct shader_stage_info {
     char* function_name;
 } shader_stage_info;
 
-
-struct Vulkan_RT_thread_data{
-    std::vector<variable_decleration_entry> variable_decleration_table;
+typedef struct Traversal_data {
     bool hit_geometry;
     Hit_data closest_hit;
     float3 ray_world_direction;
@@ -135,6 +134,13 @@ struct Vulkan_RT_thread_data{
     uint32_t sbtRecordOffset;
     uint32_t sbtRecordStride;
     uint32_t missIndex;
+} Traversal_data;
+
+
+typedef struct Vulkan_RT_thread_data {
+    std::vector<variable_decleration_entry> variable_decleration_table;
+
+    std::vector<Traversal_data> traversal_data;
 
 
     variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
@@ -189,7 +195,7 @@ struct Vulkan_RT_thread_data{
         address[1] = barycentric.y;
         address[2] = barycentric.z;
     }
-};
+} Vulkan_RT_thread_data;
 
 class VulkanRayTracing
 {
@@ -227,6 +233,7 @@ public:
                        bool &run_miss,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
+    static void endTraceRay(const ptx_instruction *pI, ptx_thread_info *thread);
     
     static void load_descriptor(const ptx_instruction *pI, ptx_thread_info *thread);
 

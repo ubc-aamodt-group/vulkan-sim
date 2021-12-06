@@ -182,12 +182,13 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 {
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
+    Traversal_data traversal_data;
 
-    thread->RT_thread_data->ray_world_direction = direction;
-    thread->RT_thread_data->ray_world_origin = origin;
-    thread->RT_thread_data->sbtRecordOffset = sbtRecordOffset;
-    thread->RT_thread_data->sbtRecordStride = sbtRecordStride;
-    thread->RT_thread_data->missIndex = missIndex;
+    traversal_data.ray_world_direction = direction;
+    traversal_data.ray_world_origin = origin;
+    traversal_data.sbtRecordOffset = sbtRecordOffset;
+    traversal_data.sbtRecordStride = sbtRecordStride;
+    traversal_data.missIndex = missIndex;
 
 
     bool terminateOnFirstHit = rayFlags & SpvRayFlagsTerminateOnFirstHitKHRMask;
@@ -414,15 +415,15 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
     if (min_thit < ray.dir_tmax.w)
     {
-        thread->RT_thread_data->hit_geometry = true;
-        thread->RT_thread_data->closest_hit.geometry_index = closest_leaf.LeafDescriptor.GeometryIndex;
-        thread->RT_thread_data->closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
-        thread->RT_thread_data->closest_hit.instance_index = closest_instanceLeaf.InstanceID;
+        traversal_data.hit_geometry = true;
+        traversal_data.closest_hit.geometry_index = closest_leaf.LeafDescriptor.GeometryIndex;
+        traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
+        traversal_data.closest_hit.instance_index = closest_instanceLeaf.InstanceID;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
         assert(intersection_point.x == ray.at(min_thit).x && intersection_point.y == ray.at(min_thit).y && intersection_point.z == ray.at(min_thit).z);
-        thread->RT_thread_data->closest_hit.intersection_point = intersection_point;
-        thread->RT_thread_data->closest_hit.worldToObjectMatrix = closest_worldToObject;
-        thread->RT_thread_data->closest_hit.objectToWorldMatrix = closest_objectToWorld;
+        traversal_data.closest_hit.intersection_point = intersection_point;
+        traversal_data.closest_hit.worldToObjectMatrix = closest_worldToObject;
+        traversal_data.closest_hit.objectToWorldMatrix = closest_objectToWorld;
 
         float3 p[3];
         for(int i = 0; i < 3; i++)
@@ -434,7 +435,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         float3 object_intersection_point = closest_objectRay.get_origin() + make_float3(closest_objectRay.get_direction().x * min_thit_object, closest_objectRay.get_direction().y * min_thit_object, closest_objectRay.get_direction().z * min_thit_object);
         //closest_objectRay.at(min_thit_object);
         float3 barycentric = Barycentric(object_intersection_point, p[0], p[1], p[2]);
-        thread->RT_thread_data->closest_hit.barycentric_coordinates = barycentric;
+        traversal_data.closest_hit.barycentric_coordinates = barycentric;
         thread->RT_thread_data->set_hitAttribute(barycentric);
 
         run_closest_hit = skipClosestHitShader ? 0 : 1;
@@ -442,11 +443,19 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     else
     {
-        thread->RT_thread_data->hit_geometry = false;
+        traversal_data.hit_geometry = false;
 
         run_closest_hit = 0;
         run_miss = 1;
     }
+    
+    thread->RT_thread_data->traversal_data.push_back(traversal_data);
+}
+
+void VulkanRayTracing::endTraceRay(const ptx_instruction *pI, ptx_thread_info *thread)
+{
+    assert(thread->RT_thread_data->traversal_data.size() > 0);
+    thread->RT_thread_data->traversal_data.pop_back();
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)
@@ -537,17 +546,17 @@ void copyHardCodedShaders()
     // src.close();
     // dst.close();
     
-    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
-    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
-    dst << src.rdbuf();
-    src.close();
-    dst.close();
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
 
-    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
-    dst << src.rdbuf();
-    src.close();
-    dst.close();
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
 
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
@@ -718,22 +727,30 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
-    // {
-    //     std::ifstream infile("debug_printf.log");
-    //     std::string line;
-    //     while (std::getline(infile, line))
-    //     {
-    //         if(line == "")
-    //             continue;
+    {
+        std::ifstream infile("debug_printf.log");
+        std::string line;
+        while (std::getline(infile, line))
+        {
+            if(line == "")
+                continue;
 
-    //         RayDebugGPUData data;
-    //         sscanf(line.c_str(), "LaunchID:(%d,%d), InstanceCustomIndex = %d, primitiveID = %d, v0 = (%f, %f, %f), v1 = (%f, %f, %f), v2 = (%f, %f, %f), hitAttribute = (%f, %f), normalWorld = (%f, %f, %f), objectIntersection = (%f, %f, %f), worldIntersection = (%f, %f, %f), objectNormal = (%f, %f, %f), worldNormal = (%f, %f, %f), NdotL = %f",
-    //                     &data.launchIDx, &data.launchIDy, &data.instanceCustomIndex, &data.primitiveID, &data.v0pos.x, &data.v0pos.y, &data.v0pos.z, &data.v1pos.x, &data.v1pos.y, &data.v1pos.z, &data.v2pos.x, &data.v2pos.y, &data.v2pos.z, &data.attribs.x, &data.attribs.y, &data.N.x, &data.N.y, &data.N.z, &data.P_object.x, &data.P_object.y, &data.P_object.z, &data.P.x, &data.P.y, &data.P.z, &data.N_object.x, &data.N_object.y, &data.N_object.z, &data.N.x, &data.N.y, &data.N.z, &data.NdotL);
-    //         data.valid = true;
-    //         rayDebugGPUData[data.launchIDx][data.launchIDy] = data;
+            RayDebugGPUData data;
+            // sscanf(line.c_str(), "LaunchID:(%d,%d), InstanceCustomIndex = %d, primitiveID = %d, v0 = (%f, %f, %f), v1 = (%f, %f, %f), v2 = (%f, %f, %f), hitAttribute = (%f, %f), normalWorld = (%f, %f, %f), objectIntersection = (%f, %f, %f), worldIntersection = (%f, %f, %f), objectNormal = (%f, %f, %f), worldNormal = (%f, %f, %f), NdotL = %f",
+            //             &data.launchIDx, &data.launchIDy, &data.instanceCustomIndex, &data.primitiveID, &data.v0pos.x, &data.v0pos.y, &data.v0pos.z, &data.v1pos.x, &data.v1pos.y, &data.v1pos.z, &data.v2pos.x, &data.v2pos.y, &data.v2pos.z, &data.attribs.x, &data.attribs.y, &data.N.x, &data.N.y, &data.N.z, &data.P_object.x, &data.P_object.y, &data.P_object.z, &data.P.x, &data.P.y, &data.P.z, &data.N_object.x, &data.N_object.y, &data.N_object.z, &data.N.x, &data.N.y, &data.N.z, &data.NdotL);
+            sscanf(line.c_str(), "launchID = (%d, %d), hitValue = (%f, %f, %f)",
+                        &data.launchIDx, &data.launchIDy, &data.hitValue.x, &data.hitValue.y, &data.hitValue.z);
+            data.valid = true;
+            assert(data.launchIDx < 2000 && data.launchIDy < 2000);
+            // printf("#### (%d, %d)\n", data.launchIDx, data.launchIDy);
+            // fflush(stdout);
+            rayDebugGPUData[data.launchIDx][data.launchIDy] = data;
 
-    //     }
-    // }
+        }
+    }
+
+    printf("new vkCmdTraceRaysKHR\n");
+    // return;
 
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
@@ -770,8 +787,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 256;
-    // launch_height = 256;
+    // launch_width = 512;
+    // launch_height = 512;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
@@ -818,7 +835,7 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.miss_sbt) + 8 * thread->RT_thread_data->missIndex);
+    uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.miss_sbt) + 8 * thread->RT_thread_data->traversal_data.back().missIndex);
 
     shader_stage_info miss_shader = shaders[shaderID];
 
@@ -1019,15 +1036,40 @@ void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint3
     // imageFile.write((char*) (&offset), sizeof(uint32_t));
     // imageFile.flush();
 
+    // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
+    //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
+    //     std::abs(hitValue_Z - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.z) > 0.0001)
+    //     {
+    //         printf("wrong value. (%d, %d): (%f, %f, %f)\n"
+    //                 , gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
+    //     }
+    
+    // if (gl_LaunchIDEXT_X == 1070 && gl_LaunchIDEXT_Y == 220)
+    //     printf("this one has wrong value\n");
+
+    // if(hitValue_X > 1 || hitValue_Y > 1 || hitValue_Z > 1)
+    // {
+    //     printf("this one has wrong value.\n");
+    // }
+    
+    uint8_t r = hitValue_X * 255;
+    uint8_t g = hitValue_Y * 255;
+    uint8_t b = hitValue_Z * 255;
+    uint8_t a = hitValue_W * 255;
+    if(hitValue_X >= 1)
+        r = 255;
+    if(hitValue_Y >= 1)
+        g = 255;
+    if(hitValue_Z >= 1)
+        b = 255;
+    if(hitValue_W >= 1)
+        a = 255;
+
     uint8_t* p = ((uint8_t*)image) + offset * 4;
-    p[0] = (uint8_t)(hitValue_Z * 255);
-    p[1] = (uint8_t)(hitValue_Y * 255);
-    p[2] = (uint8_t)(hitValue_X * 255);
-    p[3] = (uint8_t)(hitValue_W * 255);
-    // p[0] = (uint8_t)(127);
-    // p[1] = (uint8_t)(127);
-    // p[2] = (uint8_t)(127);
-    // p[3] = (uint8_t)(127);
+    p[0] = b;
+    p[1] = g;
+    p[2] = r;
+    p[3] = a;
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
