@@ -705,15 +705,27 @@ void shader_core_stats::print(FILE *fout) const {
           gpu_reg_bank_conflict_stalls);
           
   unsigned long long gpgpusim_total_cycles = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
+  
+  float average_rt_total_cycles = 0;
+  for (unsigned i=0; i<m_config->num_shader(); i++) {
+    average_rt_total_cycles += rt_total_cycles[i];
+  }
+  average_rt_total_cycles = average_rt_total_cycles / m_config->num_shader();
+  
   // RT unit stats
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
   fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
   fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_occupancy / rt_total_warps);
   fprintf(fout, "rt_avg_op_intensity = %f\n", (float)rt_total_intersection_stages / rt_total_cacheline_fetched);
-  fprintf(fout, "rt_avg_performance = %f\n", (float)rt_total_intersection_stages / rt_total_cycles);
+  fprintf(fout, "rt_avg_performance = %f\n", (float)rt_total_intersection_stages / average_rt_total_cycles);
   fprintf(fout, "rt_avg_ops = %f\n", (float)rt_total_intersection_stages / gpgpusim_total_cycles);
-  fprintf(fout, "rt_cycles = %f\n", (float)rt_total_cycles / gpgpusim_total_cycles);
-  fprintf(fout, "rt_total_cycles = %d\n", rt_total_cycles);
+  fprintf(fout, "rt_cycles = %f\n", (float)average_rt_total_cycles / gpgpusim_total_cycles);
+  fprintf(fout, "rt_total_cycles = %f\n", average_rt_total_cycles);
+  fprintf(fout, "rt_cycles_dist:");
+  for (unsigned i=0; i<m_config->num_shader(); i++) {
+    fprintf(fout, "\t%d", rt_total_cycles[i]);
+  }
+  fprintf(fout, "\n");
 
   fprintf(fout, "Warp Occupancy Distribution:\n");
   fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
@@ -2459,7 +2471,7 @@ void rt_unit::cycle() {
   }
   
   if (n_warps > 0 || !pipe_reg.empty()) {
-    m_stats->rt_total_cycles++;
+    m_stats->rt_total_cycles[m_sid]++;
   }
   
   // Cycle intersection tests
