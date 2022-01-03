@@ -721,6 +721,7 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "rt_avg_ops = %f\n", (float)rt_total_intersection_stages / gpgpusim_total_cycles);
   fprintf(fout, "rt_cycles = %f\n", (float)average_rt_total_cycles / gpgpusim_total_cycles);
   fprintf(fout, "rt_total_cycles = %f\n", average_rt_total_cycles);
+  fprintf(fout, "rt_total_cycles_sum = %d\n", rt_total_cycles_sum);
   fprintf(fout, "rt_cycles_dist:");
   for (unsigned i=0; i<m_config->num_shader(); i++) {
     fprintf(fout, "\t%d", rt_total_cycles[i]);
@@ -2472,6 +2473,7 @@ void rt_unit::cycle() {
   
   if (n_warps > 0 || !pipe_reg.empty()) {
     m_stats->rt_total_cycles[m_sid]++;
+    m_stats->rt_total_cycles_sum++;
   }
   
   // Cycle intersection tests
