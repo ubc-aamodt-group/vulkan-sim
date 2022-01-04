@@ -528,6 +528,7 @@ class gpgpu_sim : public gpgpu_t {
   const struct cudaDeviceProp *get_prop() const;
   enum divergence_support_t simd_model() const;
 
+  const struct shader_core_config *get_shader_config() const;
   unsigned threads_per_core() const;
   bool get_more_cta_left() const;
   bool kernel_more_cta_left(kernel_info_t *kernel) const;
@@ -568,6 +569,8 @@ class gpgpu_sim : public gpgpu_t {
 
   void hit_watchpoint(unsigned watchpoint_num, ptx_thread_info *thd,
                       const ptx_instruction *pI);
+
+  const struct shader_core_config* get_shader_config() { return m_shader_config; }
 
   // backward pointer
   class gpgpu_context *gpgpu_ctx;

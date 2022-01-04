@@ -221,6 +221,16 @@ void memory_config::reg_options(class OptionParser *opp) {
 void shader_core_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-gpgpu_simd_model", OPT_INT32, &model,
                          "1 = post-dominator", "1");
+  option_parser_register(opp, "-gpgpu_simd_rec_time_out", OPT_INT32, &rec_time_out,
+                         "-1 = no reconvergence time out", "-1");
+  option_parser_register(opp, "-gpgpu_simd_rec_size", OPT_INT32, &num_rec_entries,
+                         "number of physical entries in the reconvergence table", "32");
+  option_parser_register(opp, "-gpgpu_simd_st_size", OPT_INT32, &num_st_entries,
+                         "number of physical entries in the splits table", "33");
+  option_parser_register(opp, "-gpgpu_simd_rec_replacement", OPT_INT32, &rec_replacement,
+                         "reconvergence table replacement policy", "0");
+  option_parser_register(opp, "-gpgpu_simd_st_replacement", OPT_INT32, &st_replacement,
+                         "splits table replacement policy", "0");
   option_parser_register(
       opp, "-gpgpu_shader_core_pipeline", OPT_CSTR,
       &gpgpu_shader_core_pipeline_opt,
@@ -1026,6 +1036,20 @@ void gpgpu_sim::init() {
   // run a CUDA grid on the GPU microarchitecture simulator
   gpu_sim_cycle = 0;
   gpu_sim_insn = 0;
+
+  max_st_entries = 0;
+  max_rec_entries = 0;
+  max_recvg_time=0;
+  triggered_timeouts=0;
+  gpu_st_spills = 0;
+  gpu_st_fills = 0;
+  gpu_rt_spills = 0;
+  gpu_rt_fills = 0;
+  gpu_st_fills_hits = 0;
+  gpu_st_fills_misses = 0;
+  gpu_rt_fills_hits = 0;
+  gpu_rt_fills_misses = 0;
+
   last_gpu_sim_insn = 0;
   m_total_cta_launched = 0;
   gpu_completed_cta = 0;
@@ -1125,6 +1149,7 @@ void gpgpu_sim::deadlock_check() {
               "GPGPU-Sim uArch: DEADLOCK  shader cores no longer committing "
               "instructions [core(# threads)]:\n");
           printf("GPGPU-Sim uArch: DEADLOCK  ");
+          dump_pipeline((0x40|0x4|0x1),5,0);
           m_cluster[i]->print_not_completed(stdout);
         } else if (num_cores < 8) {
           m_cluster[i]->print_not_completed(stdout);
@@ -1286,6 +1311,27 @@ void gpgpu_sim::gpu_print_stat() {
   fprintf(statfout, "max_total_param_size = %llu\n",
           gpgpu_ctx->device_runtime->g_max_total_param_size);
 
+
+  // AWARE Stats
+  printf("max_recvg_time = %lld\n", max_recvg_time);
+  printf("max_st entries = %lld\n", max_st_entries);
+  printf("max_rec entries = %lld\n", max_rec_entries);
+  printf("triggered_timeouts = %lld\n", triggered_timeouts);
+  printf("gpu_st_spills = %lld\n", gpu_st_spills);
+  printf("gpu_rt_spills = %lld\n", gpu_rt_spills);
+  printf("gpu_st_fills = %lld\n", gpu_st_fills);
+  printf("gpu_rt_fills = %lld\n", gpu_rt_fills);
+  printf("gpu_st_fills_hits = %lld\n", gpu_st_fills_hits);
+  printf("gpu_st_fills_misses = %lld\n", gpu_st_fills_misses);
+  printf("gpu_rt_fills_hits = %lld\n", gpu_rt_fills_hits );
+  printf("gpu_rt_fills_misses = %lld\n", gpu_rt_fills_misses);
+
+  double avg_st_entries = m_shader_stats->compue_distribution_avg(m_shader_stats->st_size_distro);
+  printf("avg_st_entries = %f\n",avg_st_entries);
+  double avg_rt_entries = m_shader_stats->compue_distribution_avg(m_shader_stats->rt_size_distro);
+  printf("avg_rt_entries = %f\n",avg_rt_entries);
+
+    m_shader_stats->print_reuse_distribution_avg();
   // performance counter for stalls due to congestion.
   printf("gpu_stall_dramfull = %d\n", gpu_stall_dramfull);
   printf("gpu_stall_icnt2sh    = %d\n", gpu_stall_icnt2sh);

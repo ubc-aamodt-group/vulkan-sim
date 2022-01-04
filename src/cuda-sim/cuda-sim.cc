@@ -2664,7 +2664,8 @@ void functionalCoreSim::executeWarp(unsigned i, bool &allAtBarrier,
     if (inst.isatomic()) inst.do_atomic(true);
     if (inst.op == BARRIER_OP || inst.op == MEMORY_BARRIER_OP)
       m_warpAtBarrier[i] = true;
-    updateSIMTStack(i, &inst);
+    // updateSIMTStack(i, &inst);
+    updateSIMTDivergenceStructures(i, &inst);
   }
   if (m_liveThreadCount[i] > 0) someOneLive = true;
   if (!m_warpAtBarrier[i] && m_liveThreadCount[i] > 0) allAtBarrier = false;
