@@ -40,6 +40,10 @@ std::string traffic_breakdown::classify_memfetch(class mem_fetch* mf) {
     case L2_WRBK_ACC:
     case L1_WR_ALLOC_R:
     case L2_WR_ALLOC_R:
+    case BRU_ST_SPILL:
+    case BRU_ST_FILL:
+    case BRU_RT_SPILL:
+    case BRU_RT_FILL:
       traffic_name = mem_access_type_str(access_type);
       break;
     case GLOBAL_ACC_R:

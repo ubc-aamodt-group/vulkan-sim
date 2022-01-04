@@ -944,7 +944,11 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
       carry = (data.u64 & 0x100000000) >> 32;
       break;
     case S64_TYPE:
-      data.s64 = src1_data.s64 + src2_data.s64 + (src3_data.pred & 0x4);
+      if (src2.is_literal()) {
+        data.s64 = src1_data.s64 + src2_data.s32 + (src3_data.pred & 0x4);
+      } else {
+        data.s64 = src1_data.s64 + src2_data.s64 + (src3_data.pred & 0x4);
+      }
       break;
     case U8_TYPE:
       data.u64 = (src1_data.u64 & 0xFF) + (src2_data.u64 & 0xFF) +
@@ -1610,6 +1614,8 @@ void bar_impl(const ptx_instruction *pIin, ptx_thread_info *thread) {
   thread->m_last_dram_callback.instruction = pIin;
 }
 
+
+// TODO-LUCY: Check if this implementation matches AWARE
 void bfe_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   unsigned i_type = pI->get_type();
   unsigned msb = (i_type == U32_TYPE || i_type == S32_TYPE) ? 31 : 63;
@@ -2204,11 +2210,11 @@ void call_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   gpgpu_sim *gpu = thread->get_gpu();
   unsigned callee_pc = 0, callee_rpc = 0;
-  if (gpu->simd_model() == POST_DOMINATOR) {
+  // if (gpu->simd_model() == POST_DOMINATOR) {
     thread->get_core()->get_pdom_stack_top_info(thread->get_hw_wid(),
                                                 &callee_pc, &callee_rpc);
     assert(callee_pc == thread->get_pc());
-  }
+  // }
 
   thread->callstack_push(callee_pc + pI->inst_size(), callee_rpc,
                          return_var_src, return_var_dst, call_uid_next++);
@@ -4948,6 +4954,9 @@ bool isFloat(int type) {
 
 bool CmpOp(int type, ptx_reg_t a, ptx_reg_t b, unsigned cmpop) {
   bool t = false;
+
+  // TODO-LUCY: Find out what "td" is used for
+  bool td = false;
 
   switch (type) {
     case B16_TYPE:

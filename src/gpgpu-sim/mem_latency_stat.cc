@@ -240,9 +240,11 @@ void memory_stats_t::memlatstat_dram_access(mem_fetch *mf) {
         ceil(mf->get_data_size() / m_memory_config->dram_atom_size);
   }
 
-  if (mf->get_pc() != (unsigned)-1)
+  if (mf->get_pc() != (unsigned)-1 &&
+    (mf->get_pc()<BRU_VIR_START || mf->get_pc()>GLOBAL_HEAP_START)) {
     m_gpu->gpgpu_ctx->stats->ptx_file_line_stats_add_dram_traffic(
         mf->get_pc(), mf->get_data_size());
+  }
 }
 
 void memory_stats_t::memlatstat_icnt2mem_pop(mem_fetch *mf) {

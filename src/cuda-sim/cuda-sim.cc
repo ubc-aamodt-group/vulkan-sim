@@ -353,6 +353,9 @@ void function_info::ptx_assemble() {
       modified = connect_break_targets(); 
    } while (modified == true);
 
+    // TODO-LUCY: Add AWARE code from this section
+    print_basic_blocks();
+
    if ( g_debug_execution>=50 ) {
       print_basic_blocks();
       print_basic_block_links();
@@ -1819,8 +1822,11 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
       fflush(m_gpu->get_ptx_inst_debug_file());
     }
 
-    if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<5>(get_uid(),
-                                                                pc)) {
+    // if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<5>(get_uid(), pc)) {
+    unsigned long long gpgpusim_total_cycles =  m_gpu->gpgpu_ctx->the_gpgpusim->g_the_gpu->gpu_sim_cycle +
+                                                m_gpu->gpgpu_ctx->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
+    if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<5>(get_uid(), pc) &&
+        (m_gpu->gpgpu_ctx->func_sim->g_debug_cycle < gpgpusim_total_cycles)) {
       dim3 ctaid = get_ctaid();
       dim3 tid = get_tid();
       printf(
@@ -1891,13 +1897,13 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
     }
 
     if (g_debug_execution >= 6) {
-      if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<6>(get_uid(),
-                                                                  pc))
+      if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<6>(get_uid(), pc) &&
+          (m_gpu->gpgpu_ctx->func_sim->g_debug_cycle < gpgpusim_total_cycles))
         dump_modifiedregs(stdout);
     }
     if (g_debug_execution >= 10) {
-      if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<10>(get_uid(),
-                                                                   pc))
+      if (m_gpu->gpgpu_ctx->func_sim->ptx_debug_exec_dump_cond<10>(get_uid(), pc) &&
+          (m_gpu->gpgpu_ctx->func_sim->g_debug_cycle < gpgpusim_total_cycles))
         dump_regs(stdout);
     }
     update_pc();
@@ -2329,6 +2335,14 @@ void cuda_sim::read_sim_environment_variables() {
     fflush(stdout);
     sscanf(dbg_thread, "%d", &g_debug_thread_uid);
   }
+
+  char *dbg_cycle = getenv("PTX_SIM_DEBUG_CYCLE");
+  if ( dbg_cycle && strlen(dbg_cycle) ) {
+    printf("GPGPU-Sim PTX: printing debug information after cycle %s\n", dbg_cycle );
+    fflush(stdout);
+    sscanf(dbg_cycle,"%d", &g_debug_cycle);
+  }
+
   char *dbg_pc = getenv("PTX_SIM_DEBUG_PC");
   if (dbg_pc && strlen(dbg_pc)) {
     printf(
@@ -2569,8 +2583,13 @@ void functionalCoreSim::createWarp(unsigned warpId) {
   }
 
   assert(m_thread[warpId * m_warp_size] != NULL);
-  m_simt_stack[warpId]->launch(m_thread[warpId * m_warp_size]->get_pc(),
-                               initialMask);
+
+  if(m_gpu->simd_model() == POST_DOMINATOR) {
+    m_simt_stack[warpId]->launch(m_thread[warpId*m_warp_size]->get_pc(),initialMask);
+  } else {
+    m_simt_tables[warpId]->launch(m_thread[warpId*m_warp_size]->get_pc(),initialMask);
+  }
+
   char fname[2048];
   snprintf(fname, 2048, "checkpoint_files/warp_%d_0_simt.txt", warpId);
 

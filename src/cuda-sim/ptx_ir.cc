@@ -707,6 +707,133 @@ void function_info::find_dominators() {
   }
 }
 
+void function_info::update_postdominators(unsigned BBID, unsigned ReqBB, address_type rpc)
+ {
+ 	//Set BB_ID as having delayed reconvergence and set its RPC
+     unsigned block_num = (unsigned)-1;
+ 	for (unsigned i=0; i<m_basic_blocks.size(); i++) {
+     	if(m_basic_blocks[i]->bb_id == BBID){
+     		printf("Set i %u bbid %u\n",i,BBID);
+     		m_basic_blocks[i]->has_delayed_reconvergence = true;
+     		m_basic_blocks[i]->delayed_postdominator_pc = rpc;
+     		m_basic_blocks[i]->delayed_postdominator_id = ReqBB;
+     		block_num = i;
+     		break;
+     	}
+     }
+ 	/*
+     unsigned req_block_num = (unsigned)-1;
+ 	for (unsigned i=0; i<m_basic_blocks.size(); i++) {
+     	if(m_basic_blocks[i]->bb_id == ReqBB){
+     		req_block_num = i;
+     		break;
+     	}
+     }
+
+
+ 	//Remove all postdominators that do not postdominate ReqPDOM
+     for( std::set<int>::iterator s=m_basic_blocks[block_num]->postdominator_ids.begin(); s != m_basic_blocks[block_num]->postdominator_ids.end(); s++ ) {
+
+         unsigned cur_block_num = (unsigned)-1;
+     	for (unsigned i=0; i<m_basic_blocks.size(); i++) {
+         	if(m_basic_blocks[i]->bb_id == *s){
+         		cur_block_num = i;
+         		break;
+         	}
+         }
+
+
+     	if(m_basic_blocks[req_block_num]->pdom(m_basic_blocks[cur_block_num]) && (block_num!=cur_block_num) && (req_block_num!=cur_block_num) && (!m_basic_blocks[cur_block_num]->is_exit)){
+     		m_basic_blocks[block_num]->postdominator_ids.erase(s);
+     		printf("erase: %u from postdominators of %u because required pdom is %u\n",*s,block_num,req_block_num);
+     	}
+     }
+ 	*/
+ }
+
+ void function_info::update_postdominators( )
+ {
+ 	//Read from a file (file format BB: ReqPDOM,RPC)
+ 	if(getenv("DELAYED_REC_INFO")==NULL) return;
+ 	char *ptxcode;
+ 	const char *delayed_rec_info_filename = getenv("DELAYED_REC_INFO");
+ 	ptxcode = readfile(delayed_rec_info_filename);
+ 	char st = 	ptxcode[0];
+ 	unsigned j=0;
+ 	unsigned i=0;
+ 	unsigned item=0;
+ 	unsigned item_size=0;
+ 	unsigned total_item_size=0;
+ 	char * KernelName = (char *)malloc( sizeof(char)*100 );
+ 	char * BBID = (char *)malloc( sizeof(char)*10 );
+ 	char * ReqPDOMID = (char *)malloc( sizeof(char)*10 );
+ 	char * RPC = (char *)malloc( sizeof(char)*10 );
+ 	for(i=0;; i++){
+ 		if(ptxcode[i]=='*')
+ 			break;
+
+
+ 		if(ptxcode[i]==','){
+ 			item=0;
+ 			item_size=0;
+ 			total_item_size=0;
+ 			unsigned BB_ID = (unsigned)-1;
+ 			unsigned ReqPDOM_ID = (unsigned)-1;
+ 			unsigned RPC_N = (unsigned)-1;
+
+ 			sscanf(BBID, "%u", &BB_ID);
+ 			sscanf(ReqPDOMID, "%u", &ReqPDOM_ID);
+ 			sscanf(RPC, "%x", &RPC_N);
+ 			printf("%s %s %s\n",BBID,ReqPDOMID,RPC);
+ 			printf("%u %u %x\n",BB_ID,ReqPDOM_ID,RPC_N);
+ 			printf("%s \n",m_name.c_str());
+ 			printf("%s \n",KernelName);
+ 			if(compare_strings(KernelName,(char *)m_name.c_str())==0){
+ 				printf("%s \n",m_name.c_str());
+ 				update_postdominators(BB_ID, ReqPDOM_ID, RPC_N);
+ 			}
+ 		}
+ 		if(ptxcode[i]==':'){
+ 			if(item==0){
+ 				KernelName[item_size] = '\0';
+ 			}else if(item==1){
+ 				BBID[item_size] = '\0';
+ 			}else if(item==2){
+ 				ReqPDOMID[item_size] = '\0';
+ 			}else if(item==3){
+ 				RPC[item_size] = '\0';
+ 			}
+ 			item++;
+ 			if(item==4) item=0;
+ 			item_size=0;
+ 			continue;
+ 		}
+
+ 		if(item==0){
+ 			if(ptxcode[i]!=':' && ptxcode[i]!=','){
+ 				KernelName[item_size] = ptxcode[i];
+ 				item_size++;
+ 			}
+ 		}else if(item==1){
+ 			if(ptxcode[i]!=':' && ptxcode[i]!=','){
+ 				BBID[item_size] = ptxcode[i];
+ 				item_size++;
+ 			}
+ 		}else if(item==2){
+ 			if(ptxcode[i]!=':' && ptxcode[i]!=','){
+ 				ReqPDOMID[item_size] = ptxcode[i];
+ 				item_size++;
+ 			}
+ 		}else if(item==3){
+ 			if(ptxcode[i]!=':' && ptxcode[i]!=','){
+ 				RPC[item_size] = ptxcode[i];
+ 				item_size++;
+ 			}
+ 		}
+ 	}
+
+ }
+
 void function_info::find_postdominators() {
   // find postdominators using algorithm of Muchnick's Adv. Compiler Design &
   // Implemmntation Fig 7.14
@@ -780,7 +907,7 @@ void function_info::find_ipostdominators() {
   }
   unsigned num_ipdoms = 0;
   for (int n = m_basic_blocks.size() - 1; n >= 0; --n) {
-    assert(m_basic_blocks[n]->Tmp_ids.size() <= 1);
+    // assert(m_basic_blocks[n]->Tmp_ids.size() <= 1);
     // if the above assert fails we have an error in either postdominator
     // computation, the flow graph does not have a unique exit, or some other
     // error
@@ -930,19 +1057,25 @@ void function_info::get_reconvergence_pairs(gpgpu_recon_t *recon_points) {
 #ifdef DEBUG_GET_RECONVERG_PAIRS
       printf("\trecon_points[idx].source_pc=%d\n", recon_points[idx].source_pc);
 #endif
-      if (m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]
-              ->ptx_begin) {
-        recon_points[idx].target_pc =
-            m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]
-                ->ptx_begin->get_PC();
-        recon_points[idx].target_inst =
-            m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]
-                ->ptx_begin;
-      } else {
-        // reconverge after function return
-        recon_points[idx].target_pc = -2;
-        recon_points[idx].target_inst = NULL;
-      }
+           if(m_basic_blocks[i]->has_delayed_reconvergence){
+                recon_points[idx].target_pc = m_basic_blocks[i]->delayed_postdominator_pc;
+                std::list<ptx_instruction*>::iterator s;
+                s=m_instructions.begin();
+                for( ; s!=m_instructions.end(); s++ ) {
+                   ptx_instruction *pI = *s;
+                   if(pI->get_PC() == m_basic_blocks[i]->delayed_postdominator_pc){
+                 	  recon_points[idx].target_inst = pI;
+                 	  break;
+                   }
+                }
+            }else if( m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]->ptx_begin ) {
+                recon_points[idx].target_pc = m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]->ptx_begin->get_PC();
+                recon_points[idx].target_inst = m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]->ptx_begin;
+            }else {
+                 // reconverge after function return
+                 recon_points[idx].target_pc = -2;
+                 recon_points[idx].target_inst = NULL;
+            }
 #ifdef DEBUG_GET_RECONVERG_PAIRS
       m_basic_blocks[m_basic_blocks[i]->immediatepostdominator_id]
           ->ptx_begin->print_insn();

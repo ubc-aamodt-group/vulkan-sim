@@ -127,6 +127,7 @@ class cuda_sim {
     g_inst_op_classification_stat = NULL;
     g_assemble_code_next_pc = 0;
     g_debug_thread_uid = 0;
+    g_debug_cycle = 0;
     g_override_embedded_ptx = false;
     ptx_tex_regs = NULL;
     g_ptx_thread_info_delete_count = 0;
@@ -173,6 +174,7 @@ class cuda_sim {
   unsigned cdp_latency[5];
   unsigned g_assemble_code_next_pc;
   int g_debug_thread_uid;
+  int g_debug_cycle = 0;
   bool g_override_embedded_ptx;
   std::set<unsigned long long> g_ptx_cta_info_sm_idx_used;
   ptx_reg_t *ptx_tex_regs;

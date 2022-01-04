@@ -1008,6 +1008,8 @@ struct basic_block_t {
     is_exit = ex;
     immediatepostdominator_id = -1;
     immediatedominator_id = -1;
+    has_delayed_reconvergence = false;
+    delayed_postdominator_pc = (unsigned)-1;
   }
 
   ptx_instruction *ptx_begin;
@@ -1020,6 +1022,11 @@ struct basic_block_t {
   std::set<int> Tmp_ids;
   int immediatepostdominator_id;
   int immediatedominator_id;
+
+  bool has_delayed_reconvergence;
+  address_type delayed_postdominator_pc;
+  int delayed_postdominator_id;
+
   bool is_entry;
   bool is_exit;
   unsigned bb_id;
@@ -1420,6 +1427,9 @@ class function_info {
   void find_postdominators();
   void print_postdominators();
 
+  void update_postdominators();
+  void update_postdominators(unsigned BBID, unsigned ReqBB, address_type rpc);
+
   // iterate across m_basic_blocks of function,
   // finding immediate postdominator blocks, using algorithm of
   // Muchnick's Adv. Compiler Design & Implemmntation Fig 7.15
@@ -1506,6 +1516,43 @@ class function_info {
   std::pair<size_t, unsigned> get_param_config(unsigned param_num) const {
     return m_param_configs[param_num];
   }
+  
+int compare_strings(char a[], char b[])
+    {
+       int c = 0;
+
+       while (a[c] == b[c]) {
+          if (a[c] == '\0' || b[c] == '\0')
+             break;
+          c++;
+       }
+
+       if (a[c] == '\0' && b[c] == '\0')
+          return 0;
+       else
+          return -1;
+    }
+
+    char* readfile (const std::string filename){
+    	assert (filename != "");
+    	FILE* fp = fopen(filename.c_str(),"r");
+    	if (!fp) {
+    		printf("ERROR: Could not open file %s for reading\n",filename);
+    		assert (0);
+    	}
+    	// finding size of the file
+    	int filesize= 0;
+    	fseek (fp , 0 , SEEK_END);
+
+    	filesize = ftell (fp);
+    	fseek (fp, 0, SEEK_SET);
+    	// allocate and copy the entire ptx
+    	char* ret = (char*)malloc((filesize +1)* sizeof(char));
+    	fread(ret,1,filesize,fp);
+    	ret[filesize]='\0';
+    	fclose(fp);
+    	return ret;
+    }
 
   void set_maxnt_id(unsigned maxthreads) { maxnt_id = maxthreads; }
   unsigned get_maxnt_id() { return maxnt_id; }
