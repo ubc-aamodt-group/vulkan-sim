@@ -986,13 +986,11 @@ void exec_shader_core_ctx::get_pdom_stack_top_info(unsigned warp_id,
 const active_mask_t &exec_shader_core_ctx::get_active_mask(
     unsigned warp_id, const warp_inst_t *pI) {
 
-  active_mask_t act_mask;
   if (m_config->model == POST_DOMINATOR) {
-    act_mask = m_simt_stack[warp_id]->get_active_mask();
+    return m_simt_stack[warp_id]->get_active_mask();
   } else {
-    act_mask = m_simt_tables[warp_id]->get_active_mask();
+    return m_simt_tables[warp_id]->get_active_mask();
   }
-  return act_mask;
 }
 
 void shader_core_ctx::decode() {
@@ -1620,8 +1618,7 @@ void scheduler_unit::cycle() {
                     previous_issued_inst_exec_type = exec_unit_type_t::SP;
                   }
                 } else if (execute_on_INT) {
-                  m_shader->issue_warp(*m_int_out, pI, active_mask, warp_id,
-                                       m_id);
+                  m_shader->issue_warp(*m_int_out, pI, active_mask, warp_id, m_id);
                   issued++;
                   issued_inst = true;
                   warp_inst_issued = true;

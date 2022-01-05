@@ -612,8 +612,9 @@ void function_info::do_pdom() {
     modified = connect_break_targets();
   } while (modified == true);
 
+  print_basic_blocks();
+
   if (g_debug_execution >= 50) {
-    print_basic_blocks();
     print_basic_block_links();
     print_basic_block_dot();
   }
@@ -621,6 +622,7 @@ void function_info::do_pdom() {
     print_dominators();
   }
   find_postdominators();
+  update_postdominators();
   find_ipostdominators();
   if (g_debug_execution >= 50) {
     print_postdominators();
@@ -721,34 +723,6 @@ void function_info::update_postdominators(unsigned BBID, unsigned ReqBB, address
      		break;
      	}
      }
- 	/*
-     unsigned req_block_num = (unsigned)-1;
- 	for (unsigned i=0; i<m_basic_blocks.size(); i++) {
-     	if(m_basic_blocks[i]->bb_id == ReqBB){
-     		req_block_num = i;
-     		break;
-     	}
-     }
-
-
- 	//Remove all postdominators that do not postdominate ReqPDOM
-     for( std::set<int>::iterator s=m_basic_blocks[block_num]->postdominator_ids.begin(); s != m_basic_blocks[block_num]->postdominator_ids.end(); s++ ) {
-
-         unsigned cur_block_num = (unsigned)-1;
-     	for (unsigned i=0; i<m_basic_blocks.size(); i++) {
-         	if(m_basic_blocks[i]->bb_id == *s){
-         		cur_block_num = i;
-         		break;
-         	}
-         }
-
-
-     	if(m_basic_blocks[req_block_num]->pdom(m_basic_blocks[cur_block_num]) && (block_num!=cur_block_num) && (req_block_num!=cur_block_num) && (!m_basic_blocks[cur_block_num]->is_exit)){
-     		m_basic_blocks[block_num]->postdominator_ids.erase(s);
-     		printf("erase: %u from postdominators of %u because required pdom is %u\n",*s,block_num,req_block_num);
-     	}
-     }
- 	*/
  }
 
  void function_info::update_postdominators( )
