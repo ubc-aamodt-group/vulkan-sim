@@ -2942,10 +2942,8 @@ void core_t::updateSIMTDivergenceStructures(unsigned warpId, warp_inst_t * inst)
       next_pc.push_back(m_thread[wtid + i]->get_pc());
     }
   }
-  m_simt_stack[warpId]->update(thread_done, next_pc, inst->reconvergence_pc,
-                               inst->op, inst->isize, inst->pc);
 
-  if( m_gpu->simd_model() == POST_DOMINATOR ) {
+  if(m_gpu->simd_model() == POST_DOMINATOR) {
     m_simt_stack[warpId]->update(thread_done,next_pc,inst->reconvergence_pc, inst->op,inst->isize,inst->pc);
   } else {
     m_simt_tables[warpId]->update(thread_done,next_pc,inst->reconvergence_pc, inst->op,inst->isize,inst->pc);
