@@ -2834,19 +2834,6 @@ unsigned core_t::getSTSize(unsigned wid) {
   return m_simt_tables[wid]->getSTsize();
 }
 
-unsigned core_t::getInsertionDist(unsigned wid) {
-  return m_simt_tables[wid]->getInsertionDist();
-}
-
-unsigned long long core_t::getInsertionCycle(unsigned wid) {
-  return m_simt_tables[wid]->getInsertionCycle();
-}
-
-unsigned core_t::getSTSize(unsigned wid) {
-  return m_simt_tables[wid]->getSTsize();
-}
-
-
 //! Get the warp to be executed using the data taken form the SIMT stack
 warp_inst_t core_t::getExecuteWarp(unsigned warpId) {
   unsigned pc, rpc;
