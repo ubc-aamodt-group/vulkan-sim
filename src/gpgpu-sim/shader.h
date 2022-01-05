@@ -1006,7 +1006,7 @@ class barrier_set_t {
   // individual warp hits barrier
   void warp_reaches_barrier(unsigned cta_id, unsigned warp_id,
                             warp_inst_t *inst);
-  void warp_reaches_barrier(unsigned cta_id,unsigned warp_id);
+  void warp_reaches_barrier(unsigned cta_id, unsigned warp_id);
 
   // warp reaches exit
   void warp_exit(unsigned warp_id);
@@ -2094,7 +2094,7 @@ class shader_core_ctx : public core_t {
   }
   kernel_info_t *get_kernel() { return m_kernel; }
   unsigned get_sid() const { return m_sid; }
-  unsigned get_tpc() const {return m_tpc;}
+  unsigned get_tpc() const { return m_tpc; }
 
   // used by functional simulation:
   // modifiers

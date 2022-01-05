@@ -447,8 +447,8 @@ void shader_core_ctx::create_exec_pipeline() {
     this->m_result_bus.push_back(new std::bitset<MAX_ALU_LATENCY>());
   }
 
-  if(m_config->model==AWARE_RECONVERGENCE)
-     	updateSIMTDivergenceStructuresInitialization();
+  if (m_config->model == AWARE_RECONVERGENCE)
+    updateSIMTDivergenceStructuresInitialization();
 }
 
 shader_core_ctx::shader_core_ctx(class gpgpu_sim *gpu,
@@ -506,7 +506,7 @@ void shader_core_ctx::reinit(unsigned start_thread, unsigned end_thread,
   for (unsigned i = start_thread / m_config->warp_size;
        i < end_thread / m_config->warp_size; ++i) {
     m_warp[i]->reset();
-    if(m_config->model == 1){
+    if (m_config->model == 1) {
       m_simt_stack[i]->reset();
     } else {
       m_simt_tables[i]->reset();
@@ -557,9 +557,7 @@ void shader_core_ctx::init_warps(unsigned cta_id, unsigned start_thread,
         }
         start_pc = pc;
       }
-    }
-
-    else {
+    } else {
       m_simt_tables[i]->launch(start_pc, active_threads);
     }
 
@@ -567,7 +565,6 @@ void shader_core_ctx::init_warps(unsigned cta_id, unsigned start_thread,
     ++m_dynamic_warp_id;
     m_not_completed += n_active;
     ++m_active_warps;
-
   }
 }
 
@@ -590,7 +587,7 @@ void gpgpu_sim::get_pdom_stack_top_info(unsigned sid, unsigned tid,
 void shader_core_ctx::get_pdom_stack_top_info(unsigned tid, unsigned *pc,
                                               unsigned *rpc) const {
   unsigned warp_id = tid / m_config->warp_size;
-  if(m_config->model == 1){
+  if (m_config->model == 1){
     m_simt_stack[warp_id]->get_pdom_stack_top_info(pc, rpc);
   } else {
     m_simt_tables[warp_id]->get_pdom_active_split_info(pc, rpc);
@@ -783,22 +780,22 @@ void shader_core_stats::event_warp_issued(unsigned s_id, unsigned warp_id,
 }
 
 double shader_core_stats::compue_distribution_avg(std::map<unsigned/*sid*/,std::map<unsigned/*wid*/,std::map<unsigned/*# of entries*/,long long unsigned/*cycles*/>>> & dist) {
-  unsigned long long tot_cycles=1;
-  unsigned long long tot_cycles_times_entries=0;
-  for(auto it1=dist.begin(), et1=dist.end(); it1!=et1; it1++){
+  unsigned long long tot_cycles = 1;
+  unsigned long long tot_cycles_times_entries = 0;
+  for (auto it1=dist.begin(), et1=dist.end(); it1!=et1; it1++) {
     unsigned sid = it1->first;
     std::map<unsigned,std::map<unsigned,long long unsigned>> size_disto_within_core = dist[sid];
-    printf("sid=%u\n",sid);
-    for(auto it2=size_disto_within_core.begin(), et2=size_disto_within_core.end(); it2!=et2; it2++){
+    printf("sid=%u\n", sid);
+    for (auto it2=size_disto_within_core.begin(), et2=size_disto_within_core.end(); it2!=et2; it2++) {
       unsigned wid = it2->first;
       std::map<unsigned,long long unsigned> size_distro_within_warp = size_disto_within_core[wid];
-      printf("	wid=%u\n",wid);
-      for(auto it3=size_distro_within_warp.begin(), et3=size_distro_within_warp.end(); it3!=et3; it3++){
+      printf("	wid=%u\n", wid);
+      for (auto it3=size_distro_within_warp.begin(), et3=size_distro_within_warp.end(); it3!=et3; it3++) {
         unsigned numEntries = it3->first;
         unsigned long long duration = it3->second;
-        tot_cycles_times_entries+=(numEntries * duration);
-        tot_cycles+=duration;
-        printf("		%u	%llu\n",numEntries,duration);
+        tot_cycles_times_entries += (numEntries * duration);
+        tot_cycles += duration;
+        printf("		%u	%llu\n", numEntries, duration);
       }
     }
   }
@@ -811,40 +808,38 @@ void shader_core_stats::print_reuse_distribution_avg() {
   std::map<unsigned, double> distToReuseMap;
   std::map<unsigned, unsigned> distToReuseUpdatesMap;
   distToReuseMap.clear();
-  for(auto it1=st_reuse_distro.begin(), et1=st_reuse_distro.end(); it1!=et1; it1++){
+  for (auto it1=st_reuse_distro.begin(), et1=st_reuse_distro.end(); it1!=et1; it1++) {
     unsigned sid = it1->first;
-    printf("sid=%u\n",sid);
+    printf("sid=%u\n", sid);
     std::map<unsigned,std::map<unsigned,long long unsigned>> st_reuse_disto_within_core = st_reuse_distro[sid];
-    for(auto it2=st_reuse_disto_within_core.begin(), et2=st_reuse_disto_within_core.end(); it2!=et2; it2++){
+    for (auto it2=st_reuse_disto_within_core.begin(), et2=st_reuse_disto_within_core.end(); it2!=et2; it2++) {
       unsigned wid = it2->first;
       std::map<unsigned,long long unsigned> st_reuse_distro_within_warp = st_reuse_disto_within_core[wid];
-      printf("	wid=%u\n",wid);
-      for(auto it3=st_reuse_distro_within_warp.begin(), et3=st_reuse_distro_within_warp.end(); it3!=et3; it3++){
+      printf("	wid=%u\n", wid);
+      for (auto it3=st_reuse_distro_within_warp.begin(), et3=st_reuse_distro_within_warp.end(); it3!=et3; it3++) {
         unsigned dist = it3->first;
         double reuse_duration = (double)it3->second;
-        assert(dist<=MAX_ST_SIZE);
+        assert(dist <= MAX_ST_SIZE);
         unsigned updates = st_reuse_updates_distro[sid][wid][dist];
-        printf("		%u	%f\n",dist,((float)reuse_duration/updates));
-        if(distToReuseMap.find(dist)==distToReuseMap.end()){
-          distToReuseMap[dist]=0;
+        printf("		%u	%f\n", dist, ((float)reuse_duration/updates));
+        if (distToReuseMap.find(dist) == distToReuseMap.end()) {
+          distToReuseMap[dist] = 0;
         }
-        if(dist>0){
-          distToReuseMap[dist]+=reuse_duration;
+        if (dist > 0) {
+          distToReuseMap[dist] += reuse_duration;
         }
-        distToReuseUpdatesMap[dist]+=updates;
-
+        distToReuseUpdatesMap[dist] += updates;
       }
     }
   }
 
   printf("Overall Average:\n");
-  for(auto it=distToReuseMap.begin(), et=distToReuseMap.end(); it!=et; it++ ){
+  for (auto it=distToReuseMap.begin(), et=distToReuseMap.end(); it!=et; it++) {
     unsigned dist = it->first;
     double reuse_duration = it->second;
     unsigned updates = distToReuseUpdatesMap[dist];
-    printf("dist=%u		%f\n",dist,(reuse_duration/updates));
+    printf("dist=%u		%f\n", dist, (reuse_duration/updates));
   }
-
 }
 
 void shader_core_stats::visualizer_print(gzFile visualizer_file) {
@@ -976,7 +971,7 @@ void exec_shader_core_ctx::get_pdom_stack_top_info(unsigned warp_id,
                                                    const warp_inst_t *pI,
                                                    unsigned *pc,
                                                    unsigned *rpc) {
-  if(m_config->model == POST_DOMINATOR){
+  if (m_config->model == POST_DOMINATOR) {
     m_simt_stack[warp_id]->get_pdom_stack_top_info(pc, rpc);
   } else {
     m_simt_tables[warp_id]->get_pdom_active_split_info(pc, rpc);
@@ -1166,21 +1161,20 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   if (next_inst->op == BARRIER_OP) {
     m_warp[warp_id]->store_info_of_last_inst_at_barrier(*pipe_reg);
 
-    if(get_config()->model==POST_DOMINATOR){
+    if (get_config()->model == POST_DOMINATOR) {
       m_barriers.warp_reaches_barrier(m_warp[warp_id]->get_cta_id(), warp_id,
                                     const_cast<warp_inst_t *>(next_inst));
-    }
-    else {
+    } else {
       split_reaches_barrier = true;
       /* warp reaches barrier only if all its splits reach barrier */
       bool warp_reaches_barrier = m_simt_tables[warp_id]->split_reaches_barrier(next_inst->pc);
-      if(warp_reaches_barrier){
-        split_reaches_barrier=false;
+      if (warp_reaches_barrier) {
+        split_reaches_barrier = false;
         m_barriers.warp_reaches_barrier(m_warp[warp_id]->get_cta_id(),warp_id,const_cast<warp_inst_t*> (next_inst));
-        if(m_barriers.warps_count_at_barrier(m_warp[warp_id]->get_cta_id())==0){
+        if (m_barriers.warps_count_at_barrier(m_warp[warp_id]->get_cta_id()) == 0) {
           unsigned n = m_config->n_thread_per_shader / m_config->warp_size;
-          for(unsigned i=0; i<n; i++){
-            if(m_warp[i]->get_cta_id()==m_warp[warp_id]->get_cta_id())
+          for (unsigned i=0; i<n; i++) {
+            if (m_warp[i]->get_cta_id() == m_warp[warp_id]->get_cta_id())
               m_simt_tables[i]->release_barrier();
           }
         }
@@ -1191,7 +1185,7 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   }
 
   updateSIMTDivergenceStructures(warp_id, *pipe_reg);
-  if( m_gpu->simd_model() == AWARE_RECONVERGENCE ) {
+  if(m_gpu->simd_model() == AWARE_RECONVERGENCE) {
     update_table_stats(warp_id);
   }
 
@@ -1202,10 +1196,10 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
 
 void shader_core_ctx::updateSIMTDivergenceStructuresInitialization() {
  	unsigned n = m_config->n_thread_per_shader / m_config->warp_size;
- 	for(unsigned i=0; i<n; i++){
+ 	for (unsigned i=0; i<n; i++) {
  		m_simt_tables[i]->set_shader(this);
  	}
- }
+}
 
 bool shader_core_ctx::push_to_st_response_fifo(unsigned wid, unsigned entry) {
  	return m_simt_tables[wid]->push_to_st_response_fifo(entry);
@@ -1234,73 +1228,66 @@ bool shader_core_ctx::valid(unsigned wid) {
 void shader_core_ctx::update_table_stats(unsigned wid) {
   unsigned long long gpgpusim_total_cycles = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
 
-  if(m_stats->last_st_size_distro.find(m_sid)!=m_stats->last_st_size_distro.end()) {
-    if(m_stats->last_st_size_distro[m_sid].find(wid)!=m_stats->last_st_size_distro[m_sid].end()) {
-      unsigned lastNumOfEntries=m_stats->last_st_num_of_entries[m_sid][wid];
-      if(getSTSize(wid)!=lastNumOfEntries){
-        
-        m_stats->st_size_distro[m_sid][wid][lastNumOfEntries]+=(gpgpusim_total_cycles)-m_stats->last_st_size_distro[m_sid][wid][lastNumOfEntries];
-        unsigned numEntries=getSTSize(wid);
-        m_stats->last_st_num_of_entries[m_sid][wid]=numEntries;
-        m_stats->last_st_size_distro[m_sid][wid][numEntries]= gpgpusim_total_cycles;
+  if(m_stats->last_st_size_distro.find(m_sid) != m_stats->last_st_size_distro.end()) {
+    if(m_stats->last_st_size_distro[m_sid].find(wid) != m_stats->last_st_size_distro[m_sid].end()) {
+      unsigned lastNumOfEntries = m_stats->last_st_num_of_entries[m_sid][wid];
+      if (getSTSize(wid)!=lastNumOfEntries) {
+        m_stats->st_size_distro[m_sid][wid][lastNumOfEntries] += (gpgpusim_total_cycles)-m_stats->last_st_size_distro[m_sid][wid][lastNumOfEntries];
+        unsigned numEntries = getSTSize(wid);
+        m_stats->last_st_num_of_entries[m_sid][wid] = numEntries;
+        m_stats->last_st_size_distro[m_sid][wid][numEntries] = gpgpusim_total_cycles;
       }
     } else {
-      unsigned numEntries=getSTSize(wid);
-      m_stats->last_st_num_of_entries[m_sid][wid]=numEntries;
-      m_stats->last_st_size_distro[m_sid][wid][numEntries]= gpgpusim_total_cycles;
-      m_stats->st_size_distro[m_sid][wid][numEntries]= 0;
+      unsigned numEntries = getSTSize(wid);
+      m_stats->last_st_num_of_entries[m_sid][wid] = numEntries;
+      m_stats->last_st_size_distro[m_sid][wid][numEntries] = gpgpusim_total_cycles;
+      m_stats->st_size_distro[m_sid][wid][numEntries] = 0;
     }
   } else {
- 		unsigned numEntries=getSTSize(wid);
-    m_stats->last_st_num_of_entries[m_sid][wid]=numEntries;
-    m_stats->last_st_size_distro[m_sid][wid][numEntries]=gpgpusim_total_cycles;
-    m_stats->st_size_distro[m_sid][wid][numEntries]= 0;
+ 		unsigned numEntries = getSTSize(wid);
+    m_stats->last_st_num_of_entries[m_sid][wid] = numEntries;
+    m_stats->last_st_size_distro[m_sid][wid][numEntries] = gpgpusim_total_cycles;
+    m_stats->st_size_distro[m_sid][wid][numEntries] = 0;
   }
 
-
-
-  if(m_stats->last_rt_size_distro.find(m_sid)!=m_stats->rt_size_distro.end()){
-    if(m_stats->last_rt_size_distro[m_sid].find(wid)!=m_stats->rt_size_distro[m_sid].end()){
-      unsigned lastNumOfEntries=m_stats->last_rt_num_of_entries[m_sid][wid];
-      if(getRTSize(wid)!=lastNumOfEntries){
-        m_stats->rt_size_distro[m_sid][wid][lastNumOfEntries]+=(gpgpusim_total_cycles)-m_stats->last_rt_size_distro[m_sid][wid][lastNumOfEntries];
-        unsigned numEntries=getRTSize(wid);
-        m_stats->last_rt_num_of_entries[m_sid][wid]=numEntries;
-        m_stats->last_rt_size_distro[m_sid][wid][numEntries]= gpgpusim_total_cycles;
+  if (m_stats->last_rt_size_distro.find(m_sid) != m_stats->rt_size_distro.end()) {
+    if (m_stats->last_rt_size_distro[m_sid].find(wid) != m_stats->rt_size_distro[m_sid].end()) {
+      unsigned lastNumOfEntries = m_stats->last_rt_num_of_entries[m_sid][wid];
+      if (getRTSize(wid) != lastNumOfEntries) {
+        m_stats->rt_size_distro[m_sid][wid][lastNumOfEntries] += gpgpusim_total_cycles-m_stats->last_rt_size_distro[m_sid][wid][lastNumOfEntries];
+        unsigned numEntries = getRTSize(wid);
+        m_stats->last_rt_num_of_entries[m_sid][wid] = numEntries;
+        m_stats->last_rt_size_distro[m_sid][wid][numEntries] = gpgpusim_total_cycles;
       }
     } else {
-      unsigned numEntries=getRTSize(wid);
-      m_stats->last_rt_num_of_entries[m_sid][wid]=numEntries;
-      m_stats->last_rt_size_distro[m_sid][wid][numEntries]= gpgpusim_total_cycles;
-      m_stats->rt_size_distro[m_sid][wid][numEntries]= 0;
+      unsigned numEntries = getRTSize(wid);
+      m_stats->last_rt_num_of_entries[m_sid][wid] = numEntries;
+      m_stats->last_rt_size_distro[m_sid][wid][numEntries] = gpgpusim_total_cycles;
+      m_stats->rt_size_distro[m_sid][wid][numEntries] = 0;
     }
   } else {
- 		unsigned numEntries=getRTSize(wid);
-    m_stats->last_rt_num_of_entries[m_sid][wid]=numEntries;
-    m_stats->last_rt_size_distro[m_sid][wid][numEntries]=gpgpusim_total_cycles;
-    m_stats->rt_size_distro[m_sid][wid][numEntries]= 0;
+ 		unsigned numEntries = getRTSize(wid);
+    m_stats->last_rt_num_of_entries[m_sid][wid] = numEntries;
+    m_stats->last_rt_size_distro[m_sid][wid][numEntries] = gpgpusim_total_cycles;
+    m_stats->rt_size_distro[m_sid][wid][numEntries] = 0;
   }
 
-
-  if(getSTSize(wid)>0){
+  if (getSTSize(wid) > 0) {
     unsigned dist = getInsertionDist(wid);
     unsigned long long inst_cycle = getInsertionCycle(wid);
-    if(m_stats->st_reuse_distro.find(m_sid)==m_stats->st_reuse_distro.end()
-        || m_stats->st_reuse_distro[m_sid].find(wid)!=m_stats->st_reuse_distro[m_sid].end()
-        || m_stats->st_reuse_distro[m_sid][wid].find(dist)==m_stats->st_reuse_distro[m_sid][wid].end()){
-      m_stats->st_reuse_distro[m_sid][wid][dist]=0;
-      m_stats->st_reuse_updates_distro[m_sid][wid][dist]=0;
+    if(m_stats->st_reuse_distro.find(m_sid) == m_stats->st_reuse_distro.end()
+        || m_stats->st_reuse_distro[m_sid].find(wid) != m_stats->st_reuse_distro[m_sid].end()
+        || m_stats->st_reuse_distro[m_sid][wid].find(dist) == m_stats->st_reuse_distro[m_sid][wid].end()){
+      m_stats->st_reuse_distro[m_sid][wid][dist] = 0;
+      m_stats->st_reuse_updates_distro[m_sid][wid][dist] = 0;
     }
 
-    assert(dist<=MAX_ST_SIZE);
-    if(dist>0) {
-      m_stats->st_reuse_distro[m_sid][wid][dist]+=(gpgpusim_total_cycles)-inst_cycle;
+    assert(dist <= MAX_ST_SIZE);
+    if (dist > 0) {
+      m_stats->st_reuse_distro[m_sid][wid][dist] += (gpgpusim_total_cycles)-inst_cycle;
     }
  		m_stats->st_reuse_updates_distro[m_sid][wid][dist]++;
-
   }
-
-
 
   GPGPU_Context()->the_gpgpusim->g_the_gpu->max_st_entries = (GPGPU_Context()->the_gpgpusim->g_the_gpu->max_st_entries>getSTSize(wid))? GPGPU_Context()->the_gpgpusim->g_the_gpu->max_st_entries:getSTSize(wid);
   GPGPU_Context()->the_gpgpusim->g_the_gpu->max_rec_entries = (GPGPU_Context()->the_gpgpusim->g_the_gpu->max_rec_entries>getRTSize(wid))? GPGPU_Context()->the_gpgpusim->g_the_gpu->max_rec_entries:getRTSize(wid);
@@ -1456,7 +1443,7 @@ void scheduler_unit::cycle() {
           (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
 
     bool simt_conditions = true;
-    if(m_shader->get_config()->model==AWARE_RECONVERGENCE) {
+    if (m_shader->get_config()->model == AWARE_RECONVERGENCE) {
       simt_conditions=warp(warp_id).valid() && !warp(warp_id).blocked() && !warp(warp_id).pending_reconvergence() && !warp(warp_id).virtualized();
     }
 
@@ -1600,7 +1587,7 @@ void scheduler_unit::cycle() {
                 if (execute_on_SP) {
                   // TODO-LUCY: Check for how SP and SFU are differentiated and why this matters. (This code needs to be updated)
                   bool branch_unit_avail = true;
-                  if(m_shader->get_config()->model == AWARE_RECONVERGENCE){
+                  if (m_shader->get_config()->model == AWARE_RECONVERGENCE) {
                     branch_unit_avail = m_simt_tables[warp_id]->branch_unit_avail();
                   }
 
@@ -3323,12 +3310,12 @@ void ldst_unit::issue(register_set &reg_set) {
 }
 
 void ldst_unit::release_virtual_entries(warp_inst_t &inst) {
- 	if(inst.is_bru_st_fill_request()) {
+ 	if (inst.is_bru_st_fill_request()) {
  		unsigned wid = inst.warp_id();
  		address_type addr = inst.pc;
  		unsigned entry = (addr - BRU_VIR_START - (wid*m_config->warp_size)*MAX_BRU_VIR_PER_SPLIT)/(MAX_BRU_VIR_PER_SPLIT);
  		bool done = m_core->push_to_st_response_fifo(wid,entry);
- 		if(done) {
+ 		if (done) {
  			inst.clear();
  			inst.clear_pending_mem_requests();
  		}
@@ -3338,7 +3325,7 @@ void ldst_unit::release_virtual_entries(warp_inst_t &inst) {
  		address_type addr = inst.pc;
  		unsigned entry = (addr - BRU_VIR_START - (wid*m_config->warp_size)*MAX_BRU_VIR_PER_SPLIT - MAX_BRU_VIR_PER_SPLIT/2)/(MAX_BRU_VIR_PER_SPLIT);
  		bool done = m_core->push_to_rt_response_fifo(wid,entry);
- 		if(done) {
+ 		if (done) {
  			inst.clear();
  			inst.clear_pending_mem_requests();
  		}
@@ -3349,14 +3336,14 @@ void ldst_unit::writeback() {
   // process next instruction that is going to writeback
   if (!m_next_wb.empty()) {
     // if (m_operand_collector->writeback(m_next_wb)) {
-    if(m_next_wb.is_bru_st_fill_request() || m_next_wb.is_bru_rt_fill_request()){
+    if (m_next_wb.is_bru_st_fill_request() || m_next_wb.is_bru_rt_fill_request()) {
       release_virtual_entries(m_next_wb);
-      if(m_next_wb.is_bru_st_fill_request()) {
+      if (m_next_wb.is_bru_st_fill_request()) {
         GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_st_fills_misses++;
       } else {
         GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_rt_fills_misses++;
       }
-    } else if(m_operand_collector->writeback(m_next_wb)) {
+    } else if (m_operand_collector->writeback(m_next_wb)) {
       bool insn_completed = false;
       for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++) {
         if (m_next_wb.out[r] > 0) {
@@ -4420,7 +4407,7 @@ void shader_core_ctx::cycle() {
   if (!isactive() && get_not_completed() == 0) return;
 
   if (m_config->model != POST_DOMINATOR) {
- 		if (m_config->rec_time_out>0) {
+ 		if (m_config->rec_time_out > 0) {
       unsigned long long gpgpusim_total_cycles = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
 
  			if (gpgpusim_total_cycles%10000 == 0) {
@@ -4600,11 +4587,11 @@ void barrier_set_t::deallocate_barrier(unsigned cta_id) {
   m_cta_to_warps.erase(w);
 }
 
-void barrier_set_t::warp_reaches_barrier(unsigned cta_id,unsigned warp_id) {
+void barrier_set_t::warp_reaches_barrier(unsigned cta_id, unsigned warp_id) {
   barrier_type bar_type = SYNC;
   cta_to_warp_t::iterator w = m_cta_to_warps.find(cta_id);
 
-  if(w == m_cta_to_warps.end()) { // cta is active
+  if (w == m_cta_to_warps.end()) { // cta is active
     unsigned long long gpu_tot_sim_cycle = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
     unsigned long long gpu_sim_cycle = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
   
@@ -4833,7 +4820,7 @@ void shader_core_ctx::accept_fetch_response(mem_fetch *mf) {
 }
 
 bool shader_core_ctx::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type) {
- 	return m_ldst_unit->memory_cycle(inst,rc_fail,fail_type);
+ 	return m_ldst_unit->memory_cycle(inst, rc_fail, fail_type);
 }
 
 bool shader_core_ctx::ldst_unit_response_buffer_full() const {

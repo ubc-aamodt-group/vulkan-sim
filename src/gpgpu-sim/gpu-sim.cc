@@ -1039,8 +1039,8 @@ void gpgpu_sim::init() {
 
   max_st_entries = 0;
   max_rec_entries = 0;
-  max_recvg_time=0;
-  triggered_timeouts=0;
+  max_recvg_time = 0;
+  triggered_timeouts = 0;
   gpu_st_spills = 0;
   gpu_st_fills = 0;
   gpu_rt_spills = 0;
@@ -1149,7 +1149,7 @@ void gpgpu_sim::deadlock_check() {
               "GPGPU-Sim uArch: DEADLOCK  shader cores no longer committing "
               "instructions [core(# threads)]:\n");
           printf("GPGPU-Sim uArch: DEADLOCK  ");
-          dump_pipeline((0x40|0x4|0x1),5,0);
+          dump_pipeline((0x40|0x4|0x1), 5, 0);
           m_cluster[i]->print_not_completed(stdout);
         } else if (num_cores < 8) {
           m_cluster[i]->print_not_completed(stdout);
@@ -1327,11 +1327,11 @@ void gpgpu_sim::gpu_print_stat() {
   printf("gpu_rt_fills_misses = %lld\n", gpu_rt_fills_misses);
 
   double avg_st_entries = m_shader_stats->compue_distribution_avg(m_shader_stats->st_size_distro);
-  printf("avg_st_entries = %f\n",avg_st_entries);
+  printf("avg_st_entries = %f\n", avg_st_entries);
   double avg_rt_entries = m_shader_stats->compue_distribution_avg(m_shader_stats->rt_size_distro);
-  printf("avg_rt_entries = %f\n",avg_rt_entries);
+  printf("avg_rt_entries = %f\n", avg_rt_entries);
 
-    m_shader_stats->print_reuse_distribution_avg();
+  m_shader_stats->print_reuse_distribution_avg();
   // performance counter for stalls due to congestion.
   printf("gpu_stall_dramfull = %d\n", gpu_stall_dramfull);
   printf("gpu_stall_icnt2sh    = %d\n", gpu_stall_icnt2sh);

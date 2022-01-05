@@ -1517,42 +1517,41 @@ class function_info {
     return m_param_configs[param_num];
   }
   
-int compare_strings(char a[], char b[])
-    {
-       int c = 0;
+int compare_strings(char a[], char b[]) {
+  int c = 0;
 
-       while (a[c] == b[c]) {
-          if (a[c] == '\0' || b[c] == '\0')
-             break;
-          c++;
-       }
+  while (a[c] == b[c]) {
+    if (a[c] == '\0' || b[c] == '\0')
+      break;
+    c++;
+  }
 
-       if (a[c] == '\0' && b[c] == '\0')
-          return 0;
-       else
-          return -1;
-    }
+  if (a[c] == '\0' && b[c] == '\0')
+    return 0;
+  else
+    return -1;
+}
 
-    char* readfile (const std::string filename){
-    	assert (filename != "");
-    	FILE* fp = fopen(filename.c_str(),"r");
-    	if (!fp) {
-    		printf("ERROR: Could not open file %s for reading\n",filename);
-    		assert (0);
-    	}
-    	// finding size of the file
-    	int filesize= 0;
-    	fseek (fp , 0 , SEEK_END);
+char* readfile(const std::string filename) {
+  assert (filename != "");
+  FILE* fp = fopen(filename.c_str(),"r");
+  if (!fp) {
+    printf("ERROR: Could not open file %s for reading\n", filename);
+    assert (0);
+  }
+  // finding size of the file
+  int filesize = 0;
+  fseek(fp, 0, SEEK_END);
 
-    	filesize = ftell (fp);
-    	fseek (fp, 0, SEEK_SET);
-    	// allocate and copy the entire ptx
-    	char* ret = (char*)malloc((filesize +1)* sizeof(char));
-    	fread(ret,1,filesize,fp);
-    	ret[filesize]='\0';
-    	fclose(fp);
-    	return ret;
-    }
+  filesize = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+  // allocate and copy the entire ptx
+  char* ret = (char*)malloc((filesize + 1) * sizeof(char));
+  fread(ret, 1, filesize, fp);
+  ret[filesize] = '\0';
+  fclose(fp);
+  return ret;
+}
 
   void set_maxnt_id(unsigned maxthreads) { maxnt_id = maxthreads; }
   unsigned get_maxnt_id() { return maxnt_id; }

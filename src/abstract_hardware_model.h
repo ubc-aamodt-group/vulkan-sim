@@ -1482,255 +1482,251 @@ class checkpoint {
   * for one path and assigning only a single new entry.
   * TODO: recode the update function according to the above
   */
- #define MAX_ST_SIZE 33
+#define MAX_ST_SIZE 33
 
- enum splits_table_entry_type {
-     SPLITS_TABLE_ENTRY_TYPE_NORMAL = 0,
-     SPLITS_TABLE_TYPE_CALL
- };
+enum splits_table_entry_type {
+  SPLITS_TABLE_ENTRY_TYPE_NORMAL = 0,
+  SPLITS_TABLE_TYPE_CALL
+};
 
- struct simt_splits_table_entry {
+struct simt_splits_table_entry {
   bool m_valid;
  	bool m_blocked;
  	bool m_virtual;
  	bool m_transient;
  	bool m_suspended;
  	address_type m_pc;
-     unsigned int m_calldepth;
-     simt_mask_t m_active_mask;
-     address_type m_recvg_pc;
-     unsigned int m_recvg_entry;
-     unsigned long long m_branch_div_cycle;
-     splits_table_entry_type m_type;
-     simt_splits_table_entry() :
-     	m_valid(false), m_blocked(false),m_virtual(false),m_transient(false),m_suspended(false), m_pc(-1), m_calldepth(0), m_active_mask(), m_recvg_pc(-1), m_branch_div_cycle(0), m_type(SPLITS_TABLE_ENTRY_TYPE_NORMAL) {
-     }
- };
+  unsigned int m_calldepth;
+  simt_mask_t m_active_mask;
+  address_type m_recvg_pc;
+  unsigned int m_recvg_entry;
+  unsigned long long m_branch_div_cycle;
+  splits_table_entry_type m_type;
+  simt_splits_table_entry() :
+    m_valid(false), m_blocked(false), m_virtual(false), m_transient(false), m_suspended(false), m_pc(-1), m_calldepth(0), m_active_mask(), m_recvg_pc(-1), m_branch_div_cycle(0), m_type(SPLITS_TABLE_ENTRY_TYPE_NORMAL) {}
+};
 
- struct fifo_entry{
+struct fifo_entry{
  	bool m_blocked;
  	unsigned m_st_entry;
- 	/*For statistics*/
+
+ 	/* For statistics */
  	unsigned long long m_insertion_cycle;
  	unsigned m_insertion_distance;
 
- 	fifo_entry(): m_blocked(false), m_st_entry(-1){}
- 	fifo_entry(unsigned num, unsigned long long cycle, unsigned dist): m_blocked(false), m_st_entry(num){
+ 	fifo_entry(): m_blocked(false), m_st_entry(-1) {}
+ 	fifo_entry(unsigned num, unsigned long long cycle, unsigned dist): m_blocked(false), m_st_entry(num) {
  		m_insertion_cycle = cycle;
  		m_insertion_distance = dist;
  	}
- 	void update_insertion_cycle(unsigned long long cycle, unsigned dist){
+ 	void update_insertion_cycle(unsigned long long cycle, unsigned dist) {
  		m_insertion_cycle = cycle;
  		m_insertion_distance = dist;
  	}
- };
+};
 
- class simt_splits_table{
- public:
-     simt_splits_table( unsigned wid,  unsigned warpSize, const shader_core_config* config, const struct memory_config * mem_config, simt_tables * simt_table);
-     void reset();
-     void launch( address_type start_pc, const simt_mask_t &active_mask );
-     unsigned insert_new_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type, bool recvged=false);
-     unsigned insert_new_entry(simt_splits_table_entry entry, bool recvged=false);
-     bool fill_st_entry(unsigned entry);
-     bool spill_st_entry();
-     void get_pdom_splits_entry_info(unsigned num, unsigned *pc, unsigned *rpc );
-     void get_pdom_active_split_info(unsigned *pc, unsigned *rpc );
-     const simt_mask_t &get_active_mask(unsigned num);
-     const simt_mask_t &get_active_mask();
-     unsigned get_rpc();
-     unsigned get_pc();
-     unsigned get_rpc_entry();
-     splits_table_entry_type get_type();
-     bool valid();
-     unsigned get_rpc(unsigned num);
-     void invalidate();
-     void update_active_entry();
-     void update_pc(address_type new_pc);
-     void set_to_blocked();
-     void unset_blocked();
-     void unset_blocked(unsigned entry);
-     void release_blocked();
-     bool is_blocked();
-     bool is_virtual();
-     bool is_blocked_or_virtual();
-     bool split_reaches_barrier(address_type pc);
-     void push_back();
-     void push_back_once();
-     unsigned  check_simt_splits_table();
-     unsigned num_entries() {return m_num_entries;}
-     unsigned getInsertionDist() {return m_fifo_queue.front().m_insertion_distance;}
-     unsigned long long getInsertionCycle() {return m_fifo_queue.front().m_insertion_cycle;}
-     void     print(FILE*fp);
-     void cycle();
-     bool branch_unit_avail() {return m_spill_st_entry.empty();}
-     unsigned get_replacement_candidate();
-     void set_shader(shader_core_ctx* shader);
-     bool push_to_st_response_fifo(unsigned entry);
-     bool is_virtualized();
-     bool is_pending_reconvergence() {return m_pending_recvg_entry.m_valid;}
-     bool st_space_available() {return m_num_physical_entries < m_max_st_size;}
-     bool blocked();
-     unsigned address_to_entry(warp_inst_t inst);
+class simt_splits_table{
+  public:
+    simt_splits_table( unsigned wid,  unsigned warpSize, const shader_core_config* config, const struct memory_config * mem_config, simt_tables * simt_table);
+    void reset();
+    void launch( address_type start_pc, const simt_mask_t &active_mask );
+    unsigned insert_new_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type, bool recvged=false);
+    unsigned insert_new_entry(simt_splits_table_entry entry, bool recvged=false);
+    bool fill_st_entry(unsigned entry);
+    bool spill_st_entry();
+    void get_pdom_splits_entry_info(unsigned num, unsigned *pc, unsigned *rpc );
+    void get_pdom_active_split_info(unsigned *pc, unsigned *rpc );
+    const simt_mask_t &get_active_mask(unsigned num);
+    const simt_mask_t &get_active_mask();
+    unsigned get_rpc();
+    unsigned get_pc();
+    unsigned get_rpc_entry();
+    splits_table_entry_type get_type();
+    bool valid();
+    unsigned get_rpc(unsigned num);
+    void invalidate();
+    void update_active_entry();
+    void update_pc(address_type new_pc);
+    void set_to_blocked();
+    void unset_blocked();
+    void unset_blocked(unsigned entry);
+    void release_blocked();
+    bool is_blocked();
+    bool is_virtual();
+    bool is_blocked_or_virtual();
+    bool split_reaches_barrier(address_type pc);
+    void push_back();
+    void push_back_once();
+    unsigned  check_simt_splits_table();
+    unsigned num_entries() { return m_num_entries; }
+    unsigned getInsertionDist() { return m_fifo_queue.front().m_insertion_distance; }
+    unsigned long long getInsertionCycle() { return m_fifo_queue.front().m_insertion_cycle; }
+    void print(FILE*fp);
+    void cycle();
+    bool branch_unit_avail() { return m_spill_st_entry.empty(); }
+    unsigned get_replacement_candidate();
+    void set_shader(shader_core_ctx* shader);
+    bool push_to_st_response_fifo(unsigned entry);
+    bool is_virtualized();
+    bool is_pending_reconvergence() { return m_pending_recvg_entry.m_valid; }
+    bool st_space_available() { return m_num_physical_entries < m_max_st_size; }
+    bool blocked();
+    unsigned address_to_entry(warp_inst_t inst);
 
- protected:
-     unsigned m_warp_size;
-     unsigned m_warp_id;
-     unsigned m_max_st_size;
-     unsigned m_num_entries;
-     unsigned m_num_physical_entries;
-     unsigned m_num_transient_entries;
-     std::map<unsigned,simt_splits_table_entry> m_splits_table;
-     std::deque<fifo_entry> m_fifo_queue;
-     std::stack<int> m_invalid_entries;
-     std::stack<int> m_available_v_id;
-     unsigned m_active_split;
- 	warp_inst_t m_spill_st_entry;
- 	warp_inst_t m_fill_st_entry;
- 	int m_response_st_entry;
- 	shader_core_ctx* m_shader;
- 	const shader_core_config * m_config;
- 	const struct memory_config * m_mem_config;
- 	simt_tables* m_simt_tables;
- 	simt_splits_table_entry m_pending_recvg_entry;
- };
+  protected:
+    unsigned m_warp_size;
+    unsigned m_warp_id;
+    unsigned m_max_st_size;
+    unsigned m_num_entries;
+    unsigned m_num_physical_entries;
+    unsigned m_num_transient_entries;
+    std::map<unsigned, simt_splits_table_entry> m_splits_table;
+    std::deque<fifo_entry> m_fifo_queue;
+    std::stack<int> m_invalid_entries;
+    std::stack<int> m_available_v_id;
+    unsigned m_active_split;
+    warp_inst_t m_spill_st_entry;
+    warp_inst_t m_fill_st_entry;
+    int m_response_st_entry;
+    shader_core_ctx* m_shader;
+    const shader_core_config* m_config;
+    const struct memory_config* m_mem_config;
+    simt_tables* m_simt_tables;
+    simt_splits_table_entry m_pending_recvg_entry;
+};
 
 
- #define MAX_RT_SIZE 32
+#define MAX_RT_SIZE 32
 
- struct simt_reconvergence_table_entry {
+struct simt_reconvergence_table_entry {
  	bool m_valid;
  	bool m_virtual;
  	bool m_transient;
  	address_type m_pc;
-     unsigned int m_calldepth;
-     simt_mask_t m_active_mask;
-     simt_mask_t m_pending_mask;
-     address_type m_recvg_pc;
-     unsigned int m_recvg_entry;
-     unsigned long long m_branch_rec_cycle;
-     splits_table_entry_type m_type;
-     simt_reconvergence_table_entry() :
-     	m_valid(false), m_virtual(false), m_transient(false), m_pc(-1), m_calldepth(0), m_active_mask(), m_recvg_pc(-1), m_branch_rec_cycle(0) , m_type(SPLITS_TABLE_ENTRY_TYPE_NORMAL){
-     };
- };
+  unsigned int m_calldepth;
+  simt_mask_t m_active_mask;
+  simt_mask_t m_pending_mask;
+  address_type m_recvg_pc;
+  unsigned int m_recvg_entry;
+  unsigned long long m_branch_rec_cycle;
+  splits_table_entry_type m_type;
+  simt_reconvergence_table_entry() :
+    m_valid(false), m_virtual(false), m_transient(false), m_pc(-1), m_calldepth(0), m_active_mask(), m_recvg_pc(-1), m_branch_rec_cycle(0) , m_type(SPLITS_TABLE_ENTRY_TYPE_NORMAL){
+  };
+};
 
- class simt_reconvergence_table{
- public:
-     simt_reconvergence_table( unsigned wid,  unsigned warpSize,  const shader_core_config* config, const struct memory_config * m_mem_config, simt_tables * simt_table);
-     void reset();
-     const simt_mask_t & get_active_mask();
-     const simt_mask_t & get_active_mask(unsigned num);
-     void get_recvg_entry_info(unsigned num, unsigned *pc, unsigned *rpc );
-     void get_active_recvg_info(unsigned *pc, unsigned *rpc );
-     unsigned get_rpc(unsigned num);
-     unsigned get_rpc();
-     unsigned get_rpc_entry(unsigned num);
-     splits_table_entry_type get_type(unsigned num);
-     unsigned get_rpc_entry();
-     unsigned get_pc(unsigned num);
-     unsigned get_pc();
-     void invalidate();
-     void invalidate(unsigned num);
-     bool update_pending_mask(unsigned top_recvg_entry,address_type top_recvg_pc,const simt_mask_t & tmp_active_mask, bool &suspended);
-     unsigned insert_new_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask,splits_table_entry_type type);
- 	void update_masks_upon_time_out(unsigned k,const simt_mask_t & reconverged_mask);
- 	void set_rec_cycle(unsigned rec_entry,unsigned long long time);
-     unsigned check_simt_reconvergence_table();
-     simt_reconvergence_table_entry  get_recvg_entry(unsigned num);
-     unsigned num_entries() {return m_num_entries;}
-     void print (FILE *fout);
-     void cycle();
-     bool branch_unit_avail() {return m_spill_rec_entry.empty();}
-     void set_shader(shader_core_ctx* shader) {m_shader=shader;}
-     bool spill_rec_entry();
-     bool fill_rec_entry(unsigned entry);
-     bool is_pending_update() { return m_pending_update_entry.m_valid; }
-     bool push_to_rt_response_fifo(unsigned entry);
-     unsigned get_replacement_candidate();
-     unsigned address_to_entry(warp_inst_t inst);
+class simt_reconvergence_table{
+  public:
+    simt_reconvergence_table( unsigned wid,  unsigned warpSize,  const shader_core_config* config, const struct memory_config * m_mem_config, simt_tables * simt_table);
+    void reset();
+    const simt_mask_t & get_active_mask();
+    const simt_mask_t & get_active_mask(unsigned num);
+    void get_recvg_entry_info(unsigned num, unsigned *pc, unsigned *rpc );
+    void get_active_recvg_info(unsigned *pc, unsigned *rpc );
+    unsigned get_rpc(unsigned num);
+    unsigned get_rpc();
+    unsigned get_rpc_entry(unsigned num);
+    splits_table_entry_type get_type(unsigned num);
+    unsigned get_rpc_entry();
+    unsigned get_pc(unsigned num);
+    unsigned get_pc();
+    void invalidate();
+    void invalidate(unsigned num);
+    bool update_pending_mask(unsigned top_recvg_entry, address_type top_recvg_pc, const simt_mask_t & tmp_active_mask, bool &suspended);
+    unsigned insert_new_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type);
+    void update_masks_upon_time_out(unsigned k, const simt_mask_t & reconverged_mask);
+    void set_rec_cycle(unsigned rec_entry, unsigned long long time);
+    unsigned check_simt_reconvergence_table();
+    simt_reconvergence_table_entry get_recvg_entry(unsigned num);
+    unsigned num_entries() { return m_num_entries; }
+    void print (FILE *fout);
+    void cycle();
+    bool branch_unit_avail() { return m_spill_rec_entry.empty(); }
+    void set_shader(shader_core_ctx* shader) { m_shader = shader; }
+    bool spill_rec_entry();
+    bool fill_rec_entry(unsigned entry);
+    bool is_pending_update() { return m_pending_update_entry.m_valid; }
+    bool push_to_rt_response_fifo(unsigned entry);
+    unsigned get_replacement_candidate();
+    unsigned address_to_entry(warp_inst_t inst);
 
- protected:
-     unsigned m_warp_id;
-     unsigned m_warp_size;
-     unsigned m_num_entries;
-     unsigned m_num_physical_entries;
-     unsigned m_num_transient_entries;
-     unsigned m_max_rec_size;
-     std::map<int,simt_reconvergence_table_entry> m_recvg_table;
-     std::stack<int> m_invalid_entries;
-     unsigned m_active_reconvergence;
- 	const shader_core_config * m_config;
- 	shader_core_ctx* m_shader;
- 	simt_tables* m_simt_tables;
- 	warp_inst_t m_spill_rec_entry;
- 	warp_inst_t m_fill_rec_entry;
- 	int m_response_rec_entry;
- 	simt_reconvergence_table_entry m_pending_update_entry;
+  protected:
+    unsigned m_warp_id;
+    unsigned m_warp_size;
+    unsigned m_num_entries;
+    unsigned m_num_physical_entries;
+    unsigned m_num_transient_entries;
+    unsigned m_max_rec_size;
+    std::map<int, simt_reconvergence_table_entry> m_recvg_table;
+    std::stack<int> m_invalid_entries;
+    unsigned m_active_reconvergence;
+    const shader_core_config* m_config;
+    shader_core_ctx* m_shader;
+    simt_tables* m_simt_tables;
+    warp_inst_t m_spill_rec_entry;
+    warp_inst_t m_fill_rec_entry;
+    int m_response_rec_entry;
+    simt_reconvergence_table_entry m_pending_update_entry;
+};
 
- };
 
+class simt_tables{
+  public:
+    simt_tables( unsigned wid,  unsigned warpSize, const shader_core_config* config,const memory_config* mem_config);
+    void reset();
+    void launch(address_type start_pc, const simt_mask_t &active_mask);
+    void update(simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op, unsigned next_inst_size, address_type next_inst_pc);
+    const simt_mask_t &get_active_mask();
+    void get_pdom_active_split_info( unsigned *pc, unsigned *rpc);
+    unsigned get_rp();
+    void check_simt_tables();
+    void check_time_out();
+    void release_barrier();
+    bool split_reaches_barrier(address_type pc);
+    void print(FILE*fp);
+    unsigned getSTsize() { return m_simt_splits_table->num_entries(); }
+    unsigned getInsertionDist() { return m_simt_splits_table->getInsertionDist(); }
+    unsigned long long getInsertionCycle() { return m_simt_splits_table->getInsertionCycle(); }
+    unsigned getRTsize() { return m_simt_recvg_table->num_entries(); }
+    bool branch_unit_avail() { return m_simt_splits_table->branch_unit_avail() && m_simt_recvg_table->branch_unit_avail(); }
+    bool push_to_st_response_fifo(unsigned entry);
+    bool push_to_rt_response_fifo(unsigned entry);
+    void cycle() {
+      m_simt_splits_table->cycle();
+      m_simt_recvg_table->cycle();
+    }
+    void set_shader(shader_core_ctx* shader);
+    void push_back();
+    bool is_virtualized();
+    bool is_pending_reconvergence();
+    bool st_space_available();
+    bool blocked();
+    bool valid();
+    bool is_blocked();
+    bool fill_rec_entry(unsigned entry) {return m_simt_recvg_table->fill_rec_entry(entry);}
+    bool insert_st_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type, bool recvged=false) {
+      return m_simt_splits_table->insert_new_entry(pc,rpc,rpc_entry,tmp_active_mask,type,recvged);
+    }
+  private:
+    unsigned m_warp_id;
+    unsigned m_warp_size;
+    simt_splits_table* m_simt_splits_table;
+    simt_reconvergence_table* m_simt_recvg_table;
+    const shader_core_config* m_config;
+    const struct memory_config* m_mem_config;
+    shader_core_ctx* m_shader;
+};
 
- class simt_tables{
- public:
-
-     simt_tables( unsigned wid,  unsigned warpSize, const shader_core_config* config,const memory_config* mem_config);
-     void reset();
-     void launch( address_type start_pc, const simt_mask_t &active_mask );
-     void update( simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op,unsigned next_inst_size, address_type next_inst_pc);
-     const simt_mask_t &get_active_mask();
-     void     get_pdom_active_split_info( unsigned *pc, unsigned *rpc );
-     unsigned get_rp();
-     void check_simt_tables();
-     void check_time_out();
-     void release_barrier();
-     bool split_reaches_barrier(address_type pc);
-     void     print(FILE*fp);
-     unsigned getSTsize() {return m_simt_splits_table->num_entries();}
-     unsigned getInsertionDist() {return m_simt_splits_table->getInsertionDist();}
-     unsigned long long getInsertionCycle() {return m_simt_splits_table->getInsertionCycle();}
-     unsigned getRTsize() {return m_simt_recvg_table->num_entries();}
-     bool branch_unit_avail() {return m_simt_splits_table->branch_unit_avail() && m_simt_recvg_table->branch_unit_avail();}
-     bool push_to_st_response_fifo(unsigned entry);
-     bool push_to_rt_response_fifo(unsigned entry);
-     void cycle()
-     {
-     	m_simt_splits_table->cycle();
-     	m_simt_recvg_table->cycle();
-     }
-     void set_shader(shader_core_ctx* shader);
-     void push_back();
-     bool is_virtualized();
-     bool is_pending_reconvergence();
-     bool st_space_available();
-     bool blocked();
-     bool valid();
-     bool is_blocked();
-     bool fill_rec_entry(unsigned entry) {return m_simt_recvg_table->fill_rec_entry(entry);}
-     bool insert_st_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type, bool recvged=false)
-     {
-     	return m_simt_splits_table->insert_new_entry(pc,rpc,rpc_entry,tmp_active_mask,type,recvged);
-     }
- private:
-     unsigned m_warp_id;
-     unsigned m_warp_size;
- 	simt_splits_table* m_simt_splits_table;
- 	simt_reconvergence_table* m_simt_recvg_table;
- 	const shader_core_config * m_config;
- 	const struct memory_config * m_mem_config;
- 	shader_core_ctx * m_shader;
- };
-
- class simt_stack {
- public:
-    simt_stack( unsigned wid,  unsigned warpSize, class gpgpu_sim *gpu);
+class simt_stack {
+  public:
+    simt_stack(unsigned wid, unsigned warpSize, class gpgpu_sim *gpu);
 
     void reset();
-    void launch( address_type start_pc, const simt_mask_t &active_mask );
-    void update( simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op,unsigned next_inst_size, address_type next_inst_pc );
+    void launch(address_type start_pc, const simt_mask_t &active_mask);
+    void update(simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op, unsigned next_inst_size, address_type next_inst_pc);
 
     const simt_mask_t &get_active_mask() const;
-    void get_pdom_stack_top_info( unsigned *pc, unsigned *rpc ) const;
+    void get_pdom_stack_top_info(unsigned *pc, unsigned *rpc) const;
     unsigned get_rp() const;
     void print(FILE*fp) const;
      
@@ -1738,32 +1734,31 @@ class checkpoint {
     void resume(char *fname);
     void print_checkpoint(FILE *fout) const;
 
- protected:
-     unsigned m_warp_id;
-     unsigned m_warp_size;
+  protected:
+    unsigned m_warp_id;
+    unsigned m_warp_size;
 
-     enum stack_entry_type {
-         STACK_ENTRY_TYPE_NORMAL = 0,
-         STACK_ENTRY_TYPE_CALL
-     };
+    enum stack_entry_type {
+      STACK_ENTRY_TYPE_NORMAL = 0,
+      STACK_ENTRY_TYPE_CALL
+    };
 
-     struct simt_stack_entry {
-         address_type m_pc;
-         unsigned int m_calldepth;
-         simt_mask_t m_active_mask;
-         address_type m_recvg_pc;
-         unsigned long long m_branch_div_cycle;
-         stack_entry_type m_type;
-         simt_stack_entry() :
-             m_pc(-1), m_calldepth(0), m_active_mask(), m_recvg_pc(-1), m_branch_div_cycle(0), m_type(STACK_ENTRY_TYPE_NORMAL) { };
-     };
+    struct simt_stack_entry {
+      address_type m_pc;
+      unsigned int m_calldepth;
+      simt_mask_t m_active_mask;
+      address_type m_recvg_pc;
+      unsigned long long m_branch_div_cycle;
+      stack_entry_type m_type;
+      simt_stack_entry() :
+        m_pc(-1), m_calldepth(0), m_active_mask(), m_recvg_pc(-1), m_branch_div_cycle(0), m_type(STACK_ENTRY_TYPE_NORMAL) {};
+    };
 
-     std::deque<simt_stack_entry> m_stack;
+    std::deque<simt_stack_entry> m_stack;
 
     // *NEW*
     class gpgpu_sim *m_gpu;
-
- };
+};
 
 
 /*
@@ -1791,7 +1786,7 @@ class core_t {
     m_thread = (ptx_thread_info **)calloc(m_warp_count * m_warp_size,
                                           sizeof(ptx_thread_info *));
     // initilizeSIMTStack(m_warp_count, m_warp_size);
-    initilizeSIMTDivergenceStructures(m_warp_count,m_warp_size);
+    initilizeSIMTDivergenceStructures(m_warp_count, m_warp_size);
 
     for (unsigned i = 0; i < MAX_CTA_PER_SHADER; i++) {
       for (unsigned j = 0; j < MAX_BARRIERS_PER_CTA; j++) {

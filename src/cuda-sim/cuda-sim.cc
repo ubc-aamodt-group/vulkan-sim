@@ -2337,8 +2337,8 @@ void cuda_sim::read_sim_environment_variables() {
   }
 
   char *dbg_cycle = getenv("PTX_SIM_DEBUG_CYCLE");
-  if ( dbg_cycle && strlen(dbg_cycle) ) {
-    printf("GPGPU-Sim PTX: printing debug information after cycle %s\n", dbg_cycle );
+  if (dbg_cycle && strlen(dbg_cycle)) {
+    printf("GPGPU-Sim PTX: printing debug information after cycle %s\n", dbg_cycle);
     fflush(stdout);
     sscanf(dbg_cycle,"%d", &g_debug_cycle);
   }
@@ -2584,10 +2584,10 @@ void functionalCoreSim::createWarp(unsigned warpId) {
 
   assert(m_thread[warpId * m_warp_size] != NULL);
 
-  if(m_gpu->simd_model() == POST_DOMINATOR) {
-    m_simt_stack[warpId]->launch(m_thread[warpId*m_warp_size]->get_pc(),initialMask);
+  if (m_gpu->simd_model() == POST_DOMINATOR) {
+    m_simt_stack[warpId]->launch(m_thread[warpId*m_warp_size]->get_pc(), initialMask);
   } else {
-    m_simt_tables[warpId]->launch(m_thread[warpId*m_warp_size]->get_pc(),initialMask);
+    m_simt_tables[warpId]->launch(m_thread[warpId*m_warp_size]->get_pc(), initialMask);
   }
 
   char fname[2048];
