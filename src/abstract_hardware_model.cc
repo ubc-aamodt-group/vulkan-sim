@@ -2834,6 +2834,10 @@ unsigned core_t::getSTSize(unsigned wid) {
   return m_simt_tables[wid]->getSTsize();
 }
 
+unsigned core_t::getRTSize(unsigned wid) {
+	return m_simt_tables[wid]->getRTsize();
+}
+
 //! Get the warp to be executed using the data taken form the SIMT stack
 warp_inst_t core_t::getExecuteWarp(unsigned warpId) {
   unsigned pc, rpc;
