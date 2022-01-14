@@ -2386,6 +2386,8 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
       tmp_active_mask = divergent_paths[tmp_next_pc];
       divergent_paths.erase(tmp_next_pc);
     }
+
+    // TODO-LUCY: Figure out why this assert exists (below has else if with RET_OPS)
     assert(next_inst_op != RET_OPS);
 
     // HANDLE THE SPECIAL CASES FIRST
