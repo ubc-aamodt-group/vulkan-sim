@@ -1451,6 +1451,7 @@ void simt_splits_table::cycle() {
  	if (m_splits_table[m_active_split].m_blocked || (!m_splits_table[m_active_split].m_valid && m_fifo_queue.size() > 0))
  		push_back();
 
+  // For virtual active splits
  	if (m_splits_table[m_active_split].m_virtual && !m_splits_table[m_active_split].m_transient)
  		fill_st_entry(m_active_split);
 
@@ -1485,6 +1486,9 @@ unsigned simt_splits_table::insert_new_entry(simt_splits_table_entry entry, bool
  	m_invalid_entries.pop();
  	assert(m_invalid_entries.size() >= 0);
  	assert(!m_splits_table[entry_num].m_valid);
+
+  AWARE_DPRINTF("Inserting new entry to Splits Table: Entry %d\tPC %d\tRPC %d\tActive Mask%d\n", entry_num, entry.m_pc, entry.m_recvg_pc, entry.m_active_mask);
+
  	m_splits_table[entry_num].m_pc = entry.m_pc;
  	m_splits_table[entry_num].m_recvg_pc = entry.m_recvg_pc;
  	m_splits_table[entry_num].m_recvg_entry = entry.m_recvg_entry;
@@ -1644,6 +1648,8 @@ void simt_splits_table::push_back() {
   m_fifo_queue.push_back(cur_active_split);
   fifo_entry new_active_split = m_fifo_queue.front();
   m_active_split = new_active_split.m_st_entry;
+
+  AWARE_DPRINTF("Push current active split %d to back; New active split %d\n", cur_active_split.m_st_entry, m_active_split);
 
   if (m_splits_table[m_active_split].m_virtual) {
     if (!m_splits_table[m_active_split].m_transient && !m_splits_table[m_active_split].m_blocked) {
@@ -2302,7 +2308,7 @@ void simt_tables::check_simt_tables(){
  	}
 }
 
-void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op,unsigned next_inst_size, address_type next_inst_pc) {
+void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op,unsigned next_inst_size, address_type next_inst_pc, bool predicated) {
   check_simt_tables();
 
   simt_mask_t top_active_mask = m_simt_splits_table->get_active_mask();
@@ -2316,11 +2322,11 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
   const address_type null_pc = -1;
   bool warp_diverged = false;
   address_type new_recvg_pc = null_pc;
-  unsigned num_divergent_paths=0;
-  unsigned new_recvg_entry=top_recvg_entry;
+  unsigned num_divergent_paths = 0;
+  unsigned new_recvg_entry = top_recvg_entry;
   splits_table_entry_type top_type = m_simt_splits_table->get_type();
 
-  std::map<address_type,simt_mask_t> divergent_paths;
+  std::map<address_type, simt_mask_t> divergent_paths;
   bool invalidate = false;
 
   while (top_active_mask.any()) {
@@ -2328,9 +2334,9 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
     address_type tmp_next_pc = null_pc;
     simt_mask_t tmp_active_mask;
     for (int i = m_warp_size - 1; i >= 0; i--) {
-      if (top_active_mask.test(i)) { // is this thread active?
+      if (top_active_mask.test(i)) {  // is this thread active?
         if (thread_done.test(i)) {
-          top_active_mask.reset(i); // remove completed thread from active mask
+          top_active_mask.reset(i);  // remove completed thread from active mask
         } else if (tmp_next_pc == null_pc) {
           tmp_next_pc = next_pc[i];
           tmp_active_mask.set(i);
@@ -2342,40 +2348,23 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
       }
     }
 
-    if(tmp_next_pc == null_pc) {
-      assert(!top_active_mask.any()); // all threads done
+    if (tmp_next_pc == null_pc) {
+      assert(!top_active_mask.any());  // all threads done
       continue;
     }
 
     divergent_paths[tmp_next_pc] = tmp_active_mask;
     num_divergent_paths++;
   }
-  if ((next_inst_op == RET_OPS) && m_simt_splits_table->valid() && (num_divergent_paths == 0)) {
-    assert(m_simt_splits_table->valid());
-    m_simt_splits_table->invalidate();
-    m_simt_splits_table->update_active_entry();
-    bool warp_reaches_barrier = is_blocked();
-    if (warp_reaches_barrier) {
-      int cta_id = m_shader->get_cta_id(m_warp_id);
-      m_shader->warp_reaches_barrier(cta_id,m_warp_id);
-      if (m_shader->warp_count_at_barrier(cta_id) == 0) {
-        unsigned n = m_config->n_thread_per_shader / m_config->warp_size;
-        for (unsigned i=0; i<n; i++) {
-          if (m_shader->get_cta_id(i) == cta_id)
-            m_shader->release_splits_barrier(i);
-        }
-      }
-    }
-    return;
-  }
-  address_type not_taken_pc = next_inst_pc+next_inst_size;
+
+  address_type not_taken_pc = next_inst_pc + next_inst_size;
   assert(num_divergent_paths <= 2);
-  for (unsigned i=0; i<num_divergent_paths; i++) {
+  for (unsigned i = 0; i < num_divergent_paths; i++) {
     address_type tmp_next_pc = null_pc;
     simt_mask_t tmp_active_mask;
     tmp_active_mask.reset();
     /* Process the Not Taken first then the Taken Path */
-    if (divergent_paths.find(not_taken_pc)!=divergent_paths.end()) {
+    if (divergent_paths.find(not_taken_pc) != divergent_paths.end()) {
       assert(i == 0);
       tmp_next_pc = not_taken_pc;
       tmp_active_mask = divergent_paths[tmp_next_pc];
@@ -2387,38 +2376,36 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
       divergent_paths.erase(tmp_next_pc);
     }
 
-    // TODO-LUCY: Figure out why this assert exists (below has else if with RET_OPS)
-    assert(next_inst_op != RET_OPS);
-
     // HANDLE THE SPECIAL CASES FIRST
     unsigned long long gpgpusim_total_cycles = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
-    if (next_inst_op == CALL_OPS) {
-      // Since call is not a divergent instruction, all threads should have executed a call instruction
-      assert(num_divergent_paths == 1);
+    
+    if (!predicated) {
+      if (next_inst_op == CALL_OPS) {
+        // Since call is not a divergent instruction, all threads should have executed a call instruction
+        assert(num_divergent_paths == 1);
 
-      simt_splits_table_entry new_st_entry;
-      new_st_entry.m_pc = tmp_next_pc;
-      new_st_entry.m_active_mask = tmp_active_mask;
-      new_st_entry.m_branch_div_cycle = gpgpusim_total_cycles;
-      new_st_entry.m_type = SPLITS_TABLE_TYPE_CALL;
-      m_simt_splits_table->insert_new_entry(new_st_entry);
-      return;
-    } else if (next_inst_op == RET_OPS && top_type==SPLITS_TABLE_TYPE_CALL) {
-      // pop the CALL Entry
-      assert(num_divergent_paths == 1);
-      m_simt_splits_table->invalidate();
-      m_simt_splits_table->update_active_entry();
-      simt_splits_table_entry new_st_entry;
-      new_st_entry.m_pc = tmp_next_pc;
-      new_st_entry.m_recvg_pc = top_recvg_pc;
-      new_st_entry.m_recvg_entry = top_recvg_entry;
-      new_st_entry.m_active_mask = tmp_active_mask;
-      new_st_entry.m_branch_div_cycle = gpgpusim_total_cycles;
-      new_st_entry.m_type = SPLITS_TABLE_TYPE_CALL;
-      m_simt_splits_table->insert_new_entry(new_st_entry);
-      return;
-    } else if (next_inst_op == RET_OPS) {
-      abort();
+        simt_splits_table_entry new_st_entry;
+        new_st_entry.m_pc = tmp_next_pc;
+        new_st_entry.m_active_mask = tmp_active_mask;
+        new_st_entry.m_branch_div_cycle = gpgpusim_total_cycles;
+        new_st_entry.m_type = SPLITS_TABLE_TYPE_CALL;
+        m_simt_splits_table->insert_new_entry(new_st_entry);
+        return;
+      } else if (next_inst_op == RET_OPS && top_type == SPLITS_TABLE_TYPE_CALL) {
+        // pop the CALL Entry
+        assert(num_divergent_paths == 1);
+        m_simt_splits_table->invalidate();
+        m_simt_splits_table->update_active_entry();
+        simt_splits_table_entry new_st_entry;
+        new_st_entry.m_pc = tmp_next_pc;
+        new_st_entry.m_recvg_pc = top_recvg_pc;
+        new_st_entry.m_recvg_entry = top_recvg_entry;
+        new_st_entry.m_active_mask = tmp_active_mask;
+        new_st_entry.m_branch_div_cycle = gpgpusim_total_cycles;
+        new_st_entry.m_type = SPLITS_TABLE_TYPE_CALL;
+        m_simt_splits_table->insert_new_entry(new_st_entry);
+        return;
+      }
     }
 
  		if (tmp_next_pc == top_recvg_pc) {
@@ -2640,7 +2627,7 @@ void simt_stack::print_checkpoint(FILE *fout) const {
 
 void simt_stack::update(simt_mask_t &thread_done, addr_vector_t &next_pc,
                         address_type recvg_pc, op_type next_inst_op,
-                        unsigned next_inst_size, address_type next_inst_pc) {
+                        unsigned next_inst_size, address_type next_inst_pc, bool predicated) {
   assert(m_stack.size() > 0);
 
   assert(next_pc.size() == m_warp_size);
@@ -2660,8 +2647,7 @@ void simt_stack::update(simt_mask_t &thread_done, addr_vector_t &next_pc,
 
   std::map<address_type, simt_mask_t> divergent_paths;
   while (top_active_mask.any()) {
-    // extract a group of threads with the same next PC among the active threads
-    // in the warp
+    // extract a group of threads with the same next PC among the active threads in the warp
     address_type tmp_next_pc = null_pc;
     simt_mask_t tmp_active_mask;
     for (int i = m_warp_size - 1; i >= 0; i--) {
@@ -2708,34 +2694,36 @@ void simt_stack::update(simt_mask_t &thread_done, addr_vector_t &next_pc,
     }
 
     // HANDLE THE SPECIAL CASES FIRST
-    if (next_inst_op == CALL_OPS) {
-      // Since call is not a divergent instruction, all threads should have
-      // executed a call instruction
-      assert(num_divergent_paths == 1);
+    // Predicated CALLs are different
+    if (!predicated) {
+      if (next_inst_op == CALL_OPS) {
+        // Since call is not a divergent instruction, all threads should have executed a call instruction
+        assert(num_divergent_paths == 1);
 
-      simt_stack_entry new_stack_entry;
-      new_stack_entry.m_pc = tmp_next_pc;
-      new_stack_entry.m_active_mask = tmp_active_mask;
-      new_stack_entry.m_branch_div_cycle =
-          m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle;
-      new_stack_entry.m_type = STACK_ENTRY_TYPE_CALL;
-      m_stack.push_back(new_stack_entry);
-      return;
-    } else if (next_inst_op == RET_OPS && top_type == STACK_ENTRY_TYPE_CALL) {
-      // pop the CALL Entry
-      assert(num_divergent_paths == 1);
-      m_stack.pop_back();
-
-      assert(m_stack.size() > 0);
-      m_stack.back().m_pc = tmp_next_pc;  // set the PC of the stack top entry
-                                          // to return PC from  the call stack;
-      // Check if the New top of the stack is reconverging
-      if (tmp_next_pc == m_stack.back().m_recvg_pc &&
-          m_stack.back().m_type != STACK_ENTRY_TYPE_CALL) {
-        assert(m_stack.back().m_type == STACK_ENTRY_TYPE_NORMAL);
+        simt_stack_entry new_stack_entry;
+        new_stack_entry.m_pc = tmp_next_pc;
+        new_stack_entry.m_active_mask = tmp_active_mask;
+        new_stack_entry.m_branch_div_cycle =
+            m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle;
+        new_stack_entry.m_type = STACK_ENTRY_TYPE_CALL;
+        m_stack.push_back(new_stack_entry);
+        return;
+      } else if (next_inst_op == RET_OPS && top_type == STACK_ENTRY_TYPE_CALL) {
+        // pop the CALL Entry
+        assert(num_divergent_paths == 1);
         m_stack.pop_back();
+
+        assert(m_stack.size() > 0);
+        m_stack.back().m_pc = tmp_next_pc;  // set the PC of the stack top entry
+                                            // to return PC from  the call stack;
+        // Check if the New top of the stack is reconverging
+        if (tmp_next_pc == m_stack.back().m_recvg_pc &&
+            m_stack.back().m_type != STACK_ENTRY_TYPE_CALL) {
+          assert(m_stack.back().m_type == STACK_ENTRY_TYPE_NORMAL);
+          m_stack.pop_back();
+        }
+        return;
       }
-      return;
     }
 
     // discard the new entry if its PC matches with reconvergence PC
@@ -2818,9 +2806,10 @@ void core_t::updateSIMTDivergenceStructures(unsigned warpId, warp_inst_t * inst)
   }
 
   if (m_gpu->simd_model() == POST_DOMINATOR) {
-    m_simt_stack[warpId]->update(thread_done, next_pc, inst->reconvergence_pc, inst->op,inst->isize, inst->pc);
+    m_simt_stack[warpId]->update(thread_done, next_pc, inst->reconvergence_pc, inst->op,inst->isize, inst->pc, inst->has_pred());
   } else {
-    m_simt_tables[warpId]->update(thread_done, next_pc, inst->reconvergence_pc, inst->op, inst->isize, inst->pc);
+    AWARE_DPRINTF("Updating SIMT tables for Warp %d\n", warpId);
+    m_simt_tables[warpId]->update(thread_done, next_pc, inst->reconvergence_pc, inst->op, inst->isize, inst->pc, inst->has_pred());
   }
 }
 

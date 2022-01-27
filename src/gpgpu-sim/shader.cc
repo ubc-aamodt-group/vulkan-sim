@@ -1993,6 +1993,7 @@ void shader_core_ctx::execute() {
 
   if (m_config->model == AWARE_RECONVERGENCE) {
     for (unsigned i = 0; i < m_warp_count; ++i) {
+      AWARE_DPRINTF("Cycling SIMT tables for Shader %d: Warp %d...\n", m_sid, i);
       m_simt_tables[i]->cycle();
     }
   }

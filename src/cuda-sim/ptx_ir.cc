@@ -357,10 +357,21 @@ void function_info::create_basic_blocks() {
           break;
         case CALL_OP:
         case CALLP_OP:
+        // Shader calls are all CALL_OPs
+        case CALL_MISS_SHADER_OP:
+        case CALL_CLOSEST_HIT_SHADER_OP:
+        case CALL_INTERSECTION_SHADER_OP:
+        case CALL_ANY_HIT_SHADER_OP:
           if (pI->has_pred()) {
             printf("GPGPU-Sim PTX: Warning found predicated call\n");
-            i++;
-            if (i != m_instructions.end()) leaders.push_back(*i);
+            // Check if this is the last instruction
+            if (i != m_instructions.end()) {
+              // A predicated call is a basic block leader (check that it's not already in the list)
+              if (pI != leaders.back()) leaders.push_back(*i);
+              // The next instruction after a predicated call is also a basic block leader
+              i++;
+              if (i != m_instructions.end()) leaders.push_back(*i);
+            }
             i = find_next_real_instruction(i);
           } else
             i++;
@@ -999,6 +1010,10 @@ unsigned function_info::get_num_reconvergence_pairs() {
       if (m_basic_blocks[i]->ptx_end->get_opcode() == BRA_OP) {
         num_reconvergence_pairs++;
       }
+      // A predicated call is basically a branch
+      else if (m_basic_blocks[i]->ptx_end->has_pred()) {
+        num_reconvergence_pairs++;
+      }
     }
   }
   return num_reconvergence_pairs;
@@ -1013,7 +1028,8 @@ void function_info::get_reconvergence_pairs(gpgpu_recon_t *recon_points) {
     printf("i=%d\n", i);
     fflush(stdout);
 #endif
-    if (m_basic_blocks[i]->ptx_end->get_opcode() == BRA_OP) {
+    if (m_basic_blocks[i]->ptx_end->get_opcode() == BRA_OP ||
+        m_basic_blocks[i]->ptx_end->has_pred()) {
 #ifdef DEBUG_GET_RECONVERG_PAIRS
       printf("\tbranch!\n");
       printf("\tbb_id=%d; ipdom=%d\n", m_basic_blocks[i]->bb_id,

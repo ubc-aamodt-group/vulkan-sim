@@ -255,7 +255,7 @@ address_type line_size_based_tag_func(new_addr_type address, new_addr_type line_
       fflush(stdout); \
    }
 
-#define AWARE_DEBUG_PRINT 1
+#define AWARE_DEBUG_PRINT 0
 #define AWARE_DPRINTF(...) \
    if(AWARE_DEBUG_PRINT) { \
       printf(__VA_ARGS__); \
@@ -1211,6 +1211,7 @@ class warp_inst_t : public inst_t {
     m_is_printf = false;
     m_is_cdp = 0;
     should_do_atomic = true;
+    m_has_pred = false;
   }
   virtual ~warp_inst_t() {}
 
@@ -1424,6 +1425,8 @@ class warp_inst_t : public inst_t {
   
   void set_start_cycle(unsigned long long cycle) { m_start_cycle = cycle; }
   unsigned long long get_start_cycle() const {return m_start_cycle; }
+  bool has_pred() const { return m_has_pred; }
+  void set_pred() { m_has_pred = true; }
   
  protected:
   unsigned m_uid;
@@ -1436,6 +1439,7 @@ class warp_inst_t : public inst_t {
   bool m_is_printf;
   unsigned m_warp_id;
   unsigned m_dynamic_warp_id;
+  bool m_has_pred;
   const core_config *m_config;
   active_mask_t m_warp_active_mask;  // dynamic active mask for timing model
                                      // (after predication)
@@ -1591,14 +1595,22 @@ class simt_splits_table{
     std::deque<fifo_entry> m_fifo_queue;
     std::stack<int> m_invalid_entries;
     std::stack<int> m_available_v_id;
+
+    // Currently active warp split (initialized to 0)
     unsigned m_active_split;
+    
     warp_inst_t m_spill_st_entry;
     warp_inst_t m_fill_st_entry;
+
+    // Released virtual entry
     int m_response_st_entry;
+
     shader_core_ctx* m_shader;
     const shader_core_config* m_config;
     const struct memory_config* m_mem_config;
     simt_tables* m_simt_tables;
+
+    // Pending entry to be added to the Splits Table (if no pending entries, this is -1)
     simt_splits_table_entry m_pending_recvg_entry;
 };
 
@@ -1682,7 +1694,7 @@ class simt_tables{
     simt_tables( unsigned wid,  unsigned warpSize, const shader_core_config* config,const memory_config* mem_config);
     void reset();
     void launch(address_type start_pc, const simt_mask_t &active_mask);
-    void update(simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op, unsigned next_inst_size, address_type next_inst_pc);
+    void update(simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op, unsigned next_inst_size, address_type next_inst_pc, bool predicated);
     const simt_mask_t &get_active_mask();
     void get_pdom_active_split_info( unsigned *pc, unsigned *rpc);
     unsigned get_rp();
@@ -1730,7 +1742,7 @@ class simt_stack {
 
     void reset();
     void launch(address_type start_pc, const simt_mask_t &active_mask);
-    void update(simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op, unsigned next_inst_size, address_type next_inst_pc);
+    void update(simt_mask_t &thread_done, addr_vector_t &next_pc, address_type recvg_pc, op_type next_inst_op, unsigned next_inst_size, address_type next_inst_pc, bool predicated);
 
     const simt_mask_t &get_active_mask() const;
     void get_pdom_stack_top_info(unsigned *pc, unsigned *rpc) const;

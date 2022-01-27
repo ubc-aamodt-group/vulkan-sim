@@ -806,6 +806,14 @@ void ptx_instruction::set_opcode_and_latency() {
         op = CALL_OPS;
       break;
     }
+
+    case CALL_MISS_SHADER_OP:
+    case CALL_CLOSEST_HIT_SHADER_OP:
+    case CALL_INTERSECTION_SHADER_OP:
+    case CALL_ANY_HIT_SHADER_OP:
+      op = CALL_OPS;
+      break;
+
     case CALLP_OP: {
       if (m_is_printf || m_is_cdp) {
         op = ALU_OP;
@@ -1744,6 +1752,7 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
     }
 
     if (pI->has_pred()) {
+      inst.set_pred();
       const operand_info &pred = pI->get_pred();
       ptx_reg_t pred_value = get_operand_value(pred, pred, PRED_TYPE, this, 0);
       if (pI->get_pred_mod() == -1) {
