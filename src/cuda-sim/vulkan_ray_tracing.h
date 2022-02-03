@@ -6,6 +6,7 @@
 
 #include "vulkan/anv_acceleration_structure.h"
 #include "vulkan/anv_public.h"
+#include "compiler/spirv/spirv.h"
 
 // #define HAVE_PTHREAD
 // #define UTIL_ARCH_LITTLE_ENDIAN 1
@@ -42,6 +43,53 @@
 //     uint32_t size;
 //     TransactionType type;
 // } MemoryTransactionRecord;
+// typedef struct float4 {
+//     float x, y, z, w;
+// } float4;
+
+typedef struct float4x4 {
+  float m[4][4];
+
+  float4 operator*(const float4& _vec) const
+  {
+    float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
+    float res[] = {0, 0, 0, 0};
+    for(int i = 0; i < 4; i++)
+        for(int j = 0; j < 4; j++)
+            res[i] += this->m[j][i] * vec[j];
+    return {res[0], res[1], res[2], res[3]};
+  }
+} float4x4;
+
+typedef struct RayDebugGPUData
+{
+    bool valid;
+    int launchIDx;
+    int launchIDy;
+    int instanceCustomIndex;
+    int primitiveID;
+    float3 v0pos;
+    float3 v1pos;
+    float3 v2pos;
+    float3 attribs;
+    float3 P_object;
+    float3 P; //world intersection point
+    float3 N_object;
+    float3 N;
+    float NdotL;
+    float3 hitValue;
+} RayDebugGPUData;
+
+// float4 operator*(const float4& _vec, const float4x4& matrix)
+// {
+//     float vec[] = {_vec.x, _vec.y, _vec.z, _vec.w};
+//     float res[] = {0, 0, 0, 0};
+//     for(int i = 0; i < 4; i++)
+//         for(int j = 0; j < 4; j++)
+//             res[i] += matrix.m[j][i] * vec[j];
+//     return {res[0], res[1], res[2], res[3]};
+// }
+
 
 typedef struct Descriptor
 {
@@ -60,9 +108,14 @@ typedef struct variable_decleration_entry{
 } variable_decleration_entry;
 
 typedef struct Hit_data{
-    uint32_t geometry_id;
+    uint32_t geometry_index;
+    uint32_t primitive_index;
     float3 intersection_point;
     float3 barycentric_coordinates;
+
+    uint32_t instance_index;
+    float4x4 worldToObjectMatrix;
+    float4x4 objectToWorldMatrix;
 } Hit_data;
 
 typedef struct shader_stage_info {
@@ -71,11 +124,25 @@ typedef struct shader_stage_info {
     char* function_name;
 } shader_stage_info;
 
-
-struct Vulkan_RT_thread_data{
-    std::vector<variable_decleration_entry> variable_decleration_table;
+typedef struct Traversal_data {
     bool hit_geometry;
     Hit_data closest_hit;
+    float3 ray_world_direction;
+    float3 ray_world_origin;
+
+    uint32_t rayFlags;
+    uint32_t cullMask;
+    uint32_t sbtRecordOffset;
+    uint32_t sbtRecordStride;
+    uint32_t missIndex;
+} Traversal_data;
+
+
+typedef struct Vulkan_RT_thread_data {
+    std::vector<variable_decleration_entry> variable_decleration_table;
+
+    std::vector<Traversal_data> traversal_data;
+
 
     variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
         if(type == 8192)
@@ -94,7 +161,7 @@ struct Vulkan_RT_thread_data{
         variable_decleration_entry entry;
         entry.type = type;
         entry.name = name;
-        entry.address = (uint64_t) malloc(size);;
+        entry.address = (uint64_t) malloc(size);
         entry.size = size;
         variable_decleration_table.push_back(entry);
 
@@ -117,7 +184,7 @@ struct Vulkan_RT_thread_data{
         variable_decleration_entry* hitAttribute = get_hitAttribute();
         float* address;
         if(hitAttribute == NULL) {
-            address = (float*)add_variable_decleration_entry(8192, "attribs", 12);
+            address = (float*)add_variable_decleration_entry(8192, "attribs", 36);
         }
         else {
             assert (hitAttribute->type == 8192);
@@ -129,7 +196,7 @@ struct Vulkan_RT_thread_data{
         address[1] = barycentric.y;
         address[2] = barycentric.z;
     }
-};
+} Vulkan_RT_thread_data;
 
 class VulkanRayTracing
 {
@@ -141,6 +208,8 @@ private:
     static std::vector<std::vector<Descriptor> > descriptors;
     static std::ofstream imageFile;
     static bool firstTime;
+public:
+    static RayDebugGPUData rayDebugGPUData[2000][2000];
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
@@ -161,9 +230,11 @@ public:
                        float3 direction,
                        float Tmax,
                        int payload,
-                       uint32_t *hit_geometry,
+                       bool &run_closest_hit,
+                       bool &run_miss,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
+    static void endTraceRay(const ptx_instruction *pI, ptx_thread_info *thread);
     
     static void load_descriptor(const ptx_instruction *pI, ptx_thread_info *thread);
 

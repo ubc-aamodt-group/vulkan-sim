@@ -566,6 +566,19 @@ void ptx_thread_info::dump_regs(FILE *fp) {
   }
 }
 
+ptx_reg_t ptx_thread_info::get_reg(std::string regName) {
+  assert(!m_regs.empty());
+  assert(!m_regs.back().empty());
+  reg_map_t::const_iterator r;
+  for (r = m_regs.back().begin(); r != m_regs.back().end(); ++r) {
+    const symbol *sym = r->first;
+    ptx_reg_t value = r->second;
+    std::string name = sym->name();
+    if(name == regName)
+      return value;
+  }
+}
+
 void ptx_thread_info::dump_modifiedregs(FILE *fp) {
   if (!(m_debug_trace_regs_modified.empty() ||
         m_debug_trace_regs_modified.back().empty())) {

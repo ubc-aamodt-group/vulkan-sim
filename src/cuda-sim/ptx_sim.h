@@ -419,6 +419,7 @@ class ptx_thread_info {
   unsigned get_return_PC() { return m_callstack.back().m_PC; }
   void update_pc() { m_PC = m_NPC; }
   void dump_regs(FILE *fp);
+  ptx_reg_t get_reg(std::string regName);
   void dump_modifiedregs(FILE *fp);
   void clear_modifiedregs() {
     m_debug_trace_regs_modified.back().clear();

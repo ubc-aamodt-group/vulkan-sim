@@ -988,8 +988,6 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
   ptx_reg_t src1_data, src2_data, data;
   int overflow = 0;
   int carry = 0;
@@ -3365,8 +3363,6 @@ void decode_space(memory_space_t &space, ptx_thread_info *thread,
 }
 
 void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
   const operand_info &dst = pI->dst();
   const operand_info &src1 = pI->src1();
 
@@ -4125,8 +4121,6 @@ void min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 static int _count = 0;
 void mov_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst number %d at line %d\n", _count++, pI->source_line());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -4298,8 +4292,6 @@ void mul24_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void mul_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0)
-  //   printf("########## running inst at line %d\n", pI->source_line());
   ptx_reg_t data;
 
   const operand_info &dst = pI->dst();
@@ -5785,7 +5777,7 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   memory_space *mem = NULL;
   addr_t addr = addr_reg.u32;
-  float* address = (float*)(addr_reg.u64);
+  void* address = (void*)(addr_reg.u64);
 
   // decode_space(space, thread, dst, mem, addr);
 
@@ -5796,7 +5788,9 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   if (!vector_spec) {
     data = thread->get_operand_value(src1, dst, type, thread, 1);
     //mem->write(addr, size / 8, &data.s64, thread, pI);
-    *address = data.f32;
+    assert(size == 32);
+    memcpy(address, &data.s64, size / 8);
+    // *address = data.f32;
   } else {
     assert (0);
     if (vector_spec == V2_TYPE) {
@@ -6679,6 +6673,81 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   thread->set_operand_value(src2, data, U32_TYPE, thread, pI);
 }
 
+void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 1);
+  const operand_info &dst = pI->dst();
+
+  ptx_reg_t data;
+  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 1);
+  const operand_info &dst = pI->dst();
+
+  ptx_reg_t data;
+  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.primitive_index;
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 4); // TODO: this is loading identity matrix
+  const operand_info &dst0 = pI->dst();
+  const operand_info &dst1 = pI->src1();
+  const operand_info &dst2 = pI->src2();
+  const operand_info &src = pI->src3();
+
+  ptx_reg_t data[3];
+  ptx_reg_t src_data;
+
+  src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
+
+  for(int i = 0; i < 3; i++)
+    data[i].f32 = thread->RT_thread_data->traversal_data.back().closest_hit.worldToObjectMatrix.m[src_data.u32][i];
+
+  thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst2, data[2], F32_TYPE, thread, pI);
+}
+
+void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 4); // TODO: this is loading identity matrix
+  const operand_info &dst0 = pI->dst();
+  const operand_info &dst1 = pI->src1();
+  const operand_info &dst2 = pI->src2();
+  const operand_info &src = pI->src3();
+
+  ptx_reg_t data[3];
+  ptx_reg_t src_data;
+
+  src_data = thread->get_operand_value(src, dst0, U32_TYPE, thread, 1);
+
+  for(int i = 0; i < 3; i++)
+    data[i].f32 = thread->RT_thread_data->traversal_data.back().closest_hit.objectToWorldMatrix.m[src_data.u32][i];;
+
+  thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst2, data[2], F32_TYPE, thread, pI);
+}
+
+void load_ray_world_direction_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 3);
+  const operand_info &dst0 = pI->dst();
+  const operand_info &dst1 = pI->src1();
+  const operand_info &dst2 = pI->src2();
+
+  ptx_reg_t data;
+  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.x;
+  thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
+
+  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.y;
+  thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
+
+  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.z;
+  thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
+}
+
 void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   inst_not_implemented(pI);
 }
@@ -6736,29 +6805,29 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   arg++;
   const operand_info &op2 = pI->operand_lookup(arg);
-  ptx_reg_t op2_data = thread->get_operand_value(op2, op2, F32_TYPE, thread, 1);
-  uint rayFlags = (uint)(op2_data.f32);
+  ptx_reg_t op2_data = thread->get_operand_value(op2, op2, U32_TYPE, thread, 1);
+  uint rayFlags = op2_data.u32;
 
 
   arg++;
   const operand_info &op3 = pI->operand_lookup(arg);
-  ptx_reg_t op3_data = thread->get_operand_value(op3, op3, F32_TYPE, thread, 1);
-  uint cullMask = (uint)(op3_data.f32);
+  ptx_reg_t op3_data = thread->get_operand_value(op3, op3, U32_TYPE, thread, 1);
+  uint cullMask = op3_data.u32;
 
   arg++;
   const operand_info &op4 = pI->operand_lookup(arg);
-  ptx_reg_t op4_data = thread->get_operand_value(op4, op4, F32_TYPE, thread, 1);
-  uint sbtRecordOffset = (uint)(op4_data.f32);
+  ptx_reg_t op4_data = thread->get_operand_value(op4, op4, U32_TYPE, thread, 1);
+  uint sbtRecordOffset = op4_data.u32;
 
   arg++;
   const operand_info &op5 = pI->operand_lookup(arg);
-  ptx_reg_t op5_data = thread->get_operand_value(op5, op5, F32_TYPE, thread, 1);
-  uint sbtRecordStride = (uint)(op5_data.f32);
+  ptx_reg_t op5_data = thread->get_operand_value(op5, op5, U32_TYPE, thread, 1);
+  uint sbtRecordStride = op5_data.u32;
 
   arg++;
   const operand_info &op6 = pI->operand_lookup(arg);
-  ptx_reg_t op6_data = thread->get_operand_value(op6, op6, F32_TYPE, thread, 1);
-  uint missIndex = (uint)(op6_data.f32);
+  ptx_reg_t op6_data = thread->get_operand_value(op6, op6, U32_TYPE, thread, 1);
+  uint missIndex = op6_data.u32;
 
   arg++;
   const operand_info &op7 = pI->operand_lookup(arg);
@@ -6807,7 +6876,11 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   arg++;
   const operand_info &op16 = pI->operand_lookup(arg);
-  ptx_reg_t hit_geometry;
+  bool run_closest_hit;
+
+  arg++;
+  const operand_info &op17 = pI->operand_lookup(arg);
+  bool run_miss;
 
   // thread->dump_regs(stdout);
 
@@ -6817,12 +6890,22 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
                    {directionX, directionY, directionZ},
                    Tmax,
                    NULL,
-                   &(hit_geometry.u32),
+                   run_closest_hit,
+                   run_miss,
                    pI,
                    thread);
   
+  ptx_reg_t data;
 
-  thread->set_operand_value(op16, hit_geometry, U32_TYPE, thread, pI);
+  data.u32 = run_closest_hit;
+  thread->set_operand_value(op16, data, PRED_TYPE, thread, pI);
+
+  data.u32 = run_miss;
+  thread->set_operand_value(op17, data, PRED_TYPE, thread, pI);
+}
+
+void end_trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VulkanRayTracing::endTraceRay(pI, thread);
 }
 
 // VkAccelerationStructureKHR* _topLevelAS,
@@ -6839,9 +6922,48 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 // const ptx_instruction *pI,
 // ptx_thread_info *thread
 
+void call_pc_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  inst_not_implemented(pI);
+  static unsigned call_uid_next = 1;
+
+  const operand_info &target = pI->dst();
+  ptx_reg_t target_pc =
+      thread->get_operand_value(target, target, U32_TYPE, thread, 1);
+
+  const symbol *return_var_src = NULL;
+  const symbol *return_var_dst = NULL;
+
+  gpgpu_sim *gpu = thread->get_gpu();
+  unsigned callee_pc = 0, callee_rpc = 0;
+  /*if (gpu->simd_model() == POST_DOMINATOR)*/ {
+    thread->get_core()->get_pdom_stack_top_info(thread->get_hw_wid(),
+                                                &callee_pc, &callee_rpc);
+    assert(callee_pc == thread->get_pc());
+  }
+
+  thread->callstack_push_plus(callee_pc + pI->inst_size(), callee_rpc,
+                              return_var_src, return_var_dst, call_uid_next++);
+  thread->set_npc(target_pc);
+}
+
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    // {
+    //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+    //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+    //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+    //   fflush(stdout);
+    // }
+  
+  // const operand_info &dst = pI->dst();
+  
   VulkanRayTracing::callMissShader(pI, thread);
   // printf("calling miss shader\n");
+
+  // ptx_reg_t data;
+  // data.u32 = pc;
+  // thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {

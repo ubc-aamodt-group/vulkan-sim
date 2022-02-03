@@ -159,6 +159,22 @@ GEN_RT_BVH_INTERNAL_NODE_unpack(struct GEN_RT_BVH_INTERNAL_NODE* dst,
 }
 
 
+float4x4 instance_leaf_matrix_to_float4x4(float* address)
+{
+   float4x4 matrix;
+   for(int i = 0; i < 4; i++)
+   {
+      for(int j = 0; j < 3; j++)
+      {
+         matrix.m[i][j] = *address;
+         address++;
+      }
+      matrix.m[i][3] = 0;
+   }
+   matrix.m[3][3] = 1;
+   return matrix;
+}
+
 #define GEN_RT_BVH_INSTANCE_LEAF_length       32
 struct GEN_RT_BVH_INSTANCE_LEAF {
    uint32_t                             ShaderIndex;

@@ -232,6 +232,11 @@ struct Ray
     printf("Direction: %f %f %f \tOrigin: %f %f %f\tTmin: %f\tTmax: %f\n", dir_tmax.x, dir_tmax.y, dir_tmax.z, origin_tmin.x, origin_tmin.y, origin_tmin.z, origin_tmin.w, dir_tmax.w);
   }
 
+  float3 at(float t)
+  {
+    return {origin_tmin.x + dir_tmax.x * t, origin_tmin.y + dir_tmax.y * t, origin_tmin.z + dir_tmax.z * t};
+  }
+
   void make_ray(float3 o, float3 d, float t_min, float t_max)
   {
     origin_tmin.x = o.x;
