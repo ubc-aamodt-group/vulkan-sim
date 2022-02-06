@@ -35,6 +35,17 @@ namespace fs = boost::filesystem;
 #include "../stream_manager.h"
 #include "../abstract_hardware_model.h"
 #include "vulkan_acceleration_structure_util.h"
+#include "astc_decomp.h"
+
+#define HAVE_PTHREAD
+#define UTIL_ARCH_LITTLE_ENDIAN 1
+#define UTIL_ARCH_BIG_ENDIAN 0
+#define signbit signbit
+
+#define UINT_MAX 65535
+#define GLuint MESA_GLuint
+#include "vulkan/anv_private.h"
+#undef GLuint
 
 VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
@@ -45,6 +56,7 @@ std::ofstream VulkanRayTracing::imageFile;
 bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
 RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
+struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
 
 float get_norm(float4 v)
 {
@@ -164,6 +176,97 @@ typedef struct StackEntry {
     StackEntry(uint8_t* addr, bool topLevel, bool leaf): addr(addr), topLevel(topLevel), leaf(leaf) {}
 } StackEntry;
 
+bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& path, bool isTopLevel = true, bool isLeaf = false, bool isRoot = true)
+{
+    path.push_back(address);
+
+    if(isRoot)
+    {
+        GEN_RT_BVH topBVH; //TODO: test hit with world before traversal
+        GEN_RT_BVH_unpack(&topBVH, (uint8_t*)address);
+
+        uint8_t* topRootAddr = (uint8_t*)address + topBVH.RootNodeOffset;
+
+        if(find_primitive(topRootAddr, primitiveID, path, isTopLevel, false, false))
+            return true;
+    }
+    
+    else if(!isLeaf) // internal nodes
+    {
+        struct GEN_RT_BVH_INTERNAL_NODE node;
+        GEN_RT_BVH_INTERNAL_NODE_unpack(&node, address);
+
+        uint8_t *child_addr = address + (node.ChildOffset * 64);
+        for(int i = 0; i < 6; i++)
+        {
+            if(node.ChildSize[i] > 0)
+            {
+                if(node.ChildType[i] != NODE_TYPE_INTERNAL)
+                    isLeaf = true;
+                else
+                    isLeaf = false;
+
+                if(find_primitive(child_addr, primitiveID, path, isTopLevel, isLeaf, false))
+                    return true;
+            }
+
+            child_addr += node.ChildSize[i] * 64;
+        }
+    }
+
+    else // leaf nodes
+    {
+        if(isTopLevel)
+        {
+            GEN_RT_BVH_INSTANCE_LEAF instanceLeaf;
+            GEN_RT_BVH_INSTANCE_LEAF_unpack(&instanceLeaf, address);
+
+            float4x4 worldToObjectMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.WorldToObjectm00);
+            float4x4 objectToWorldMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.ObjectToWorldm00);
+
+            assert(instanceLeaf.BVHAddress != NULL);
+            if(find_primitive(instanceLeaf.BVHAddress, primitiveID, path, false, false, true))
+                return true;
+        }
+        else
+        {
+            struct GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR leaf_descriptor;
+            GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_unpack(&leaf_descriptor, address);
+            
+            if (leaf_descriptor.LeafType == TYPE_QUAD)
+            {
+                struct GEN_RT_BVH_QUAD_LEAF leaf;
+                GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, address);
+
+                float3 p[3];
+                for(int i = 0; i < 3; i++)
+                {
+                    p[i].x = leaf.QuadVertex[i].X;
+                    p[i].y = leaf.QuadVertex[i].Y;
+                    p[i].z = leaf.QuadVertex[i].Z;
+                }
+
+                assert(leaf.PrimitiveIndex1Delta == 0);
+
+                if(leaf.PrimitiveIndex0 == primitiveID)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                printf("sth is wrong here\n");
+            }
+        }
+    }
+
+    path.pop_back();
+    return false;
+}
+
+
+bool debugTraversal = false;
+
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
                    uint cullMask,
@@ -189,6 +292,17 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     traversal_data.sbtRecordOffset = sbtRecordOffset;
     traversal_data.sbtRecordStride = sbtRecordStride;
     traversal_data.missIndex = missIndex;
+
+    std::ofstream traversalFile;
+
+    if (debugTraversal)
+    {
+        traversalFile.open("traversal.txt");
+        traversalFile << "starting traversal\n";
+        traversalFile << "origin = (" << origin.x << ", " << origin.y << ", " << origin.z << "), ";
+        traversalFile << "direction = (" << direction.x << ", " << direction.y << ", " << direction.z << "), ";
+        traversalFile << "tmin = " << Tmin << ", tmax = " << Tmax << std::endl << std::endl;
+    }
 
 
     bool terminateOnFirstHit = rayFlags & SpvRayFlagsTerminateOnFirstHitKHRMask;
@@ -241,6 +355,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
             transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
 
+            if (debugTraversal)
+            {
+                traversalFile << "traversing top level internal node " << (void *)node_addr << "\n";
+            }
+
             bool child_hit[6];
             float thit[6];
             for(int i = 0; i < 6; i++)
@@ -253,6 +372,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
                     child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
                     child_hit[i] = true;
+                    
+                    if (debugTraversal)
+                    {
+                        if(child_hit[i])
+                            traversalFile << "hit child number " << i << ", ";
+                        else
+                            traversalFile << "missed child number " << i << ", ";
+                        traversalFile << "lo = (" << lo.x << ", " << lo.y << ", " << lo.z << "), ";
+                        traversalFile << "hi = (" << hi.x << ", " << hi.y << ", " << hi.z << ")" << std::endl;
+                    }
                 }
                 else
                     child_hit[i] = false;
@@ -263,6 +392,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             {
                 if(child_hit[i])
                 {
+                    if (debugTraversal)
+                    {
+                        traversalFile << "add child node " << (void *)child_addr << ", child number " << i << ", type " << node.ChildType[i] << ", to stack" << std::endl;
+                    }
                     if(node.ChildType[i] != NODE_TYPE_INTERNAL)
                     {
                         assert(node.ChildType[i] == NODE_TYPE_INSTANCE);
@@ -276,7 +409,19 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             stack.push_back(StackEntry(child_addr, true, false));
                     }
                 }
+                else
+                {
+                    if (debugTraversal)
+                    {
+                        traversalFile << "ignoring missed node " << (void *)child_addr << ", child number " << i << ", type " << node.ChildType[i] << std::endl;
+                    }
+                }
                 child_addr += node.ChildSize[i] * 64;
+            }
+
+            if (debugTraversal)
+            {
+                traversalFile << std::endl;
             }
         }
 
@@ -303,7 +448,17 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             float worldToObject_tMultiplier;
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
 
-            stack.push_back(StackEntry(((uint8_t *)(instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset, false, false));
+            uint8_t * botLevelRootAddr = ((uint8_t *)(instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
+            stack.push_back(StackEntry(botLevelRootAddr, false, false));
+
+            if (debugTraversal)
+            {
+                traversalFile << "traversing top level leaf node " << (void *)leaf_addr << ", child bot root " << (void *)botLevelRootAddr << std::endl;
+                traversalFile << "warped ray to object coordinates ";
+                traversalFile << "origin = (" << objectRay.get_origin().x << ", " << objectRay.get_origin().y << ", " << objectRay.get_origin().z << "), ";
+                traversalFile << "direction = (" << objectRay.get_direction().x << ", " << objectRay.get_direction().y << ", " << objectRay.get_direction().z << "), ";
+                traversalFile << "tmin = " << objectRay.get_tmin() << ", tmax = " << objectRay.get_tmax() << std::endl << std::endl;
+            }
 
             // traverse bottom level tree
             while (!stack.empty() && !stack.back().topLevel)
@@ -322,6 +477,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
                     transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
 
+                    if (debugTraversal)
+                    {
+                        traversalFile << "traversing bot level internal node " << (void *)node_addr << "\n";
+                    }
+
                     bool child_hit[6];
                     float thit[6];
                     for(int i = 0; i < 6; i++)
@@ -333,6 +493,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             set_child_bounds(&node, i, &lo, &hi);
 
                             child_hit[i] = ray_box_test(lo, hi, idir, objectRay.get_origin(), objectRay.get_tmin(), objectRay.get_tmax(), thit[i]);
+
+                            if (debugTraversal)
+                            {
+                                if(child_hit[i])
+                                    traversalFile << "hit child number " << i << ", ";
+                                else
+                                    traversalFile << "missed child number " << i << ", ";
+                                traversalFile << "lo = (" << lo.x << ", " << lo.y << ", " << lo.z << "), ";
+                                traversalFile << "hi = (" << hi.x << ", " << hi.y << ", " << hi.z << ")" << std::endl;
+                            }
                         }
                         else
                             child_hit[i] = false;
@@ -343,6 +513,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     {
                         if(child_hit[i])
                         {
+                            if (debugTraversal)
+                            {
+                                traversalFile << "add child node " << (void *)child_addr << ", child number " << i << ", type " << node.ChildType[i] << ", to stack" << std::endl;
+                            }
+
                             if(node.ChildType[i] != NODE_TYPE_INTERNAL)
                             {
                                 stack.push_back(StackEntry(child_addr, false, true));
@@ -355,7 +530,19 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                                     stack.push_back(StackEntry(child_addr, false, false));
                             }
                         }
+                        else
+                        {
+                            if (debugTraversal)
+                            {
+                                traversalFile << "ignoring missed node " << (void *)child_addr << ", child number " << i << ", type " << node.ChildType[i] << std::endl;
+                            }
+                        }
                         child_addr += node.ChildSize[i] * 64;
+                    }
+
+                    if (debugTraversal)
+                    {
+                        traversalFile << std::endl;
                     }
                 }
 
@@ -386,8 +573,29 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         float thit;
                         bool hit = VulkanRayTracing::mt_ray_triangle_test(p[0], p[1], p[2], objectRay, &thit);
 
+                        assert(leaf.PrimitiveIndex1Delta == 0);
+
+                        if (debugTraversal)
+                        {
+                            if(hit)
+                                traversalFile << "hit quad node " << (void *)leaf_addr << " with thit " << thit << " ";
+                            else
+                                traversalFile << "miss quad node " << leaf_addr << " ";
+                            traversalFile << "primitiveID = " << leaf.PrimitiveIndex0 << "\n";
+
+                            traversalFile << "p[0] = (" << p[0].x << p[0].y << p[0].z << ") ";
+                            traversalFile << "p[1] = (" << p[1].x << p[1].y << p[1].z << ") ";
+                            traversalFile << "p[2] = (" << p[2].x << p[2].y << p[2].z << ") ";
+                            traversalFile << "p[3] = (" << p[3].x << p[3].y << p[3].z << ")" << std::endl;
+                        }
+
                         if(hit && thit / worldToObject_tMultiplier < min_thit)
                         {
+                            if (debugTraversal)
+                            {
+                                traversalFile << "quad node " << (void *)leaf_addr << ", primitiveID " << leaf.PrimitiveIndex0 << " is the closest hit. world_thit " << thit / worldToObject_tMultiplier;
+                            }
+
                             min_thit = thit / worldToObject_tMultiplier;
                             closest_leaf = leaf;
                             closest_instanceLeaf = instanceLeaf;
@@ -401,12 +609,18 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                                 stack.clear();
                             }
                         }
+
+                        if (debugTraversal)
+                        {
+                            traversalFile << std::endl;
+                        }
                     }
                     else
                     {
                         struct GEN_RT_BVH_PROCEDURAL_LEAF leaf;
                         GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, leaf_addr);
                         transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PROCEDURAL_LEAF_length * 4, TransactionType::BVH_PROCEDURAL_LEAF));
+                        assert(0);
                     }
                 }
             }
@@ -420,10 +634,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         traversal_data.closest_hit.instance_index = closest_instanceLeaf.InstanceID;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
-        assert(intersection_point.x == ray.at(min_thit).x && intersection_point.y == ray.at(min_thit).y && intersection_point.z == ray.at(min_thit).z);
+        // assert(intersection_point.x == ray.at(min_thit).x && intersection_point.y == ray.at(min_thit).y && intersection_point.z == ray.at(min_thit).z);
         traversal_data.closest_hit.intersection_point = intersection_point;
         traversal_data.closest_hit.worldToObjectMatrix = closest_worldToObject;
         traversal_data.closest_hit.objectToWorldMatrix = closest_objectToWorld;
+        traversal_data.closest_hit.world_min_thit = min_thit;
 
         float3 p[3];
         for(int i = 0; i < 3; i++)
@@ -450,6 +665,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     
     thread->RT_thread_data->traversal_data.push_back(traversal_data);
+
+    if (debugTraversal)
+    {
+        traversalFile.close();
+    }
 }
 
 void VulkanRayTracing::endTraceRay(const ptx_instruction *pI, ptx_thread_info *thread)
@@ -533,6 +753,11 @@ void VulkanRayTracing::setAccelerationStructure(VkAccelerationStructureKHR accel
     VulkanRayTracing::topLevelAS = accelerationStructure;
 }
 
+void VulkanRayTracing::setDescriptorSet(struct anv_descriptor_set *set)
+{
+    VulkanRayTracing::descriptorSet = set;
+}
+
 static bool invoked = false;
 
 void copyHardCodedShaders()
@@ -546,11 +771,11 @@ void copyHardCodedShaders()
     // src.close();
     // dst.close();
     
-    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
-    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_3.ptx", std::ios::binary);
-    // dst << src.rdbuf();
-    // src.close();
-    // dst.close();
+    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
+    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
 
     // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
     // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
@@ -713,6 +938,8 @@ void VulkanRayTracing::invoke_gpgpusim()
     }
 }
 
+int CmdTraceRaysKHRID = 0;
+
 void VulkanRayTracing::vkCmdTraceRaysKHR(
                       void *raygen_sbt,
                       void *miss_sbt,
@@ -723,34 +950,41 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
-    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    
+    CmdTraceRaysKHRID++;
+    if(CmdTraceRaysKHRID != 1)
+        return;
+
+    if(imageFile.is_open())
+        return;
+    imageFile.open("image.binary", std::ios::out | std::ios::binary);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
-    {
-        std::ifstream infile("debug_printf.log");
-        std::string line;
-        while (std::getline(infile, line))
-        {
-            if(line == "")
-                continue;
+    // {
+    //     std::ifstream infile("debug_printf.log");
+    //     std::string line;
+    //     while (std::getline(infile, line))
+    //     {
+    //         if(line == "")
+    //             continue;
 
-            RayDebugGPUData data;
-            // sscanf(line.c_str(), "LaunchID:(%d,%d), InstanceCustomIndex = %d, primitiveID = %d, v0 = (%f, %f, %f), v1 = (%f, %f, %f), v2 = (%f, %f, %f), hitAttribute = (%f, %f), normalWorld = (%f, %f, %f), objectIntersection = (%f, %f, %f), worldIntersection = (%f, %f, %f), objectNormal = (%f, %f, %f), worldNormal = (%f, %f, %f), NdotL = %f",
-            //             &data.launchIDx, &data.launchIDy, &data.instanceCustomIndex, &data.primitiveID, &data.v0pos.x, &data.v0pos.y, &data.v0pos.z, &data.v1pos.x, &data.v1pos.y, &data.v1pos.z, &data.v2pos.x, &data.v2pos.y, &data.v2pos.z, &data.attribs.x, &data.attribs.y, &data.N.x, &data.N.y, &data.N.z, &data.P_object.x, &data.P_object.y, &data.P_object.z, &data.P.x, &data.P.y, &data.P.z, &data.N_object.x, &data.N_object.y, &data.N_object.z, &data.N.x, &data.N.y, &data.N.z, &data.NdotL);
-            sscanf(line.c_str(), "launchID = (%d, %d), hitValue = (%f, %f, %f)",
-                        &data.launchIDx, &data.launchIDy, &data.hitValue.x, &data.hitValue.y, &data.hitValue.z);
-            data.valid = true;
-            assert(data.launchIDx < 2000 && data.launchIDy < 2000);
-            // printf("#### (%d, %d)\n", data.launchIDx, data.launchIDy);
-            // fflush(stdout);
-            rayDebugGPUData[data.launchIDx][data.launchIDy] = data;
+    //         RayDebugGPUData data;
+    //         // sscanf(line.c_str(), "LaunchID:(%d,%d), InstanceCustomIndex = %d, primitiveID = %d, v0 = (%f, %f, %f), v1 = (%f, %f, %f), v2 = (%f, %f, %f), hitAttribute = (%f, %f), normalWorld = (%f, %f, %f), objectIntersection = (%f, %f, %f), worldIntersection = (%f, %f, %f), objectNormal = (%f, %f, %f), worldNormal = (%f, %f, %f), NdotL = %f",
+    //         //             &data.launchIDx, &data.launchIDy, &data.instanceCustomIndex, &data.primitiveID, &data.v0pos.x, &data.v0pos.y, &data.v0pos.z, &data.v1pos.x, &data.v1pos.y, &data.v1pos.z, &data.v2pos.x, &data.v2pos.y, &data.v2pos.z, &data.attribs.x, &data.attribs.y, &data.N.x, &data.N.y, &data.N.z, &data.P_object.x, &data.P_object.y, &data.P_object.z, &data.P.x, &data.P.y, &data.P.z, &data.N_object.x, &data.N_object.y, &data.N_object.z, &data.N.x, &data.N.y, &data.N.z, &data.NdotL);
+    //         sscanf(line.c_str(), "launchID = (%d, %d), hitValue = (%f, %f, %f)",
+    //                     &data.launchIDx, &data.launchIDy, &data.hitValue.x, &data.hitValue.y, &data.hitValue.z);
+    //         data.valid = true;
+    //         assert(data.launchIDx < 2000 && data.launchIDy < 2000);
+    //         // printf("#### (%d, %d)\n", data.launchIDx, data.launchIDy);
+    //         // fflush(stdout);
+    //         rayDebugGPUData[data.launchIDx][data.launchIDy] = data;
 
-        }
-    }
+    //     }
+    // }
 
-    printf("new vkCmdTraceRaysKHR\n");
-    // return;
+    struct anv_descriptor desc;
+    desc.image_view = NULL;
 
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
@@ -787,8 +1021,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 512;
-    // launch_height = 512;
+    // launch_width = 32;
+    // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
@@ -817,7 +1051,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
     ctx->the_gpgpusim->g_stream_manager->push(op);
 
-    printf("%d\n", descriptors[0][1].address);
+    //printf("%d\n", descriptors[0][1].address);
 
     while(!op.is_done() && !op.get_kernel()->done()) {
         printf("waiting for op to finish\n");
@@ -1011,30 +1245,200 @@ void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *addr
     descriptors[setID][descID].type = type;
 }
 
-void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t descID)
+void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
 {
-    assert(setID < descriptors.size());
-    assert(descID < descriptors[setID].size());
+    // assert(setID < descriptors.size());
+    // assert(binding < descriptors[setID].size());
+    
+    struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
 
-    return descriptors[setID][descID].address;
+    const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
+    struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+    void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+
+    assert(desc->type == bind_layout->type);
+    
+    switch (desc->type)
+    {
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        {
+            assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
+            assert(desc->sampler == NULL);
+
+            struct anv_image_view *image_view = desc->image_view;
+            assert(image_view != NULL);
+            struct anv_image * image = image_view->image;
+            void* address = anv_address_map(image->planes[0].address);
+            return address;
+        }
+        case VK_DESCRIPTOR_TYPE_SAMPLER:
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+        {
+            return desc;
+        }
+
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            assert(0);
+            break;
+
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+        {
+            if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            {
+                // MRS_TODO: account for desc->offset?
+                return anv_address_map(desc->buffer->address);
+            }
+            else
+            {
+                struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
+                return anv_address_map(bview->address);
+            }
+        }
+
+        case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+            assert(0);
+            break;
+
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+        {
+            struct anv_address_range_descriptor *desc_data = desc_map;
+            return (void *)(desc_data->address);
+        }
+
+        default:
+            assert(0);
+            break;
+    }
+
+    // return descriptors[setID][binding].address;
+}
+
+void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3)
+{
+    struct anv_image_view *image_view =  desc->image_view;
+    struct anv_sampler *sampler = desc->sampler;
+
+    const struct anv_image *image = image_view->image;
+    uint8_t* address = anv_address_map(image->planes[0].address);
+
+    int x_int = x; //MRS_TODO: change this to NN or bilinear
+    if(x_int < 0)
+        x_int = 0;
+    int y_int = y;
+    if(y_int < 0)
+        y_int = 0;
+    switch(image->vk_format)
+    {
+        case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
+        {
+            int blockX = x_int / 8;
+            int blockY = y_int / 8;
+
+            uint32_t block_offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
+            assert(block_offset < image->planes[0].size);
+            assert(block_offset >= 0);
+
+            uint8_t dst_colors[256];
+            basisu::astc::decompress(dst_colors, address + block_offset, true, 8, 8);
+            uint8_t* pixel_color = &dst_colors[0] + (x_int % 8 + (y_int % 8) * 8) * 4;
+
+            c0 = pixel_color[0] / 255.0;
+            c1 = pixel_color[1] / 255.0;
+            c2 = pixel_color[2] / 255.0;
+            c3 = pixel_color[3] / 255.0;
+            break;
+        }
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        {
+            uint32_t offset = (x * image->extent.height + y) * 4;
+            c0 = address[offset + 2] / 255.0;
+            c1 = address[offset + 1] / 255.0;
+            c2 = address[offset] / 255.0;
+            c3 = address[offset + 3] / 255.0;
+            break;
+        }
+        case VK_FORMAT_R8G8B8A8_SRGB:
+        {
+            uint32_t offset = (x * image->extent.height + y) * 4;
+            c0 = address[offset] / 255.0;
+            c1 = address[offset + 1] / 255.0;
+            c2 = address[offset + 2] / 255.0;
+            c2 = address[offset + 3] / 255.0;
+            break;
+        }
+        // case VK_FORMAT_D32_SFLOAT:
+        default:
+            printf("%d not implemented\n", image->vk_format);
+            assert(0);
+            break;
+    }
+
+    // printf("writing image with extant = (%d, %d)\n", image->extent.height, image->extent.width);
+
+    // for(int x = 0; x < image->extent.width; x++)
+    // {
+    //     for(int y = 0; y < image->extent.height; y++)
+    //     {
+    //         int blockX = x / 8;
+    //         int blockY = y / 8;
+
+    //         uint32_t offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
+
+    //         uint8_t dst_colors[100];
+    //         basisu::astc::decompress(dst_colors, address + offset, true, 8, 8);
+    //         uint8_t* pixel_color = &dst_colors[0] + (x % 8 + (y % 8) * 8) * 4;
+
+    //         uint32_t bit_map_offset = x + y * image->extent.width;
+
+    //         float data[4];
+    //         data[0] = pixel_color[0] / 255.0;
+    //         data[1] = pixel_color[1] / 255.0;
+    //         data[2] = pixel_color[2] / 255.0;
+    //         data[3] = pixel_color[3] / 255.0;
+    //         imageFile.write((char*) data, 3 * sizeof(float));
+    //         imageFile.write((char*) (&bit_map_offset), sizeof(uint32_t));
+    //         imageFile.flush();
+    //     }
+    // }
+    // exit(-1);
+
+    // uint32_t offset = (x * image->extent.height + y) * 4;
+    // if(offset < 0)
+    //     offset = 0;
+    // if(offset >= image->size)
+    //     offset = image->size - 1;
+
+    // c0 = address[offset] / 255.0;
+    // c1 = address[offset + 1] / 255.0;
+    // c2 = address[offset + 2] / 255.0;
 }
 
 void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
+    // if(hitValue_X != 0 || hitValue_Y != 0 || hitValue_Z != 0)
+    //     printf("image store (%f, %f, %f)\n", hitValue_X, hitValue_Y, hitValue_Z);
     uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
     uint32_t offset = 0;
     offset += gl_LaunchIDEXT_Y * image_width;
     offset += gl_LaunchIDEXT_X;
 
-    // float data[4];
-    // data[0] = hitValue_X;
-    // data[1] = hitValue_Y;
-    // data[2] = hitValue_Z;
-    // data[3] = hitValue_W;
-    // imageFile.write((char*) data, 3 * sizeof(float));
-    // imageFile.write((char*) (&offset), sizeof(uint32_t));
-    // imageFile.flush();
+    float data[4];
+    data[0] = hitValue_X;
+    data[1] = hitValue_Y;
+    data[2] = hitValue_Z;
+    data[3] = hitValue_W;
+    imageFile.write((char*) data, 3 * sizeof(float));
+    imageFile.write((char*) (&offset), sizeof(uint32_t));
+    imageFile.flush();
 
     // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
     //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
