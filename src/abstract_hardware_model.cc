@@ -1806,6 +1806,12 @@ void simt_splits_table::print (FILE *fout) {
     }
 
     GPGPU_Context()->func_sim->ptx_print_insn( splits_table_entry.m_pc, fout );
+
+    if (splits_table_entry.m_recvg_entry == (unsigned)-1) {
+      fprintf(fout," recvg_entry: ----      ");
+    } else {
+      fprintf(fout," recvg_entry: 0x%03x    ", splits_table_entry.m_recvg_entry);
+    }
     fprintf(fout,"\n");
   }
 }
@@ -2098,6 +2104,11 @@ splits_table_entry_type simt_reconvergence_table::get_type(unsigned num) {
   return m_recvg_table[num].m_type;
 }
 
+splits_table_entry_type simt_reconvergence_table::get_type() {
+  assert(m_recvg_table.find(m_active_reconvergence) != m_recvg_table.end());
+  return m_recvg_table[m_active_reconvergence].m_type;
+}
+
 unsigned simt_reconvergence_table::get_rpc() {
   assert(m_recvg_table.find(m_active_reconvergence) != m_recvg_table.end());
   return m_recvg_table[m_active_reconvergence].m_recvg_pc;
@@ -2166,6 +2177,11 @@ void simt_reconvergence_table::print (FILE *fout) {
       fprintf(fout," rp: 0x%03x     %s", recvg_table_entry.m_recvg_pc, (recvg_table_entry.m_valid==true?" V ":" N "));
     }
     GPGPU_Context()->func_sim->ptx_print_insn( recvg_table_entry.m_pc, fout );
+    if (recvg_table_entry.m_recvg_entry == (unsigned)-1) {
+      fprintf(fout," rp: ----       ");
+    } else {
+      fprintf(fout," rp: 0x%03x     ", recvg_table_entry.m_recvg_entry);
+    }
     fprintf(fout,"\n");
   }
 }
@@ -2384,8 +2400,17 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
         // Since call is not a divergent instruction, all threads should have executed a call instruction
         assert(num_divergent_paths == 1);
 
+        // Move top entry to the reconvergence table
+        new_recvg_entry = m_simt_recvg_table->insert_new_entry(top_pc, top_recvg_pc, top_recvg_entry, top_active_mask_keep, SPLITS_TABLE_ENTRY_TYPE_NORMAL);
+        assert(new_recvg_entry != (unsigned)-1);
+        
+        m_simt_splits_table->invalidate();
+        m_simt_splits_table->update_active_entry();
+
+        // Create a new entry for the CALL_OPS
         simt_splits_table_entry new_st_entry;
         new_st_entry.m_pc = tmp_next_pc;
+        new_st_entry.m_recvg_entry = new_recvg_entry;
         new_st_entry.m_active_mask = tmp_active_mask;
         new_st_entry.m_branch_div_cycle = gpgpusim_total_cycles;
         new_st_entry.m_type = SPLITS_TABLE_TYPE_CALL;
@@ -2394,17 +2419,28 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
       } else if (next_inst_op == RET_OPS && top_type == SPLITS_TABLE_TYPE_CALL) {
         // pop the CALL Entry
         assert(num_divergent_paths == 1);
+        top_recvg_entry = m_simt_splits_table->get_rpc_entry();
         m_simt_splits_table->invalidate();
         m_simt_splits_table->update_active_entry();
-        simt_splits_table_entry new_st_entry;
-        new_st_entry.m_pc = tmp_next_pc;
-        new_st_entry.m_recvg_pc = top_recvg_pc;
-        new_st_entry.m_recvg_entry = top_recvg_entry;
-        new_st_entry.m_active_mask = tmp_active_mask;
-        new_st_entry.m_branch_div_cycle = gpgpusim_total_cycles;
-        new_st_entry.m_type = SPLITS_TABLE_TYPE_CALL;
-        m_simt_splits_table->insert_new_entry(new_st_entry);
-        return;
+
+        // Move reconvergence entry back to splits table
+        simt_mask_t  active_mask =  m_simt_recvg_table->get_active_mask(new_recvg_entry);
+        address_type pc = m_simt_recvg_table->get_pc(new_recvg_entry);
+        address_type rpc = m_simt_recvg_table->get_rpc(new_recvg_entry);
+        unsigned rpc_entry = m_simt_recvg_table->get_rpc_entry(top_recvg_entry);
+        splits_table_entry_type type = m_simt_recvg_table->get_type(new_recvg_entry);
+        m_simt_splits_table->insert_new_entry(pc, rpc, rpc_entry, active_mask, type, true);
+
+        // Update top entry
+        top_recvg_pc = m_simt_splits_table->get_rpc();
+        top_pc = m_simt_splits_table->get_pc();
+
+        // Invalidate reconvergence entry
+        bool suspended = false;
+        m_simt_recvg_table->update_pending_mask(top_recvg_entry, top_pc, active_mask, suspended);
+        top_recvg_entry = m_simt_splits_table->get_rpc_entry();
+
+        // Do not return in case there is further reconvergence
       }
     }
 

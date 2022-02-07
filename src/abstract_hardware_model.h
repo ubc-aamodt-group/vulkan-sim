@@ -1651,6 +1651,7 @@ class simt_reconvergence_table{
     unsigned get_rpc();
     unsigned get_rpc_entry(unsigned num);
     splits_table_entry_type get_type(unsigned num);
+    splits_table_entry_type get_type();
     unsigned get_rpc_entry();
     unsigned get_pc(unsigned num);
     unsigned get_pc();
