@@ -850,6 +850,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     printf("%d\n", descriptors[0][1].address);
 
+    fflush(stdout);
+
     while(!op.is_done() && !op.get_kernel()->done()) {
         printf("waiting for op to finish\n");
         sleep(1);

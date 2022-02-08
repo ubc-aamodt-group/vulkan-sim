@@ -57,8 +57,6 @@ void *gpgpu_sim_thread_sequential(void *ctx_ptr) {
         ctx->the_gpgpusim->g_the_gpu->cycle();
         ctx->the_gpgpusim->g_the_gpu->deadlock_check();
       }
-      // TODO-LUCY: Fix this global variable and find out if it's necessary
-      // g_ptx_thread_info_uid_next = 0;
       ctx->the_gpgpusim->g_the_gpu->print_stats();
       ctx->the_gpgpusim->g_the_gpu->update_stats();
       ctx->print_simulation_time();
@@ -150,6 +148,7 @@ void *gpgpu_sim_thread_concurrent(void *ctx_ptr) {
       ctx->the_gpgpusim->g_the_gpu->update_stats();
       ctx->print_simulation_time();
     }
+    ctx->the_gpgpusim->g_stream_manager->register_finished_kernel();
     pthread_mutex_lock(&(ctx->the_gpgpusim->g_sim_lock));
     ctx->the_gpgpusim->g_sim_active = false;
     pthread_mutex_unlock(&(ctx->the_gpgpusim->g_sim_lock));

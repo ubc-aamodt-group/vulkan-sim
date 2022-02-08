@@ -251,6 +251,8 @@ class stream_manager {
  public:
   stream_manager(gpgpu_sim *gpu, bool cuda_launch_blocking);
   bool register_finished_kernel(unsigned grid_uid);
+  bool register_finished_kernel();
+  bool special_check_finished_kernel();
   bool check_finished_kernel();
   stream_operation front();
   void add_stream(CUstream_st *stream);
@@ -277,6 +279,7 @@ class stream_manager {
   bool m_service_stream_zero;
   pthread_mutex_t m_lock;
   std::list<struct CUstream_st *>::iterator m_last_stream;
+  unsigned m_grid_uid;
 };
 
 #endif
