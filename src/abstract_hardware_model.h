@@ -1547,6 +1547,7 @@ class simt_splits_table{
     void reset();
     void launch( address_type start_pc, const simt_mask_t &active_mask );
     unsigned insert_new_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type, bool recvged=false);
+    unsigned insert_new_entry(address_type pc, address_type rpc, unsigned rpc_entry, const simt_mask_t & tmp_active_mask, splits_table_entry_type type, bool call_ret, bool recvged);
     unsigned insert_new_entry(simt_splits_table_entry entry, bool recvged=false);
     bool fill_st_entry(unsigned entry);
     bool spill_st_entry();
