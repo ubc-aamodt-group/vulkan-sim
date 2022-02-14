@@ -37,6 +37,8 @@ namespace fs = boost::filesystem;
 #include "vulkan_acceleration_structure_util.h"
 #include "astc_decomp.h"
 
+#include "intel_image_util.h"
+
 #define HAVE_PTHREAD
 #define UTIL_ARCH_LITTLE_ENDIAN 1
 #define UTIL_ARCH_BIG_ENDIAN 0
@@ -44,6 +46,7 @@ namespace fs = boost::filesystem;
 
 #define UINT_MAX 65535
 #define GLuint MESA_GLuint
+#include "isl/isl.h"
 #include "vulkan/anv_private.h"
 #undef GLuint
 
@@ -589,7 +592,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             traversalFile << "p[3] = (" << p[3].x << p[3].y << p[3].z << ")" << std::endl;
                         }
 
-                        if(hit && thit / worldToObject_tMultiplier < min_thit)
+                        float world_thit = thit / worldToObject_tMultiplier;
+
+                        //TODO: why the Tmin Tmax consition wasn't handled in the object coordinates?
+                        if(hit && Tmin <= world_thit && world_thit <= Tmax && world_thit < min_thit)
                         {
                             if (debugTraversal)
                             {
@@ -1021,7 +1027,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 32;
+    // launch_width = 1;
     // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
@@ -1321,6 +1327,63 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     // return descriptors[setID][binding].address;
 }
 
+void show_decompress_ASTC_texture_block(const uint8_t * data, bool isSRGB, int blockWidth, int blockHeight)
+{
+    uint8_t dst_colors[1024];
+    basisu::astc::decompress(dst_colors, data, isSRGB, blockWidth, blockHeight);
+
+    for(int i = 0; i < blockHeight; i++)
+    {
+        for(int j = 0; j < blockWidth; j++)
+        {
+            uint8_t* pixel_color = &dst_colors[0] + (i * blockWidth + j) * 4;
+            printf("pixel (%d, %d) = (%d, %d, %d, %d) = (%f, %f, %f, %f)\n", i, j, 
+                    pixel_color[0], pixel_color[1], pixel_color[2], pixel_color[3],
+                    pixel_color[0] / 255.0, pixel_color[1] / 255.0, pixel_color[2] / 255.0, pixel_color[3] / 255.0);
+        }
+        printf("\n");
+    }
+}
+
+void save_ASTC_texture_to_text_file(const struct anv_image *image)
+{
+    FILE * pFile;
+    pFile = fopen ("ASTC_texture.txt","w");
+    assert(image->vk_format == VK_FORMAT_ASTC_8x8_SRGB_BLOCK);
+    uint8_t* address = anv_address_map(image->planes[0].address);
+
+    for(int block = 0; block * (128 / 8) < image->planes[0].size; block++)
+    {
+        uint8_t dst_colors[1024];
+        basisu::astc::decompress(dst_colors, address + block * (128 / 8), true, 8, 8);
+
+        fprintf(pFile, "block %d:", block);
+        for(int i = 0; i < 8; i++)
+        {
+            for(int j = 0; j < 8; j++)
+            {
+                uint8_t* pixel_color = &dst_colors[0] + (i * 8 + j) * 4;
+                fprintf(pFile, "\tpixel (%d, %d) = (%d, %d, %d, %d) = (%f, %f, %f, %f)\n", i, j, 
+                        pixel_color[0], pixel_color[1], pixel_color[2], pixel_color[3],
+                        pixel_color[0] / 255.0, pixel_color[1] / 255.0, pixel_color[2] / 255.0, pixel_color[3] / 255.0);
+            }
+            fprintf(pFile, "\n");
+        }
+        fprintf(pFile, "\n\n");
+    }
+
+    fclose (pFile);
+}
+
+float SRGB_to_linearRGB(float s)
+{
+    assert(0 <= s && s <= 1);
+    if(s <= 0.04045)
+        return s / 12.92;
+    else
+        return pow(((s + 0.055) / 1.055), 2.4);
+}
+
 void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3)
 {
     struct anv_image_view *image_view =  desc->image_view;
@@ -1329,30 +1392,64 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     const struct anv_image *image = image_view->image;
     uint8_t* address = anv_address_map(image->planes[0].address);
 
-    int x_int = x; //MRS_TODO: change this to NN or bilinear
+    //save_ASTC_texture_to_text_file(image);
+    // save_ASTC_texture_to_image_file(descriptorSet->descriptors[24].image_view->image, imageFile);
+    // exit(-1);
+
+    int x_int = x * image->extent.width; //MRS_TODO: change this to NN or bilinear
+    x_int %= image->extent.width;
     if(x_int < 0)
-        x_int = 0;
-    int y_int = y;
+        x_int += image->extent.width;
+    // if(x_int >= image->extent.width)
+    //     x_int = image->extent.width - 1;
+    int y_int = y * image->extent.height;
+    y_int %= image->extent.height;
     if(y_int < 0)
-        y_int = 0;
+        y_int += image->extent.height;
+    // if(y_int >= image->extent.height)
+    //     y_int = image->extent.height - 1;
     switch(image->vk_format)
     {
         case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
         {
-            int blockX = x_int / 8;
-            int blockY = y_int / 8;
+            // int blockX = x_int / 8;
+            // int blockY = y_int / 8;
 
-            uint32_t block_offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
-            assert(block_offset < image->planes[0].size);
-            assert(block_offset >= 0);
+            // uint32_t block_offset = (blockX  * (image->extent.height / 8) + blockY) * (128 / 8);
+            // assert(block_offset < image->planes[0].size);
+            // assert(block_offset >= 0);
+
+            // uint8_t dst_colors[256];
+            // basisu::astc::decompress(dst_colors, address + block_offset, true, 8, 8);
+            // uint8_t* pixel_color = &dst_colors[0] + ((x_int % 8) + (y_int % 8)  * 8) * 4;
+
+            uint32_t tileWidth = 8;
+            uint32_t tileHeight = 32;
+            uint32_t ASTC_block_size = 128 / 8;
+
+            int tileX = x_int / 8 / tileWidth;
+            int tileY = y_int / 8 / tileHeight;
+            int tileID = tileX + tileY * image->extent.width / 8 / tileWidth;
+
+            int blockX = ((x_int / 8) % tileWidth);
+            int blockY = ((y_int / 8) % tileHeight);
+            int blockID = blockX * (tileHeight) + blockY;
+
+            uint32_t offset = (tileID * (tileWidth * tileHeight) + blockID) * ASTC_block_size;
+            // uint32_t offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
+            // uint32_t offset = (blockX * (image->extent.height / 8) + blockY) * (128 / 8);
 
             uint8_t dst_colors[256];
-            basisu::astc::decompress(dst_colors, address + block_offset, true, 8, 8);
-            uint8_t* pixel_color = &dst_colors[0] + (x_int % 8 + (y_int % 8) * 8) * 4;
+            if(!basisu::astc::decompress(dst_colors, address + offset, true, 8, 8))
+            {
+                printf("decoding error\n");
+                exit(-2);
+            }
+            uint8_t* pixel_color = &dst_colors[0] + ((x_int % 8) + (y_int % 8) * 8) * 4;
 
-            c0 = pixel_color[0] / 255.0;
-            c1 = pixel_color[1] / 255.0;
-            c2 = pixel_color[2] / 255.0;
+            c0 = SRGB_to_linearRGB(pixel_color[0] / 255.0);
+            c1 = SRGB_to_linearRGB(pixel_color[1] / 255.0);
+            c2 = SRGB_to_linearRGB(pixel_color[2] / 255.0);
             c3 = pixel_color[3] / 255.0;
             break;
         }
@@ -1368,10 +1465,10 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         case VK_FORMAT_R8G8B8A8_SRGB:
         {
             uint32_t offset = (x * image->extent.height + y) * 4;
-            c0 = address[offset] / 255.0;
-            c1 = address[offset + 1] / 255.0;
-            c2 = address[offset + 2] / 255.0;
-            c2 = address[offset + 3] / 255.0;
+            c0 = SRGB_to_linearRGB(address[offset] / 255.0);
+            c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
+            c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
+            c3 = address[offset + 3] / 255.0;
             break;
         }
         // case VK_FORMAT_D32_SFLOAT:
