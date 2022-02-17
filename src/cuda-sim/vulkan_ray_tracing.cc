@@ -47,6 +47,7 @@ namespace fs = boost::filesystem;
 #define UINT_MAX 65535
 #define GLuint MESA_GLuint
 #include "isl/isl.h"
+#include "isl/isl_tiled_memcpy.c"
 #include "vulkan/anv_private.h"
 #undef GLuint
 
@@ -268,7 +269,7 @@ bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& pat
 }
 
 
-bool debugTraversal = false;
+bool debugTraversal = true;
 
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
@@ -288,6 +289,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 {
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
+    // std::list<uint8_t *> path;
+    // find_primitive((uint8_t*)_topLevelAS, 6207, path);
+
     Traversal_data traversal_data;
 
     traversal_data.ray_world_direction = direction;
@@ -476,6 +480,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                 {
                     node_addr = next_node_addr;
                     next_node_addr = NULL;
+
+                    // if(node_addr == *(++path.rbegin()))
+                    //     printf("this is where things go wrong\n");
+
                     struct GEN_RT_BVH_INTERNAL_NODE node;
                     GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
                     transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
@@ -640,6 +648,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         traversal_data.closest_hit.instance_index = closest_instanceLeaf.InstanceID;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
+        float3 rayatinter = ray.at(min_thit);
         // assert(intersection_point.x == ray.at(min_thit).x && intersection_point.y == ray.at(min_thit).y && intersection_point.z == ray.at(min_thit).z);
         traversal_data.closest_hit.intersection_point = intersection_point;
         traversal_data.closest_hit.worldToObjectMatrix = closest_worldToObject;
@@ -777,11 +786,11 @@ void copyHardCodedShaders()
     // src.close();
     // dst.close();
     
-    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
-    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
-    dst << src.rdbuf();
-    src.close();
-    dst.close();
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
 
     // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
     // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
@@ -944,7 +953,7 @@ void VulkanRayTracing::invoke_gpgpusim()
     }
 }
 
-int CmdTraceRaysKHRID = 0;
+// int CmdTraceRaysKHRID = 0;
 
 void VulkanRayTracing::vkCmdTraceRaysKHR(
                       void *raygen_sbt,
@@ -957,13 +966,13 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
     
-    CmdTraceRaysKHRID++;
-    if(CmdTraceRaysKHRID != 1)
-        return;
+    // CmdTraceRaysKHRID++;
+    // if(CmdTraceRaysKHRID != 1)
+    //     return;
 
-    if(imageFile.is_open())
-        return;
-    imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // if(imageFile.is_open())
+    //     return;
+    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1268,14 +1277,7 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     {
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
         {
-            assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
-            assert(desc->sampler == NULL);
-
-            struct anv_image_view *image_view = desc->image_view;
-            assert(image_view != NULL);
-            struct anv_image * image = image_view->image;
-            void* address = anv_address_map(image->planes[0].address);
-            return address;
+            return (void *)(desc);
         }
         case VK_DESCRIPTOR_TYPE_SAMPLER:
         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
@@ -1384,12 +1386,22 @@ float SRGB_to_linearRGB(float s)
         return pow(((s + 0.055) / 1.055), 2.4);
 }
 
+inline uint64_t ceil_divide(uint64_t a, uint64_t b)
+{
+    return (a + b - 1) / b;
+}
+
 void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3)
 {
     struct anv_image_view *image_view =  desc->image_view;
     struct anv_sampler *sampler = desc->sampler;
 
     const struct anv_image *image = image_view->image;
+    assert(image->n_planes == 1);
+    assert(image->samples == 1);
+    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+    assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
+
     uint8_t* address = anv_address_map(image->planes[0].address);
 
     //save_ASTC_texture_to_text_file(image);
@@ -1453,22 +1465,43 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
             c3 = pixel_color[3] / 255.0;
             break;
         }
-        case VK_FORMAT_B8G8R8A8_UNORM:
-        {
-            uint32_t offset = (x * image->extent.height + y) * 4;
-            c0 = address[offset + 2] / 255.0;
-            c1 = address[offset + 1] / 255.0;
-            c2 = address[offset] / 255.0;
-            c3 = address[offset + 3] / 255.0;
-            break;
-        }
+        // case VK_FORMAT_B8G8R8A8_UNORM:
+        // {
+        //     uint32_t offset = (x * image->extent.height + y) * 4;
+        //     c0 = address[offset + 2] / 255.0;
+        //     c1 = address[offset + 1] / 255.0;
+        //     c2 = address[offset] / 255.0;
+        //     c3 = address[offset + 3] / 255.0;
+        //     break;
+        // }
         case VK_FORMAT_R8G8B8A8_SRGB:
         {
-            uint32_t offset = (x * image->extent.height + y) * 4;
-            c0 = SRGB_to_linearRGB(address[offset] / 255.0);
-            c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
-            c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
-            c3 = address[offset + 3] / 255.0;
+            // uint32_t tileWidth = 32;
+            // uint32_t tileHeight = 32;
+
+            // int tileX = x_int / tileWidth;
+            // int tileY = y_int / tileHeight;
+            // int tileID = tileX + tileY * image->extent.width / tileWidth;
+
+            // uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
+
+            // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
+            // c0 = SRGB_to_linearRGB(address[offset] / 255.0);
+            // c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
+            // c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
+            // c3 = address[offset + 3] / 255.0;
+
+            uint8_t colors[4];
+
+            intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
+            colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
+            ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+
+            c0 = SRGB_to_linearRGB(colors[0] / 255.0);
+            c1 = SRGB_to_linearRGB(colors[1] / 255.0);
+            c2 = SRGB_to_linearRGB(colors[2] / 255.0);
+            c3 = colors[3] / 255.0;
+
             break;
         }
         // case VK_FORMAT_D32_SFLOAT:
@@ -1518,59 +1551,125 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     // c2 = address[offset + 2] / 255.0;
 }
 
-void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
+void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
     // if(hitValue_X != 0 || hitValue_Y != 0 || hitValue_Z != 0)
-    //     printf("image store (%f, %f, %f)\n", hitValue_X, hitValue_Y, hitValue_Z);
-    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
-    uint32_t offset = 0;
-    offset += gl_LaunchIDEXT_Y * image_width;
-    offset += gl_LaunchIDEXT_X;
+        // printf("launch_ID = (%d, %d), image store (%f, %f, %f)\n", gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
+    assert(desc->sampler == NULL);
 
-    float data[4];
-    data[0] = hitValue_X;
-    data[1] = hitValue_Y;
-    data[2] = hitValue_Z;
-    data[3] = hitValue_W;
-    imageFile.write((char*) data, 3 * sizeof(float));
-    imageFile.write((char*) (&offset), sizeof(uint32_t));
-    imageFile.flush();
+    struct anv_image_view *image_view = desc->image_view;
+    assert(image_view != NULL);
+    struct anv_image * image = image_view->image;
+    assert(image->n_planes == 1);
+    assert(image->samples == 1);
+    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+    assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
 
-    // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
-    //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
-    //     std::abs(hitValue_Z - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.z) > 0.0001)
-    //     {
-    //         printf("wrong value. (%d, %d): (%f, %f, %f)\n"
-    //                 , gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
-    //     }
+    void* mem_address = anv_address_map(image->planes[0].address);
+
+    switch (image->vk_format)
+    {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        {
+            uint8_t r = hitValue_X * 255;
+            uint8_t g = hitValue_Y * 255;
+            uint8_t b = hitValue_Z * 255;
+            uint8_t a = hitValue_W * 255;
+
+            if(hitValue_X >= 1)
+                r = 255;
+            if(hitValue_Y >= 1)
+                g = 255;
+            if(hitValue_Z >= 1)
+                b = 255;
+            if(hitValue_W >= 1)
+                a = 255;
+            
+            uint8_t colors[] = {r, g, b, a};
+
+            intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
+            mem_address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
+            ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+            break;
+            
+            uint32_t tileWidth = 32;
+            uint32_t tileHeight = 32;
+
+            int tileX = gl_LaunchIDEXT_X / tileWidth;
+            int tileY = gl_LaunchIDEXT_Y / tileHeight;
+            int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
+
+            uint32_t offset = (tileID * tileWidth * tileHeight + (gl_LaunchIDEXT_X % tileWidth) + (gl_LaunchIDEXT_Y % tileHeight) * tileWidth) * 4;
+            if(offset >= 3768320)
+                printf("this is where things go wrong\n");
+            assert (offset >= 0);
+
+            // offset = gl_LaunchIDEXT_Y * image->extent.width;
+            // offset += gl_LaunchIDEXT_X;
+            // offset *= 4;
+
+            uint8_t* p = ((uint8_t*)mem_address) + offset;
+            p[0] = b;
+            p[1] = g;
+            p[2] = r;
+            p[3] = a;
+            break;
+        }
+        
+        default:
+            assert(0);
+            break;
+    }
+
+    // uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+    // uint32_t offset = 0;
+    // offset += gl_LaunchIDEXT_Y * image_width;
+    // offset += gl_LaunchIDEXT_X;
+
+    // float data[4];
+    // data[0] = hitValue_X;
+    // data[1] = hitValue_Y;
+    // data[2] = hitValue_Z;
+    // data[3] = hitValue_W;
+    // imageFile.write((char*) data, 3 * sizeof(float));
+    // imageFile.write((char*) (&offset), sizeof(uint32_t));
+    // imageFile.flush();
+
+    // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
+    // //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
+    // //     std::abs(hitValue_Z - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.z) > 0.0001)
+    // //     {
+    // //         printf("wrong value. (%d, %d): (%f, %f, %f)\n"
+    // //                 , gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
+    // //     }
     
-    // if (gl_LaunchIDEXT_X == 1070 && gl_LaunchIDEXT_Y == 220)
-    //     printf("this one has wrong value\n");
+    // // if (gl_LaunchIDEXT_X == 1070 && gl_LaunchIDEXT_Y == 220)
+    // //     printf("this one has wrong value\n");
 
-    // if(hitValue_X > 1 || hitValue_Y > 1 || hitValue_Z > 1)
-    // {
-    //     printf("this one has wrong value.\n");
-    // }
+    // // if(hitValue_X > 1 || hitValue_Y > 1 || hitValue_Z > 1)
+    // // {
+    // //     printf("this one has wrong value.\n");
+    // // }
     
-    uint8_t r = hitValue_X * 255;
-    uint8_t g = hitValue_Y * 255;
-    uint8_t b = hitValue_Z * 255;
-    uint8_t a = hitValue_W * 255;
-    if(hitValue_X >= 1)
-        r = 255;
-    if(hitValue_Y >= 1)
-        g = 255;
-    if(hitValue_Z >= 1)
-        b = 255;
-    if(hitValue_W >= 1)
-        a = 255;
+    // uint8_t r = hitValue_X * 255;
+    // uint8_t g = hitValue_Y * 255;
+    // uint8_t b = hitValue_Z * 255;
+    // uint8_t a = hitValue_W * 255;
+    // if(hitValue_X >= 1)
+    //     r = 255;
+    // if(hitValue_Y >= 1)
+    //     g = 255;
+    // if(hitValue_Z >= 1)
+    //     b = 255;
+    // if(hitValue_W >= 1)
+    //     a = 255;
 
-    uint8_t* p = ((uint8_t*)image) + offset * 4;
-    p[0] = b;
-    p[1] = g;
-    p[2] = r;
-    p[3] = a;
+    // uint8_t* p = ((uint8_t*)mem_address) + offset * 4;
+    // p[0] = b;
+    // p[1] = g;
+    // p[2] = r;
+    // p[3] = a;
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
