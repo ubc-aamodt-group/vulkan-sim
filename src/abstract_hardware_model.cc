@@ -983,7 +983,8 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
         if (m_per_scalar_thread[i].intersection_delay == 0) {
           new_addr_type coalesced_base_addr = line_size_based_tag_func(uncoalesced_base_addr, 32);
           unsigned position = (addr - coalesced_base_addr) / 32;
-          RT_DPRINTF("Thread %d received chunk %d (of %d)\n", i, position, mem_record.mem_chunks.count());
+          std::string bitstring = mem_record.mem_chunks.to_string();
+          RT_DPRINTF("Thread %d received chunk %d (of <%s>)\n", i, position, bitstring.c_str());
           mem_record.mem_chunks.reset(position);
           
           // If all the bits are clear, the entire data has returned, pop from list

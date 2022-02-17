@@ -1304,14 +1304,14 @@ class rt_unit : public pipelined_simd_unit {
     protected:
       void process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg);
       mem_fetch* process_memory_stores();
+      mem_fetch* process_memory_chunks(warp_inst_t &inst);
+      mem_fetch* process_memory_access_queue(warp_inst_t &inst);
+      void schedule_next_warp(warp_inst_t &inst);
       void memory_cycle(warp_inst_t &inst);
                           
       virtual void process_cache_access(
-            cache_t *cache, warp_inst_t &inst,
-            std::list<cache_event> &events, mem_fetch *mf,
-            enum cache_request_status status);
+            baseline_cache *cache, warp_inst_t &inst, mem_fetch *mf);
             
-      void process_memory_access_queue(baseline_cache *cache, warp_inst_t &inst);
       mem_access_t* create_mem_access(new_addr_type addr);
       
       const memory_config *m_memory_config;
@@ -1321,6 +1321,7 @@ class rt_unit : public pipelined_simd_unit {
       
       unsigned m_sid;
       unsigned m_tpc;
+      bool mem_chunk;
       
       shader_core_stats *m_stats;
       
@@ -1330,7 +1331,7 @@ class rt_unit : public pipelined_simd_unit {
       read_only_cache *m_L0_tri;
       l1_cache *L1D;
 
-      std::deque<std::pair<unsigned, new_addr_type> > m_store_queue;
+      std::deque<std::pair<unsigned, new_addr_type> > mem_store_q;
       
       std::deque<new_addr_type> mem_access_q;
       unsigned mem_access_q_warp_uid;
