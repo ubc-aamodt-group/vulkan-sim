@@ -1840,6 +1840,7 @@ struct shader_core_stats_pod {
   unsigned long long rt_total_intersection_stages;
   unsigned long long *rt_total_cycles;
   unsigned long long rt_total_cycles_sum = 0;
+  unsigned long long rt_writes;
 
   int gpgpu_n_mem_l2_writeback;
   int gpgpu_n_mem_l1_write_allocate;

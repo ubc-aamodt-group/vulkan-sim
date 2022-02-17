@@ -734,6 +734,7 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "rt_avg_op_intensity = %f\n", (float)rt_total_intersection_stages / rt_total_cacheline_fetched);
   fprintf(fout, "rt_avg_performance = %f\n", (float)rt_total_intersection_stages / average_rt_total_cycles);
   fprintf(fout, "rt_avg_ops = %f\n", (float)rt_total_intersection_stages / gpgpusim_total_cycles);
+  fprintf(fout, "rt_writes = %d\n", rt_writes);
   fprintf(fout, "rt_cycles = %f\n", (float)average_rt_total_cycles / gpgpusim_total_cycles);
   fprintf(fout, "rt_total_cycles = %f\n", average_rt_total_cycles);
   fprintf(fout, "rt_total_cycles_sum = %d\n", rt_total_cycles_sum);
@@ -2765,6 +2766,8 @@ void rt_unit::cycle() {
 
     // Handle write ACKs
     if (mf->get_is_write()) {
+      m_stats->rt_writes++;
+
       // Find warp (expect a unique warp)
       for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
         if (it->second.check_pending_writes(uncoalesced_base_addr)) {
@@ -2959,12 +2962,7 @@ void rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem
   // Otherwise check for stores
   else if (!m_store_queue.empty()) {
     RT_DPRINTF("Shader %d: Prioritizing stores\n", m_sid);
-    if (m_config->m_rt_use_l1d) {
-      fail = process_memory_access_queue(L1D, inst);
-    }
-    else {
-      fail = process_memory_access_queue(m_L0_complet, inst);
-    }
+    fail = process_memory_access_queue(L1D, inst);
   }
   
   // Otherwise, check warps
