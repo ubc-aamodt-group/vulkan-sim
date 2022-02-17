@@ -1304,16 +1304,14 @@ class rt_unit : public pipelined_simd_unit {
     protected:
       void process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg);
       mem_fetch* process_memory_stores();
-      void memory_cycle(  warp_inst_t &inst, 
-                          mem_stage_stall_type &rc_fail,
-                          mem_stage_access_type &fail_type);
+      void memory_cycle(warp_inst_t &inst);
                           
-      virtual mem_stage_stall_type process_cache_access(
+      virtual void process_cache_access(
             cache_t *cache, warp_inst_t &inst,
             std::list<cache_event> &events, mem_fetch *mf,
             enum cache_request_status status);
             
-      mem_stage_stall_type process_memory_access_queue(baseline_cache *cache, warp_inst_t &inst);
+      void process_memory_access_queue(baseline_cache *cache, warp_inst_t &inst);
       mem_access_t* create_mem_access(new_addr_type addr);
       
       const memory_config *m_memory_config;
@@ -1732,6 +1730,7 @@ class shader_core_config : public core_config {
   unsigned m_rt_max_mshr_entries;
   bool m_rt_coalesce_warps;
   bool m_rt_use_l1d;
+  bool m_rt_coherency_engine;
   bool bypassL0Complet;
 };
 

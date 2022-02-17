@@ -2706,8 +2706,6 @@ void rt_unit::cycle() {
   
   // Copy ldst unit injection mechanism
   warp_inst_t &pipe_reg = *m_dispatch_reg;
-  enum mem_stage_stall_type rc_fail = NO_RC_FAIL;
-  mem_stage_access_type type;
   
   occupied >>=1;
   
@@ -2817,11 +2815,10 @@ void rt_unit::cycle() {
   }
   // Otherwise use pipe_reg
   else {
-    rt_inst = pipe_reg;
+    if (!pipe_reg.empty()) m_current_warps[pipe_reg.get_uid()] = pipe_reg;
   }
   m_dispatch_reg->clear();
-  memory_cycle(rt_inst, rc_fail, type);
-  m_mem_rc = rc_fail;
+  memory_cycle(rt_inst);
   
   // Place warp back into m_current_warps
   if (!rt_inst.empty()) {
@@ -2945,24 +2942,23 @@ void rt_unit::process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg) {
 }
 
 
-void rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type) {
-  mem_stage_stall_type fail;
+void rt_unit::memory_cycle(warp_inst_t &inst) {
   
   // If there are still accesses waiting in mem_access_q, send those first
   if (!mem_access_q.empty()) {
     RT_DPRINTF("Shader %d: Prioritizing mem_access_q entries (%d entries remaining)\n", m_sid, mem_access_q.size());
     if (m_config->m_rt_use_l1d) {
-      fail = process_memory_access_queue(L1D, inst);
+      process_memory_access_queue(L1D, inst);
     }
     else {
-      fail = process_memory_access_queue(m_L0_complet, inst);
+      process_memory_access_queue(m_L0_complet, inst);
     }
   }
 
   // Otherwise check for stores
   else if (!m_store_queue.empty()) {
     RT_DPRINTF("Shader %d: Prioritizing stores\n", m_sid);
-    fail = process_memory_access_queue(L1D, inst);
+    process_memory_access_queue(L1D, inst);
   }
   
   // Otherwise, check warps
@@ -3006,19 +3002,12 @@ void rt_unit::memory_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem
     
     // Continue to next step
     if (m_config->m_rt_use_l1d) {
-      fail = process_memory_access_queue(L1D, inst);
+      process_memory_access_queue(L1D, inst);
     }
     else {
-      fail = process_memory_access_queue(m_L0_complet, inst);
+      process_memory_access_queue(m_L0_complet, inst);
     }
   }
-    
-  // Stalled
-  if (fail != NO_RC_FAIL) {
-    rc_fail = fail;
-    fail_type = RT_C_MEM;
-  }
-  
 }
 
 
@@ -3104,8 +3093,7 @@ mem_fetch* rt_unit::process_memory_stores() {
 }
 
 
-mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache, warp_inst_t &inst) {
-  mem_stage_stall_type result = NO_RC_FAIL;
+void rt_unit::process_memory_access_queue(baseline_cache *cache, warp_inst_t &inst) {
   mem_fetch *mf = NULL;
   new_addr_type next_addr; 
   new_addr_type base_addr;
@@ -3122,13 +3110,14 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
   // Otherwise, prioritize stores (for now)
   else if (!m_store_queue.empty()) {
     mf = process_memory_stores();
+    inst = mf->get_inst();
     mem_access_q_type = static_cast<int>(TransactionType::UNDEFINED);
   }
   
   // If queue is empty, then we got here because there is warp waiting to send memory requests
   else {  
-    if (inst.rt_mem_accesses_empty()) return result;
-    if (!cache->data_port_free()) return DATA_PORT_STALL;
+    if (inst.rt_mem_accesses_empty()) return;
+    if (!cache->data_port_free()) return;
     
     RTMemoryTransactionRecord next_access = inst.get_next_rt_mem_transaction();
     next_addr = next_access.address;
@@ -3179,11 +3168,9 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
     unsigned control_size = 8;
     unsigned size = mf->get_access_size() + control_size;
     // printf("Interconnect:Addr: %x, size=%d\n",access.get_addr(),size);
-    if (m_icnt->full(size, inst.is_store() || inst.isatomic())) {
-      result = ICNT_RC_FAIL;
-    } else {
+    if (!m_icnt->full(size, inst.is_store() || inst.isatomic())) {
       m_icnt->push(mf);
-      return result;
+      return;
     }
   }
   
@@ -3199,7 +3186,7 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
   }
   
   // Stalled
-  if (status == RESERVATION_FAIL || result == ICNT_RC_FAIL) {
+  if (status == RESERVATION_FAIL) {
 
     // Address already in MSHR, but MSHR entry is full
     if (!cache->probe_mshr(mf->get_addr()).empty()) {
@@ -3233,17 +3220,13 @@ mem_stage_stall_type rt_unit::process_memory_access_queue(baseline_cache *cache,
     }
   }
   
-  if (result == ICNT_RC_FAIL) return result;
-  
-  return process_cache_access(cache, inst, events, mf, status);
+  process_cache_access(cache, inst, events, mf, status);
 }
 
-mem_stage_stall_type rt_unit::process_cache_access(
+void rt_unit::process_cache_access(
     cache_t *cache, warp_inst_t &inst,
     std::list<cache_event> &events, mem_fetch *mf,
     enum cache_request_status status) {
-      
-    mem_stage_stall_type result = NO_RC_FAIL;
     
     new_addr_type addr = mf->get_addr();
     new_addr_type base_addr = mf->get_uncoalesced_base_addr();
@@ -3274,14 +3257,10 @@ mem_stage_stall_type rt_unit::process_cache_access(
       
     } else if (status == RESERVATION_FAIL) {
       // Already processed previously
-      result = BK_CONF;
       delete mf;
     } else {
       assert(status == MISS);
     }
-    
-    if (!inst.rt_mem_accesses_empty() && result == NO_RC_FAIL) result = COAL_STALL;
-    return result;
 }
 
 void rt_unit::fill(mem_fetch *mf) {

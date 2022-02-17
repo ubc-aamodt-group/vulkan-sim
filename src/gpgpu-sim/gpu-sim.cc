@@ -258,6 +258,10 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "use existing L1 cache instead of dedicated L0 cache ",
       "1");
   option_parser_register(
+      opp, "-gpgpu_rt_coherency_engine", OPT_BOOL, &m_rt_coherency_engine,
+      "enable coherency engine (ray sorting) ",
+      "0");
+  option_parser_register(
       opp, "-gpgpu_rt_disable_rt_cache", OPT_BOOL, &bypassL0Complet,
       "bypass RT cache and connect RT unit directly to interconnect ",
       "0");
