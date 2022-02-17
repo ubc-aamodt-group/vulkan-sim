@@ -1302,6 +1302,8 @@ class rt_unit : public pipelined_simd_unit {
         void reset_rt_stats();
         
     protected:
+      void process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg);
+      mem_fetch* process_memory_stores();
       void memory_cycle(  warp_inst_t &inst, 
                           mem_stage_stall_type &rc_fail,
                           mem_stage_access_type &fail_type);
@@ -1329,6 +1331,8 @@ class rt_unit : public pipelined_simd_unit {
       read_only_cache *m_L0_complet;
       read_only_cache *m_L0_tri;
       l1_cache *L1D;
+
+      std::deque<std::pair<unsigned, new_addr_type> > m_store_queue;
       
       std::deque<new_addr_type> mem_access_q;
       unsigned mem_access_q_warp_uid;
@@ -1587,12 +1591,13 @@ class shader_core_config : public core_config {
     }
     
     // Initialize RT unit latency delays
-    sscanf(m_rt_intersection_latency_str, "%u,%u,%u,%u,%u,%u", 
+    sscanf(m_rt_intersection_latency_str, "%u,%u,%u,%u,%u,%u,%u", 
       &m_rt_intersection_latency[TransactionType::BVH_STRUCTURE],
       &m_rt_intersection_latency[TransactionType::BVH_INTERNAL_NODE],
       &m_rt_intersection_latency[TransactionType::BVH_INSTANCE_LEAF],
       &m_rt_intersection_latency[TransactionType::BVH_PRIMITIVE_LEAF_DESCRIPTOR],
       &m_rt_intersection_latency[TransactionType::BVH_QUAD_LEAF],
+      &m_rt_intersection_latency[TransactionType::BVH_QUAD_LEAF_HIT],
       &m_rt_intersection_latency[TransactionType::BVH_PROCEDURAL_LEAF]);
   }
   void reg_options(class OptionParser *opp);

@@ -271,8 +271,8 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "0");
   option_parser_register(
       opp, "-gpgpu_rt_intersection_latency", OPT_CSTR, &m_rt_intersection_latency_str,
-      "latency of pipelined intersection tests (6 types)",
-      "0,0,0,0,0,0");
+      "latency of pipelined intersection tests (7 types)",
+      "0,0,0,0,0,0,0");
   option_parser_register(opp, "-gpgpu_cache:il1", OPT_CSTR,
                          &m_L1I_config.m_config_string,
                          "shader L1 instruction cache config "
@@ -1471,6 +1471,8 @@ void gpgpu_sim::gpu_print_stat() {
       fprintf(statfout, "%d\t", gpgpu_ctx->func_sim->g_rt_mem_access_type[i]);
   }
   fprintf(statfout, "\n");
+
+  fprintf(statfout, "rt_num_hits = %d\n", gpgpu_ctx->func_sim->g_rt_num_hits);
 
 #ifdef GPGPUSIM_POWER_MODEL
   if (m_config.g_power_simulation_enabled) {

@@ -1894,7 +1894,7 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
     if (pI->get_opcode() == TRACE_RAY_OP) { 
       // Copy list of accesses to warp instruction
       inst.set_rt_mem_transactions(lane_id, RT_transactions);
-      inst.set_rt_ray_properties(lane_id, m_ray, m_raytrace_intersect);
+      inst.set_rt_ray_properties(lane_id, m_ray);
       
       // Set memory space
       insn_space.set_type(global_space);

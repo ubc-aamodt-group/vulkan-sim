@@ -776,7 +776,14 @@ void warp_inst_t::print_intersection_delay() {
   RT_DPRINTF("\n");
 }
 
-unsigned warp_inst_t::dec_thread_latency() { 
+bool warp_inst_t::check_pending_writes(new_addr_type addr) {
+  if (m_pending_writes.find(addr) != m_pending_writes.end()) {
+    m_pending_writes.erase(addr);
+    return true;
+  }
+}
+
+unsigned warp_inst_t::dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue) { 
   // Track number of threads performing intersection tests
   unsigned n_threads = 0;
   
@@ -784,6 +791,18 @@ unsigned warp_inst_t::dec_thread_latency() {
     if (m_per_scalar_thread[i].intersection_delay > 0) {
       m_per_scalar_thread[i].intersection_delay--; 
       n_threads++;
+      if (m_per_scalar_thread[i].intersection_delay == 0 && m_per_scalar_thread[i].ray_intersect) {
+        // Temporary size
+        unsigned size = RT_WRITE_BACK_SIZE;
+
+        // Get an address to write to
+        void* next_buffer_addr = GPGPUSim_Context(GPGPU_Context())->get_device()->get_gpgpu()->gpu_malloc(size);
+        store_queue.push_back(std::pair<unsigned, new_addr_type>(m_uid, (new_addr_type)next_buffer_addr));
+        m_per_scalar_thread[i].ray_intersect = false;
+        RT_DPRINTF("Buffer store pushed for warp %d thread %d at 0x%x\n", m_uid, i, next_buffer_addr);
+
+        m_pending_writes.insert((new_addr_type)next_buffer_addr);
+      }
     }
   }
   
@@ -827,10 +846,9 @@ bool warp_inst_t::is_stalled() {
   return true;
 }
 
-void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray , bool intersect) {
+void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray) {
   assert(m_per_scalar_thread_valid);
   m_per_scalar_thread[tid].ray_properties = ray;
-  m_per_scalar_thread[tid].ray_intersect = intersect;
 }
 
 bool warp_inst_t::rt_mem_accesses_empty() { 
@@ -977,6 +995,12 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
             RT_DPRINTF("Thread %d collected all chunks for address 0x%x (size %d)\n", i, mem_record.address, mem_record.size);
             RT_DPRINTF("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
             m_per_scalar_thread[i].RT_mem_accesses.pop_front();
+
+            // Mark triangle hit to store to memory
+            if (mem_record.type == TransactionType::BVH_QUAD_LEAF_HIT) {
+              m_per_scalar_thread[i].ray_intersect = true;
+              RT_DPRINTF("Buffer store detected for warp %d thread %d\n", m_uid, i);
+            }
           }
           
           thread_found++;

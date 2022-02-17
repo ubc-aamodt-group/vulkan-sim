@@ -173,9 +173,12 @@ enum class TransactionType {
     BVH_INSTANCE_LEAF,
     BVH_PRIMITIVE_LEAF_DESCRIPTOR,
     BVH_QUAD_LEAF,
+    BVH_QUAD_LEAF_HIT,
     BVH_PROCEDURAL_LEAF,
     UNDEFINED,
 };
+
+#define RT_WRITE_BACK_SIZE 32
 
 #include <assert.h>
 #include <stdlib.h>
@@ -1390,7 +1393,7 @@ class warp_inst_t : public inst_t {
                                                    
     // RT variables    
     std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
-    bool ray_intersect;
+    bool ray_intersect = false;
     Ray ray_properties;
     unsigned intersection_delay;
     unsigned long long end_cycle;
@@ -1402,11 +1405,12 @@ class warp_inst_t : public inst_t {
   
   // RT functions
   void set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions);
-  void set_rt_ray_properties(unsigned int tid, Ray ray, bool intersect);
+  void set_rt_ray_properties(unsigned int tid, Ray ray);
   bool get_rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
   Ray get_rt_ray_properties(unsigned int tid) const { return m_per_scalar_thread[tid].ray_properties; }
   bool rt_mem_accesses_empty();
   bool rt_intersection_delay_done();
+  bool has_pending_writes() { return !m_pending_writes.empty(); }
   bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
   bool is_stalled();
   void undo_rt_access(new_addr_type addr);
@@ -1425,7 +1429,8 @@ class warp_inst_t : public inst_t {
   void set_thread_info(unsigned tid, struct per_thread_info thread_info) { m_per_scalar_thread[tid] = thread_info; }
   void clear_thread_info(unsigned tid) { m_per_scalar_thread[tid].clear_mem_accesses(); }
   unsigned get_thread_latency(unsigned tid) const { return m_per_scalar_thread[tid].intersection_delay; }
-  unsigned dec_thread_latency();
+  unsigned dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue);
+  bool check_pending_writes(new_addr_type addr);
   unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
   
   void set_start_cycle(unsigned long long cycle) { m_start_cycle = cycle; }
@@ -1460,6 +1465,8 @@ class warp_inst_t : public inst_t {
   std::set<std::pair<new_addr_type, unsigned> > m_next_rt_accesses_set;
   
   RTMemoryTransactionRecord m_current_rt_access;
+
+  std::set<new_addr_type> m_pending_writes;
   
   // List of current memory requests awaiting response
   bool m_per_scalar_thread_valid;

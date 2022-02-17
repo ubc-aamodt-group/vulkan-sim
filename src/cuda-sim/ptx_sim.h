@@ -304,7 +304,7 @@ class ptx_thread_info {
     m_hw_wid = wid;
     m_hw_tid = tid;
     m_functionalSimulationMode = fsim;
-    m_raytrace_intersect = 0;
+    m_num_ray_intersections = 0;
   }
 
   void ptx_fetch_inst(inst_t &inst) const;
@@ -477,7 +477,7 @@ class ptx_thread_info {
   kernel_info_t &get_kernel() { return m_kernel; }
   
   void set_rt_transactions(std::vector<MemoryTransactionRecord> transactions) { RT_transactions = transactions; }
-  void add_ray_intersect() { m_raytrace_intersect = 1; }
+  void add_ray_intersect() { m_num_ray_intersections += 1; }
   void add_ray_properties(Ray ray) { m_ray = ray; }
 
  public:
@@ -537,7 +537,7 @@ class ptx_thread_info {
 
   std::stack<class operand_info, std::vector<operand_info> > m_breakaddrs;
   
-  unsigned m_raytrace_intersect;
+  unsigned m_num_ray_intersections;
   Ray m_ray;
 };
 

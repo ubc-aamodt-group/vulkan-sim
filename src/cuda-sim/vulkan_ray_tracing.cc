@@ -380,8 +380,6 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     {
                         struct GEN_RT_BVH_QUAD_LEAF leaf;
                         GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
-                        transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_QUAD_LEAF_length * 4, TransactionType::BVH_QUAD_LEAF));
-                        ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_QUAD_LEAF)]++;
 
                         float3 p[3];
                         for(int i = 0; i < 3; i++)
@@ -404,11 +402,18 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             closest_objectToWorld = objectToWorldMatrix;
                             closest_objectRay = objectRay;
                             min_thit_object = thit;
+                            thread->add_ray_intersect();
+                            transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_QUAD_LEAF_length * 4, TransactionType::BVH_QUAD_LEAF_HIT));
+                            ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_QUAD_LEAF_HIT)]++;
 
                             if(terminateOnFirstHit)
                             {
                                 stack.clear();
                             }
+                        }
+                        else {
+                            transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_QUAD_LEAF_length * 4, TransactionType::BVH_QUAD_LEAF));
+                            ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_QUAD_LEAF)]++;
                         }
                     }
                     else
@@ -426,6 +431,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     if (min_thit < ray.dir_tmax.w)
     {
         traversal_data.hit_geometry = true;
+        ctx->func_sim->g_rt_num_hits++;
         traversal_data.closest_hit.geometry_index = closest_leaf.LeafDescriptor.GeometryIndex;
         traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         traversal_data.closest_hit.instance_index = closest_instanceLeaf.InstanceID;
