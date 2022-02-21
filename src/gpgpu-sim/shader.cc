@@ -722,10 +722,13 @@ void shader_core_stats::print(FILE *fout) const {
   unsigned long long gpgpusim_total_cycles = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
   
   float average_rt_total_cycles = 0;
+  float average_mem_store_cycles = 0;
   for (unsigned i=0; i<m_config->num_shader(); i++) {
     average_rt_total_cycles += rt_total_cycles[i];
+    average_mem_store_cycles += rt_mem_store_q_cycles[i];
   }
   average_rt_total_cycles = average_rt_total_cycles / m_config->num_shader();
+  average_mem_store_cycles = average_mem_store_cycles / m_config->num_shader();
   
   // RT unit stats
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
@@ -735,12 +738,19 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "rt_avg_performance = %f\n", (float)rt_total_intersection_stages / average_rt_total_cycles);
   fprintf(fout, "rt_avg_ops = %f\n", (float)rt_total_intersection_stages / gpgpusim_total_cycles);
   fprintf(fout, "rt_writes = %d\n", rt_writes);
+  fprintf(fout, "rt_max_mem_store_q = %d\n", rt_max_store_q);
+  fprintf(fout, "rt_avg_mem_store_cycles = %f\n", average_mem_store_cycles);
   fprintf(fout, "rt_cycles = %f\n", (float)average_rt_total_cycles / gpgpusim_total_cycles);
   fprintf(fout, "rt_total_cycles = %f\n", average_rt_total_cycles);
   fprintf(fout, "rt_total_cycles_sum = %d\n", rt_total_cycles_sum);
   fprintf(fout, "rt_cycles_dist:");
   for (unsigned i=0; i<m_config->num_shader(); i++) {
     fprintf(fout, "\t%d", rt_total_cycles[i]);
+  }
+  fprintf(fout, "\n");
+  fprintf(fout, "rt_store_cycles_dist:");
+  for (unsigned i=0; i<m_config->num_shader(); i++) {
+    fprintf(fout, "\t%d", rt_mem_store_q_cycles[i]);
   }
   fprintf(fout, "\n");
 
@@ -2677,7 +2687,11 @@ rt_unit::rt_unit(mem_fetch_interface *icnt,
                                       get_shader_constant_cache_id(), icnt, 
                                       IN_L1C_MISS_QUEUE);
 
-  L1D = m_core->get_l1d();                              
+  L1D = m_core->get_l1d();    
+
+  ray_coherence_config coherence_config = config->m_rt_coherence_engine_config;
+  coherence_config.warp_size = config->warp_size;
+  m_ray_coherence_engine = new ray_coherence_engine(sid, coherence_config, core);
 
   m_mem_rc = NO_RC_FAIL;
   m_name = "RT_CORE";
@@ -2726,6 +2740,18 @@ void rt_unit::cycle() {
     
     pipe_reg.set_start_cycle(current_cycle);
     pipe_reg.set_thread_end_cycle(current_cycle);
+
+    if (m_config->m_rt_coherence_engine) {
+      if (!m_ray_coherence_engine->m_initialized) {
+        // Get world min/max
+        m_ray_coherence_engine->set_world(
+          GPGPU_Context()->func_sim->g_rt_world_min,
+          GPGPU_Context()->func_sim->g_rt_world_max
+        );
+        m_ray_coherence_engine->m_initialized = true;
+      }
+      m_ray_coherence_engine->insert(pipe_reg);
+    }
   }
   
   if (n_warps > 0 || !pipe_reg.empty()) {
@@ -2738,9 +2764,20 @@ void rt_unit::cycle() {
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
     n_threads += (it->second).dec_thread_latency(mem_store_q);
   }
+  if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->dec_thread_latency();
   // Number of threads currently completing intersection tests are the number of intersection operations this cycle
   m_stats->rt_total_intersection_stages += n_threads;
   
+  if (mem_store_q.size() > m_stats->rt_max_store_q) {
+    m_stats->rt_max_store_q = mem_store_q.size();
+  }
+  if (!mem_store_q.empty()) {
+    m_stats->rt_mem_store_q_cycles[m_sid]++;
+  }
+
+  // Cycle coherence engine
+  m_ray_coherence_engine->cycle();
+
   // AerialVision stats
   m_stats->rt_nwarps[m_sid] = n_warps;
   m_stats->rt_nthreads_intersection[m_sid] = n_threads;
@@ -2791,7 +2828,8 @@ void rt_unit::cycle() {
         }
       }
       
-      process_memory_response(mf, pipe_reg);
+      if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->process_response(mf, m_current_warps);
+      else process_memory_response(mf, pipe_reg);
     }
   }
     
@@ -2806,14 +2844,24 @@ void rt_unit::cycle() {
 
   // Choose next warp
   warp_inst_t rt_inst;
+
   // Check if there are outstanding chunks to request
   if (!mem_access_q.empty()) {
     // Find the appropriate warp
     rt_inst = m_current_warps[mem_access_q_warp_uid];
     m_current_warps.erase(mem_access_q_warp_uid);
   }
-  else if (mem_store_q.empty()) {
+  else if (mem_store_q.empty() && !m_config->m_rt_coherence_engine) {
+    // Choose next warp
     schedule_next_warp(rt_inst);
+  }
+  else if (mem_store_q.empty() && m_config->m_rt_coherence_engine) {
+    // Check if active
+    if (m_ray_coherence_engine->active()) {
+      unsigned warp_uid = m_ray_coherence_engine->schedule_next_warp();
+      rt_inst = m_current_warps[warp_uid];
+      m_current_warps.erase(warp_uid);
+    }
   }
 
   // Schedule next memory request
@@ -2977,6 +3025,9 @@ void rt_unit::memory_cycle(warp_inst_t &inst) {
   }
 
   else {
+    // If MSHR is at the "limit" don't sent new requests
+    if (m_config->m_rt_max_warps > 0 && m_L0_complet->num_mshr_entries() > m_config->m_rt_max_mshr_entries) return;
+    
     // Return if there are no active threads
     if (!inst.active_count()) return;
     
@@ -2984,10 +3035,7 @@ void rt_unit::memory_cycle(warp_inst_t &inst) {
     assert(inst.space.get_type() == global_space);
     
     // If waiting for responses, don't send new requests
-    if (inst.is_stalled()) return;
-    
-    // If MSHR is at the "limit" don't sent new requests
-    if (m_config->m_rt_max_warps > 0 && m_L0_complet->num_mshr_entries() > m_config->m_rt_max_mshr_entries) return;
+    if (!m_config->m_rt_coherence_engine && inst.is_stalled()) return;
     
     // Continue to next step
     RT_DPRINTF("Shader %d: Processing next memory access\n", m_sid);
@@ -3102,7 +3150,13 @@ mem_fetch* rt_unit::process_memory_chunks(warp_inst_t &inst) {
 mem_fetch* rt_unit::process_memory_access_queue(warp_inst_t &inst) {
   if (inst.rt_mem_accesses_empty()) return NULL;
   
-  RTMemoryTransactionRecord next_access = inst.get_next_rt_mem_transaction();
+  RTMemoryTransactionRecord next_access;
+  if (m_config->m_rt_coherence_engine) {
+    next_access = m_ray_coherence_engine->get_next_access();
+  }
+  else {
+    next_access = inst.get_next_rt_mem_transaction();
+  }
   new_addr_type next_addr = next_access.address;
   new_addr_type base_addr = next_access.address;
   
@@ -3186,10 +3240,11 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
       else {
         RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
         if (mem_chunk) {
-            mem_access_q.push_front(mf->get_uncoalesced_addr());
+          mem_access_q.push_front(mf->get_uncoalesced_addr());
         }
         else {
-            inst.undo_rt_access(mf->get_uncoalesced_addr());
+          if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->undo_access(mf->get_uncoalesced_addr());
+          else inst.undo_rt_access(mf->get_uncoalesced_addr());
         }
         m_stats->gpgpu_n_rt_mem[mem_access_q_type]--;
       }
@@ -3197,10 +3252,11 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
     else {
       RT_DPRINTF("Shader %d: Reservation fail, undoing request for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
       if (mem_chunk) {
-          mem_access_q.push_front(mf->get_uncoalesced_addr());
+        mem_access_q.push_front(mf->get_uncoalesced_addr());
       }
       else {
-          inst.undo_rt_access(mf->get_uncoalesced_addr());
+        if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->undo_access(mf->get_uncoalesced_addr());
+        else inst.undo_rt_access(mf->get_uncoalesced_addr());
       }
       m_stats->gpgpu_n_rt_mem[mem_access_q_type]--;
     }
@@ -3208,21 +3264,28 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
   }
   
   else if (status == HIT) {
-    unsigned found = 0;
-    found += inst.process_returned_mem_access(mf);
-    
     RT_DPRINTF("Shader %d: Cache hit for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
     
     // Every cache hit is a returned cacheline
     m_stats->rt_total_cacheline_fetched++;
-    
-    if (m_config->m_rt_coalesce_warps) {
-      for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
-        if (found > 0) {
-          (it->second).process_returned_mem_access(mf);
-        }
-        else {
-          (it->second).process_returned_mem_access(mf);
+
+    if (m_config->m_rt_coherence_engine) {
+      if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
+      m_ray_coherence_engine->process_response(mf, m_current_warps);
+      inst.clear();
+    }
+    else {
+      unsigned found = 0;
+      found += inst.process_returned_mem_access(mf);
+      
+      if (m_config->m_rt_coalesce_warps) {
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+          if (found > 0) {
+            (it->second).process_returned_mem_access(mf);
+          }
+          else {
+            (it->second).process_returned_mem_access(mf);
+          }
         }
       }
     }
@@ -4137,6 +4200,9 @@ void rt_unit::print(FILE *fout) const {
     const mem_fetch *mf = *i;
     mf->print(fout);
   }
+
+  // Coherence engine
+  m_ray_coherence_engine->print(fout);
 }
 
 void shader_core_ctx::display_rt_pipeline(FILE *fout, int mask) const{

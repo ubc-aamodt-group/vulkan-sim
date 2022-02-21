@@ -154,6 +154,9 @@ class cuda_sim {
   // Ray tracing memory access type stats
   unsigned g_rt_mem_access_type[static_cast<int>(TransactionType::UNDEFINED)];
   unsigned g_rt_num_hits; 
+  bool g_rt_world_set = false;
+  float3 g_rt_world_min;
+  float3 g_rt_world_max;
   
   char *cdp_latency_str;
   int g_ptx_kernel_count;  // used for classification stat collection purposes

@@ -178,6 +178,17 @@ enum class TransactionType {
     UNDEFINED,
 };
 
+struct ray_coherence_config {
+  unsigned max_cycles;
+  unsigned min_rays;
+  char hash;
+  unsigned hash_francois_bits;
+  unsigned hash_grid_bits;
+  unsigned hash_sphere_bits;
+  float hash_two_point_est_length_ratio;
+  unsigned warp_size;
+};
+
 #define RT_WRITE_BACK_SIZE 32
 
 #include <assert.h>
@@ -259,6 +270,13 @@ address_type line_size_based_tag_func(new_addr_type address, new_addr_type line_
 #define RT_DEBUG_PRINT 0
 #define RT_DPRINTF(...) \
    if(RT_DEBUG_PRINT) { \
+      printf(__VA_ARGS__); \
+      fflush(stdout); \
+   }
+
+#define COHERENCE_DEBUG_PRINT 0
+#define COHERENCE_DPRINTF(...) \
+   if(COHERENCE_DEBUG_PRINT) { \
       printf(__VA_ARGS__); \
       fflush(stdout); \
    }
@@ -1424,6 +1442,8 @@ class warp_inst_t : public inst_t {
   void update_next_rt_accesses();
   RTMemoryTransactionRecord get_next_rt_mem_transaction();
   unsigned process_returned_mem_access(const mem_fetch *mf);
+  bool process_returned_mem_access(const mem_fetch *mf, unsigned tid);
+  bool process_returned_mem_access(bool &mem_record_done, unsigned tid, new_addr_type addr, new_addr_type uncoalesced_base_addr);
   
   struct per_thread_info get_thread_info(unsigned tid) { return m_per_scalar_thread[tid]; }
   void set_thread_info(unsigned tid, struct per_thread_info thread_info) { m_per_scalar_thread[tid] = thread_info; }

@@ -1,0 +1,431 @@
+#include "ray_coherency_engine.h"
+#include "../../libcuda/gpgpu_context.h"
+
+
+ray_coherence_engine::ray_coherence_engine(unsigned sid, struct ray_coherence_config config, shader_core_ctx *core) {
+  m_core = core;
+  m_sid = sid;
+  m_config = config;
+  m_initialized = false;
+  m_active = false;
+}
+
+void ray_coherence_engine::set_world(float3 min, float3 max) {
+  COHERENCE_DPRINTF("Shader %d: Set world coordinates\n", m_sid);
+  world_min = min;
+  world_max = max;
+}
+
+void ray_coherence_engine::insert(warp_inst_t inst) {
+  assert(!inst.empty());
+
+  m_last_insertion_cycle = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
+  COHERENCE_DPRINTF("Shader %d: New warp inserted (%ld)\n", m_sid, m_last_insertion_cycle);
+  
+  unsigned num_rays = 0;
+
+  // Copy rays into engine
+  for (unsigned i=0; i<m_config.warp_size; i++) {
+    if (inst.rt_mem_accesses_empty(i)) continue;
+
+    // Create ray
+    coherence_ray ray;
+    ray.origin_thread_id = i;
+    ray.origin_warp_uid = inst.get_uid();
+    ray.ray_properties = inst.get_thread_info(i).ray_properties;
+    ray.RT_mem_accesses = inst.get_thread_info(i).RT_mem_accesses;
+    ray.latency_delay = inst.get_thread_latency(i);
+
+    // Get ray hash
+    ray_hash hash = get_ray_hash(ray.ray_properties);
+
+    // Add ray to pool
+    if (m_ray_pool.find(hash) == m_ray_pool.end()) {
+      COHERENCE_DPRINTF("Shader %d: New coherence packet created for hash 0x%x\n", m_sid, hash);
+      coherence_packet packet;
+      m_ray_pool[hash] = packet;
+    }
+    m_ray_pool[hash].push_back(ray);
+    m_total_rays++;
+    num_rays++;
+  }
+  
+  COHERENCE_DPRINTF("Shader %d: %d rays added (%d rays total)\n", m_sid, num_rays, m_total_rays);
+}
+
+bool ray_coherence_engine::is_stalled() {
+  // Check all the coherence packets
+  for (auto i=m_ray_pool.cbegin(); i!=m_ray_pool.cend(); i++) {
+    ray_hash hash = i->first;
+    coherence_packet packet = i->second;
+    if (!is_stalled(hash, packet)) return false;
+  }
+  // Stalled
+  return true;
+}
+
+bool ray_coherence_engine::is_stalled(ray_hash hash, coherence_packet packet) {
+  // Check all the rays
+  for (auto it=packet.cbegin(); it!=packet.cend(); it++) {
+    coherence_ray ray = *it;
+    if (!ray.empty()) {
+      if (ray.next_status() == RT_MEM_UNMARKED && ray.latency_delay == 0) return false;
+    }
+  }
+  // Stalled
+  return true;
+}
+
+void ray_coherence_engine::cycle() {
+  unsigned long long current_cycle = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
+  
+  // Turn engine off if there are no more rays
+  if (m_total_rays == 0) m_active = false;
+  // Turn engine off if stalled
+  else if (is_stalled()) m_active = false;
+  // Turn engine on if there are enough rays
+  else if (m_total_rays > m_config.min_rays) m_active = true;
+  // Turn engine on if timer expires
+  else if (current_cycle - m_last_insertion_cycle > m_config.max_cycles) m_active = true;
+}
+
+unsigned ray_coherence_engine::schedule_next_warp() {
+  assert(m_active);
+
+  // Find the largest coherence packet
+  unsigned largest_packet = 0;
+  ray_hash hash;
+  for (auto it=m_ray_pool.cbegin(); it!=m_ray_pool.cend(); it++) {
+    if (it->second.size() > largest_packet && !is_stalled(it->first, it->second)) {
+      hash = it->first;
+      largest_packet = it->second.size();
+    }
+  }
+  assert(largest_packet != 0);
+  m_active_hash = hash;
+  COHERENCE_DPRINTF("Shader %d: Scheduling next access (hash 0x%x ", m_sid, m_active_hash);
+
+  // Choose the most common request
+  std::map<new_addr_type, unsigned> requests;
+  // Gather all the addresses
+  for (auto it=m_ray_pool[m_active_hash].cbegin(); it!=m_ray_pool[m_active_hash].cend(); it++) {
+    coherence_ray ray = *it;
+
+    if (!ray.empty()) {
+      // Check if address is already in progress
+      if (ray.next_status() != RT_MEM_AWAITING) {
+        if (requests.find(ray.next_addr()) == requests.end()) {
+          requests[ray.next_addr()] = 0;
+        }
+        requests[ray.next_addr()]++;
+      }
+    }
+  }
+
+  assert(!requests.empty());
+
+  // Find the most common
+  unsigned occurrences = 0;
+  new_addr_type next_addr;
+  for (auto it=requests.cbegin(); it!=requests.cend(); it++) {
+    if (it->second > occurrences) {
+      occurrences = it->second;
+      next_addr = it->first;
+    }
+  }
+
+  COHERENCE_DPRINTF("addr 0x%x ", next_addr);
+
+
+  // Find thread
+  for (auto it=m_ray_pool[m_active_hash].cbegin(); it!=m_ray_pool[m_active_hash].cend(); it++) {
+    coherence_ray ray = *it;
+    if (!ray.empty()) {
+      if (ray.next_addr() == next_addr) {
+        m_active_thread = ray.origin_thread_id;
+        m_active_warp = ray.origin_warp_uid;
+        m_active_record = ray.next_access();
+
+        COHERENCE_DPRINTF("warp %d thread %d)\n", m_active_warp, m_active_thread);
+        return m_active_warp;
+      }
+    }
+  }
+  assert(0);
+}
+
+RTMemoryTransactionRecord ray_coherence_engine::get_next_access() {
+  // Mark memory record status
+  for (coherence_ray &ray : m_ray_pool[m_active_hash]) {
+    if (!ray.empty()) {
+      if (ray.next_addr() == m_active_record.address) {
+        // TODO: Figure out if it's necessary to match the size as well
+        assert(ray.RT_mem_accesses.front().size == m_active_record.size);
+        ray.RT_mem_accesses.front().status = RT_MEM_AWAITING;
+      }
+    }
+  }
+
+  // Mark request as sent
+  if (m_request_mshr.find(m_active_record.address) == m_request_mshr.end()) {
+    std::set<ray_hash> outstanding_hashes;
+    m_request_mshr[m_active_record.address] = outstanding_hashes;
+  }
+  COHERENCE_DPRINTF("Shader %d: Inserting MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, m_active_record.address);
+  m_request_mshr[m_active_record.address].insert(m_active_hash);
+
+  // Create MSHR for chunks
+  if (m_active_record.size > 32) {
+    COHERENCE_DPRINTF("Shader %d: Memory request > 32B. Inserting MSHR entries\n", m_sid);
+      // Create the memory chunks and push to mem_access_q
+    for (unsigned i=1; i<((m_active_record.size+31)/32); i++) {
+      if (m_request_mshr.find(m_active_record.address + (i * 32)) == m_request_mshr.end()) {
+        std::set<ray_hash> outstanding_hashes;
+        m_request_mshr[m_active_record.address + (i * 32)] = outstanding_hashes;
+      }
+      COHERENCE_DPRINTF("Shader %d: Inserting MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, m_active_record.address + (i * 32));
+      m_request_mshr[m_active_record.address + (i * 32)].insert(m_active_hash);
+    }
+  }
+
+  return m_active_record;
+}
+
+void ray_coherence_engine::undo_access(new_addr_type addr) {
+  // Assume that this was the most recent request
+  assert(m_active_record.address == addr);
+
+  // Remove the most recent hash from the MSHR
+  assert(m_request_mshr.find(addr) != m_request_mshr.end());
+  assert(m_request_mshr[addr].erase(m_active_hash) > 0);
+  COHERENCE_DPRINTF("Shader %d: Undoing MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, addr);
+}
+
+void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t> &m_current_warps) {
+  // Get the original address (TODO: CHECK THIS)
+  new_addr_type uncoalesced_addr = mf->get_uncoalesced_addr();
+  COHERENCE_DPRINTF("Shader %d: Processing memory response for addr 0x%x\n", m_sid, uncoalesced_addr);
+
+  unsigned found = 0;
+  
+  if (m_request_mshr.find(uncoalesced_addr) != m_request_mshr.end()) {
+    std::set<ray_hash> hashes = m_request_mshr[uncoalesced_addr];
+    COHERENCE_DPRINTF("Shader %d: Found %d MSHR ray coherency packets for addr 0x%x\n", m_sid, hashes.size(), uncoalesced_addr);
+
+    // Mark memory response for all hashes
+    for (ray_hash hash : hashes) {
+      // Find the appropriate threads
+      assert(m_ray_pool.find(hash) != m_ray_pool.end());
+      coherence_packet &packet = m_ray_pool[hash];
+      
+      // Go through each ray in the packet
+      for (coherence_ray &ray : packet) {
+        if (!ray.empty()) {
+          unsigned thread_id = ray.origin_thread_id;
+          unsigned warp_uid = ray.origin_warp_uid;
+
+          assert(m_current_warps.find(warp_uid) != m_current_warps.end());
+          COHERENCE_DPRINTF("Shader %d: Ray coherency packet includes warp %d thread %d\n", m_sid, warp_uid, thread_id);
+          bool mem_record_done = m_current_warps[warp_uid].process_returned_mem_access(mf, thread_id);
+
+          if (mem_record_done) {
+            assert(ray.next_addr() == mf->get_uncoalesced_base_addr());
+            ray.RT_mem_accesses.pop_front();
+            ray.latency_delay = m_current_warps[warp_uid].get_thread_latency(thread_id);
+            if (ray.empty()) m_total_rays--;
+          }
+        }
+      }
+    }
+
+    // Remove address from MSHR 
+    m_request_mshr.erase(uncoalesced_addr);
+  }
+}
+
+void ray_coherence_engine::dec_thread_latency() {
+  for (auto it=m_ray_pool.cbegin(); it!=m_ray_pool.cend(); it++) {
+    ray_hash hash = it->first;
+    for (coherence_ray &ray : m_ray_pool[hash]) {
+      if (ray.latency_delay > 0) ray.latency_delay--;
+    }
+  }
+}
+
+uint64_t ray_coherence_engine::hash_comp(float x, uint32_t num_bits) {
+  uint32_t mask = UINT32_MAX >> (32 - num_bits);
+
+  uint32_t o_x = *((uint32_t*) &x);
+
+  uint64_t sign_bit_x = o_x >> 31;
+  uint64_t exp_x = (o_x >> (31 - num_bits)) & mask;
+  uint64_t mant_x = (o_x >> (23 - num_bits)) & mask;
+
+  return (sign_bit_x << (2 * num_bits)) | (exp_x << num_bits) | mant_x;
+}
+
+// Quantize direction to a sphere - xyz to theta and phi
+// `theta_bits` is used for theta, `theta_bits` + 1 is used for phi, for a total of
+// 2 * `theta_bits` + 1 bits
+uint64_t ray_coherence_engine::hash_direction_spherical(const float3 &d) {
+  uint32_t num_sphere_bits = m_config.hash_sphere_bits;
+  uint32_t theta_bits = num_sphere_bits;
+  uint32_t phi_bits = theta_bits + 1;
+
+  uint64_t theta = std::acos(clamp(d.z, -1.f, 1.f)) / PI * 180;
+  uint64_t phi = (std::atan2(d.y, d.x) + PI) / PI * 180;
+  uint64_t q_theta = theta >> (8 - theta_bits);
+  uint64_t q_phi = phi >> (9 - phi_bits);
+
+  return (q_phi << theta_bits) | q_theta;
+}
+
+// Quantize origin to a grid
+// Each component uses `num_bits`, for a total of 3 * `num_bits` bits
+uint64_t ray_coherence_engine::hash_origin_grid(const float3& o, uint32_t num_bits) {
+  uint32_t grid_size = 1 << num_bits;
+
+  uint64_t hash_o_x = clamp((o.x - world_min.x) / (world_max.x - world_min.x) * grid_size, 0.f, (float)grid_size - 1);
+  uint64_t hash_o_y = clamp((o.y - world_min.y) / (world_max.y - world_min.y) * grid_size, 0.f, (float)grid_size - 1);
+  uint64_t hash_o_z = clamp((o.z - world_min.z) / (world_max.z - world_min.z) * grid_size, 0.f, (float)grid_size - 1);
+  return (hash_o_x << (2 * num_bits)) | (hash_o_y << num_bits) | hash_o_z;
+}
+
+ray_hash ray_coherence_engine::hash_francois(const Ray &ray) {
+  uint32_t num_bits = m_config.hash_francois_bits;
+  // Each component has 1 bit sign, `num_bits` mantissa, `num_bits` exponent
+  uint32_t num_comp_bits = 2 * num_bits + 1;
+  uint64_t hash_d =
+    (hash_comp(ray.get_direction().z, num_bits) << (2 * num_comp_bits)) |
+    (hash_comp(ray.get_direction().y, num_bits) << num_comp_bits) |
+     hash_comp(ray.get_direction().x, num_bits);
+  uint64_t hash_o =
+    (hash_comp(ray.get_origin().x, num_bits) << (2 * num_comp_bits)) |
+    (hash_comp(ray.get_origin().y, num_bits) << num_comp_bits) |
+     hash_comp(ray.get_origin().z, num_bits);
+  return (ray_hash)hash_o ^ hash_d;
+}
+
+ray_hash ray_coherence_engine::hash_grid_spherical(const Ray &ray)
+{
+  uint32_t num_sphere_bits = m_config.hash_sphere_bits;
+  uint32_t num_grid_bits = m_config.hash_grid_bits;
+  uint64_t hash_d = hash_direction_spherical(ray.get_direction());
+  uint64_t hash_o = hash_origin_grid(ray.get_origin(), num_grid_bits);
+  uint64_t hash = hash_o ^ hash_d;
+
+  return (ray_hash)hash;
+}
+
+ray_hash ray_coherence_engine::hash_francois_grid_spherical(const Ray &ray) {
+  return (ray_hash)hash_grid_spherical(ray) ^ hash_francois(ray);
+}
+
+ray_hash ray_coherence_engine::hash_two_point(const Ray &ray) {
+  uint64_t hash_1 = hash_origin_grid(ray.get_origin(), m_config.hash_grid_bits);
+  float3 d = world_max - world_min;
+  float max_extent_length = std::max(std::max(d.x, d.y), d.z);
+  float3 est_target = ray.get_origin() + m_config.hash_two_point_est_length_ratio * max_extent_length * ray.get_direction();
+  uint64_t hash_2 = hash_origin_grid(est_target, m_config.hash_grid_bits);
+  return (ray_hash)hash_1 ^ hash_2;
+}
+
+ray_hash ray_coherence_engine::hash_direction_only(const Ray &ray) {
+  uint64_t hash_d = hash_direction_spherical(ray.get_direction());
+  return (ray_hash)hash_d;
+}
+
+
+unsigned long long ray_coherence_engine::compute_index(ray_hash hash, unsigned num_bits) const {
+  uint64_t mask = UINT64_MAX >> (64 - num_bits);
+
+  uint64_t index = 0;
+  while (hash > 0) {
+    index ^= (hash & mask);
+    hash >>= num_bits;
+  }
+  return index;
+}
+
+
+ray_hash ray_coherence_engine::get_ray_hash(const Ray &ray) {
+
+  switch (m_config.hash) {
+    // Francois's hash
+    case 'f':
+        return hash_francois(ray);
+
+    // Grid-Spherical
+    case 'g':
+      return hash_grid_spherical(ray);
+
+    // Two-Point
+    case 't':
+      return hash_two_point(ray);
+
+    // Direction-Only
+    case 'd':
+      return hash_direction_only(ray);
+    
+    default:
+      assert(0);
+  }
+}
+
+void ray_coherence_engine::print(FILE *fout) {
+  fprintf(fout, "\nRAY_COHERENCE_ENGINE: (%sactive)\n", m_active ? "" : "in");
+
+  fprintf(fout, "Rays (%d):\n", m_total_rays);
+  for (auto it=m_ray_pool.begin(); it!=m_ray_pool.end(); it++) {
+    ray_hash hash = it->first;
+    fprintf(fout, "[0x%x] (%d)\t", hash, is_stalled(hash, it->second));
+    for (coherence_ray ray : it->second) {
+      fprintf(fout, "w%d:t%d\t", ray.origin_warp_uid, ray.origin_thread_id);
+    }
+    fprintf(fout, "\n");
+  }
+
+  fprintf(fout, "Outstanding requests:\n");
+  for (auto it=m_request_mshr.begin(); it!=m_request_mshr.end(); it++) {
+    fprintf(fout, "[0x%x]\t", it->first);
+    for (ray_hash hash : it->second) {
+      fprintf(fout, "0x%x\t", hash);
+    }
+    fprintf(fout, "\n");
+  }
+}
+
+void ray_coherence_engine::print(ray_hash &hash, FILE *fout) {
+  if (m_ray_pool.find(hash)!=m_ray_pool.end()) {
+    print(m_ray_pool[hash], fout);
+  }
+  else {
+    fprintf(fout, "0x%x not found!\n", hash);
+  }
+}
+
+void ray_coherence_engine::print(coherence_packet &packet, FILE *fout) const {
+  for (coherence_ray ray : packet) {
+    ray.print(fout);
+  }
+}
+
+void ray_coherence_engine::print_full(FILE *fout) {
+  fprintf(fout, "\nRAY_COHERENCE_ENGINE: (%sactive)\n", m_active ? "" : "in");
+
+  fprintf(fout, "Rays (%d):\n", m_total_rays);
+  for (auto it=m_ray_pool.begin(); it!=m_ray_pool.end(); it++) {
+    ray_hash hash = it->first;
+    fprintf(fout, "Hash [0x%x] (%s)\n", hash, is_stalled(hash, it->second) ? "s" : " ");
+    print(it->second, fout);
+  }
+
+  fprintf(fout, "Outstanding requests:\n");
+  for (auto it=m_request_mshr.begin(); it!=m_request_mshr.end(); it++) {
+    fprintf(fout, "[0x%x]\t", it->first);
+    for (ray_hash hash : it->second) {
+      fprintf(fout, "0x%x\t", hash);
+    }
+    fprintf(fout, "\n");
+  }
+}

@@ -1,0 +1,111 @@
+#ifndef RAY_COHERENCE_INCLUDED
+#define RAY_COHERENCE_INCLUDED
+
+#include "../abstract_hardware_model.h"
+#include <cmath>
+#include "vector-math.h"
+
+typedef uint64_t(*HashFunc)(const Ray&, const float3&, const float3&);
+
+
+struct {
+  Ray ray_properties;
+  std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
+  unsigned origin_warp_uid;
+  unsigned origin_thread_id;
+  unsigned latency_delay;
+
+  bool empty() {
+    return RT_mem_accesses.empty();
+  }
+  void print(FILE* fout) {
+    fprintf(fout, "\t[%d:%d] [%d]- ", origin_warp_uid, origin_thread_id, latency_delay);
+    for (RTMemoryTransactionRecord record : RT_mem_accesses) {
+      fprintf(fout, "0x%x (%d-%s-<%s>)\t", record.address, record.size, record.status == RT_MEM_AWAITING ? "A" : "U", record.mem_chunks.to_string().c_str()); 
+    }
+    fprintf(fout, "\n");
+  }
+  RTMemoryTransactionRecord next_access() {
+    assert(!RT_mem_accesses.empty());
+    return RT_mem_accesses.front();
+  }
+  new_addr_type next_addr() {
+    assert(!RT_mem_accesses.empty());
+    return RT_mem_accesses.front().address;
+  }
+  RTMemStatus next_status() {
+    assert(!RT_mem_accesses.empty());
+    return RT_mem_accesses.front().status;
+  }
+} typedef coherence_ray;
+
+typedef std::deque<coherence_ray> coherence_packet;
+typedef unsigned long long ray_hash;
+
+class ray_coherence_engine {
+  public:
+    ray_coherence_engine(unsigned sid, struct ray_coherence_config config, shader_core_ctx *core);
+    ~ray_coherence_engine();
+    
+    void cycle();
+    void insert(warp_inst_t new_warp);
+    unsigned schedule_next_warp();
+    RTMemoryTransactionRecord get_next_access();
+    void undo_access(new_addr_type addr);
+    void process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t> &m_current_warps);
+    void dec_thread_latency();
+
+    // Backwards pointer
+    shader_core_ctx *m_core;
+    unsigned m_sid;
+    ray_coherence_config m_config;
+
+    bool m_initialized;
+
+    void set_world(float3 min, float3 max);
+    bool active() const { return m_active; }
+    void print_full(FILE *fout);
+    void print(FILE *fout);
+    void print(ray_hash &hash, FILE *fout);
+    void print(coherence_packet &packet, FILE *fout) const;
+
+  private:
+    unsigned m_total_rays;
+    unsigned long long m_last_insertion_cycle;
+
+    // map [hash]->[group of rays]
+    std::map<ray_hash, coherence_packet> m_ray_pool;
+
+    // map [addr]->[set of hashes (coherence_packets)]
+    std::map<new_addr_type, std::set<ray_hash> > m_request_mshr;
+
+    float3 world_min;
+    float3 world_max;
+
+    bool m_active;
+
+    ray_hash m_active_hash;
+    unsigned m_active_warp;
+    unsigned m_active_thread;
+    RTMemoryTransactionRecord m_active_record;
+
+    bool is_stalled();
+    bool is_stalled(ray_hash hash, coherence_packet packet);
+
+    unsigned long long compute_index(ray_hash hash, unsigned num_bits) const;
+    ray_hash get_ray_hash(const Ray &ray);
+
+    // Hash functions
+    uint64_t hash_comp(float x, uint32_t num_bits);
+    uint64_t hash_direction_spherical(const float3 &d);
+    uint64_t hash_origin_grid(const float3& o, uint32_t num_bits);
+
+    ray_hash hash_francois(const Ray &ray);
+    ray_hash hash_grid_spherical(const Ray &ray);
+    ray_hash hash_francois_grid_spherical(const Ray &ray);
+    ray_hash hash_two_point(const Ray &ray);
+    ray_hash hash_direction_only(const Ray &ray);
+
+};
+
+#endif

@@ -1,5 +1,4 @@
-#ifndef VECTOR_MATH_INCLUDED
-#define VECTOR_MATH_INCLUDED
+#include "vector-math.h"
 
 float3 make_float3(float a, float b, float c)
 {
@@ -81,6 +80,3 @@ float3 max(float3 a, float3 b)
     return make_float3(std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z));
 }
 
-const float PI = 3.14159265358979323846;
-
-#endif

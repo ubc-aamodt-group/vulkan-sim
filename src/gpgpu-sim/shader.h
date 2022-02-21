@@ -54,6 +54,7 @@
 #include "stack.h"
 #include "stats.h"
 #include "traffic_breakdown.h"
+#include "ray_coherency_engine.h"
 
 #define NO_OP_FLAG 0xFF
 
@@ -1324,6 +1325,8 @@ class rt_unit : public pipelined_simd_unit {
       bool mem_chunk;
       
       shader_core_stats *m_stats;
+
+      ray_coherence_engine *m_ray_coherence_engine;
       
       // FILE * m_cache_reuse_log_file;
       
@@ -1598,7 +1601,42 @@ class shader_core_config : public core_config {
       &m_rt_intersection_latency[TransactionType::BVH_QUAD_LEAF],
       &m_rt_intersection_latency[TransactionType::BVH_QUAD_LEAF_HIT],
       &m_rt_intersection_latency[TransactionType::BVH_PROCEDURAL_LEAF]);
+    
+    sscanf(m_rt_coherence_engine_config_str, "%u,%u,%c,%u,%u,%u,%f", 
+      &m_rt_coherence_engine_config.max_cycles,
+      &m_rt_coherence_engine_config.min_rays,
+      &m_rt_coherence_engine_config.hash,
+      &m_rt_coherence_engine_config.hash_francois_bits,
+      &m_rt_coherence_engine_config.hash_grid_bits,
+      &m_rt_coherence_engine_config.hash_sphere_bits,
+      &m_rt_coherence_engine_config.hash_two_point_est_length_ratio);
+
+    // Print options into output for readability:
+    printf("GPGPU-Sim: Ray Coherence Engine Settings:\n");
+    printf("\tEnabled: %s\n", m_rt_coherence_engine ? "Yes" : "No");
+    printf("\tMax cycles: %d\n", m_rt_coherence_engine_config.max_cycles);
+    printf("\tSorting hash: ");
+    switch (m_rt_coherence_engine_config.hash) {
+      case 'd': 
+        printf("direction-only\n");
+        printf("\tBits: %d\n", m_rt_coherence_engine_config.hash_sphere_bits);
+        break;
+      case 'f':
+        printf("francois\n");
+        printf("\tBits: %d\n", m_rt_coherence_engine_config.hash_francois_bits);
+        break;
+      case 'g':
+        printf("grid-spherical\n");
+        printf("\tBits: %d-%d\n", m_rt_coherence_engine_config.hash_grid_bits, m_rt_coherence_engine_config.hash_sphere_bits);
+        break;
+      case 't':
+        printf("two-point\n");
+        printf("\tBits: %d (%f)\n", m_rt_coherence_engine_config.hash_grid_bits, m_rt_coherence_engine_config.hash_two_point_est_length_ratio);
+      default:
+        printf("unknown\n");
+    }
   }
+
   void reg_options(class OptionParser *opp);
   unsigned max_cta(const kernel_info_t &k) const;
   unsigned num_shader() const {
@@ -1731,7 +1769,9 @@ class shader_core_config : public core_config {
   unsigned m_rt_max_mshr_entries;
   bool m_rt_coalesce_warps;
   bool m_rt_use_l1d;
-  bool m_rt_coherency_engine;
+  bool m_rt_coherence_engine;
+  char * m_rt_coherence_engine_config_str;
+  ray_coherence_config m_rt_coherence_engine_config;
   bool bypassL0Complet;
 };
 
@@ -1841,6 +1881,8 @@ struct shader_core_stats_pod {
   unsigned long long *rt_total_cycles;
   unsigned long long rt_total_cycles_sum = 0;
   unsigned long long rt_writes;
+  unsigned rt_max_store_q;
+  unsigned *rt_mem_store_q_cycles;
 
   int gpgpu_n_mem_l2_writeback;
   int gpgpu_n_mem_l1_write_allocate;
@@ -1943,6 +1985,7 @@ class shader_core_stats : public shader_core_stats_pod {
         (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     m_n_diverge = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     
+    rt_mem_store_q_cycles = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_total_cycles = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
     rt_nwarps = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_nthreads_intersection = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));

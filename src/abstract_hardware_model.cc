@@ -974,46 +974,66 @@ unsigned warp_inst_t::process_returned_mem_access(const mem_fetch *mf) {
   
   // Iterate through every thread in the warp
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
-      RTMemoryTransactionRecord &mem_record = m_per_scalar_thread[i].RT_mem_accesses.front();
-      new_addr_type thread_addr = mem_record.address;
-      
-      if (thread_addr == uncoalesced_base_addr) {
-        // Only remove accesses from threads that have completed their previous intersection test
-        if (m_per_scalar_thread[i].intersection_delay == 0) {
-          new_addr_type coalesced_base_addr = line_size_based_tag_func(uncoalesced_base_addr, 32);
-          unsigned position = (addr - coalesced_base_addr) / 32;
-          std::string bitstring = mem_record.mem_chunks.to_string();
-          RT_DPRINTF("Thread %d received chunk %d (of <%s>)\n", i, position, bitstring.c_str());
-          mem_record.mem_chunks.reset(position);
-          
-          // If all the bits are clear, the entire data has returned, pop from list
-          if (mem_record.mem_chunks.none()) {
-            // Set up delay of next intersection test
-            unsigned n_delay_cycles = m_config->m_rt_intersection_latency.at(mem_record.type);
-            m_per_scalar_thread[i].intersection_delay += n_delay_cycles;
-            
-            RT_DPRINTF("Thread %d collected all chunks for address 0x%x (size %d)\n", i, mem_record.address, mem_record.size);
-            RT_DPRINTF("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
-            m_per_scalar_thread[i].RT_mem_accesses.pop_front();
+    bool mem_record_done;
+    if (process_returned_mem_access(mem_record_done, i, addr, uncoalesced_base_addr)) {
+      thread_found++;
+    }
+  }
+  return thread_found;
+}
 
-            // Mark triangle hit to store to memory
-            if (mem_record.type == TransactionType::BVH_QUAD_LEAF_HIT) {
-              m_per_scalar_thread[i].ray_intersect = true;
-              RT_DPRINTF("Buffer store detected for warp %d thread %d\n", m_uid, i);
-            }
-          }
+bool warp_inst_t::process_returned_mem_access(const mem_fetch *mf, unsigned tid) {
+  bool mem_record_done = false;
+  
+  // Get addresses
+  new_addr_type addr = mf->get_addr();
+  new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
+
+  process_returned_mem_access(mem_record_done, tid, addr, uncoalesced_base_addr);
+  return mem_record_done;
+}
+
+bool warp_inst_t::process_returned_mem_access(bool &mem_record_done, unsigned tid, new_addr_type addr, new_addr_type uncoalesced_base_addr) {
+  bool thread_found = false;
+  if (!m_per_scalar_thread[tid].RT_mem_accesses.empty()) {
+    RTMemoryTransactionRecord &mem_record = m_per_scalar_thread[tid].RT_mem_accesses.front();
+    new_addr_type thread_addr = mem_record.address;
+    
+    if (thread_addr == uncoalesced_base_addr) {
+      // Only remove accesses from threads that have completed their previous intersection test
+      if (m_per_scalar_thread[tid].intersection_delay == 0) {
+        new_addr_type coalesced_base_addr = line_size_based_tag_func(uncoalesced_base_addr, 32);
+        unsigned position = (addr - coalesced_base_addr) / 32;
+        std::string bitstring = mem_record.mem_chunks.to_string();
+        RT_DPRINTF("Thread %d received chunk %d (of <%s>)\n", tid, position, bitstring.c_str());
+        mem_record.mem_chunks.reset(position);
+        
+        // If all the bits are clear, the entire data has returned, pop from list
+        if (mem_record.mem_chunks.none()) {
+          // Set up delay of next intersection test
+          unsigned n_delay_cycles = m_config->m_rt_intersection_latency.at(mem_record.type);
+          m_per_scalar_thread[tid].intersection_delay += n_delay_cycles;
           
-          thread_found++;
+          RT_DPRINTF("Thread %d collected all chunks for address 0x%x (size %d)\n", tid, mem_record.address, mem_record.size);
+          RT_DPRINTF("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
+          m_per_scalar_thread[tid].RT_mem_accesses.pop_front();
+          mem_record_done = true;
+
+          // Mark triangle hit to store to memory
+          if (mem_record.type == TransactionType::BVH_QUAD_LEAF_HIT) {
+            m_per_scalar_thread[tid].ray_intersect = true;
+            RT_DPRINTF("Buffer store detected for warp %d thread %d\n", m_uid, tid);
+          }
         }
       }
-      
-      // If the RT_mem_accesses is now empty, then the last memory request has returned and the thread is almost done
-      if (m_per_scalar_thread[i].RT_mem_accesses.empty()) {
-        unsigned long long current_cycle =  GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle +
-                                            GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
-        m_per_scalar_thread[i].end_cycle = current_cycle + m_per_scalar_thread[i].intersection_delay;
-      }
+      thread_found = true;
+    }
+    
+    // If the RT_mem_accesses is now empty, then the last memory request has returned and the thread is almost done
+    if (m_per_scalar_thread[tid].RT_mem_accesses.empty()) {
+      unsigned long long current_cycle =  GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle +
+                                          GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
+      m_per_scalar_thread[tid].end_cycle = current_cycle + m_per_scalar_thread[tid].intersection_delay;
     }
   }
   return thread_found;

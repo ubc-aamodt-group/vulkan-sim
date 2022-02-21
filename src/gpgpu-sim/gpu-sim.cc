@@ -258,9 +258,13 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "use existing L1 cache instead of dedicated L0 cache ",
       "1");
   option_parser_register(
-      opp, "-gpgpu_rt_coherency_engine", OPT_BOOL, &m_rt_coherency_engine,
+      opp, "-gpgpu_rt_coherence_engine", OPT_BOOL, &m_rt_coherence_engine,
       "enable coherency engine (ray sorting) ",
       "0");
+  option_parser_register(
+      opp, "-gpgpu_rt_coherence_engine_config", OPT_CSTR, &m_rt_coherence_engine_config_str,
+      "max cycles, hash ",
+      "100, d");
   option_parser_register(
       opp, "-gpgpu_rt_disable_rt_cache", OPT_BOOL, &bypassL0Complet,
       "bypass RT cache and connect RT unit directly to interconnect ",
@@ -269,6 +273,10 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       opp, "-gpgpu_rt_max_warps", OPT_UINT32, &m_rt_max_warps,
       "max number of warps concurrently in one rt core ",
       "0");
+  option_parser_register(
+      opp, "-gpgpu_rt_max_mshr", OPT_UINT32, &m_rt_max_mshr_entries,
+      "max number of MSHR entries in RT unit ",
+      "32");
   option_parser_register(
       opp, "-gpgpu_rt_coalesce_warps", OPT_BOOL, &m_rt_coalesce_warps,
       "try to coalesce memory requests between warps ",

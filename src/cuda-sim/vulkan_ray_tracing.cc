@@ -1,6 +1,5 @@
 #include "vulkan_ray_tracing.h"
 
-#include "vector-math.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -35,6 +34,8 @@ namespace fs = boost::filesystem;
 #include "../stream_manager.h"
 #include "../abstract_hardware_model.h"
 #include "vulkan_acceleration_structure_util.h"
+#include "../gpgpu-sim/vector-math.h"
+
 
 VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
@@ -218,6 +219,22 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
     
     uint8_t* topRootAddr = (uint8_t*)_topLevelAS + topBVH.RootNodeOffset;
+
+    // Get min/max
+    if (!ctx->func_sim->g_rt_world_set) {
+        struct GEN_RT_BVH_INTERNAL_NODE node;
+        GEN_RT_BVH_INTERNAL_NODE_unpack(&node, topRootAddr);
+        for(int i = 0; i < 6; i++) {
+            if (node.ChildSize[i] > 0) {
+                float3 idir = calculate_idir(ray.get_direction()); //TODO: this works wierd if one of ray dimensions is 0
+                float3 lo, hi;
+                set_child_bounds(&node, i, &lo, &hi);
+                ctx->func_sim->g_rt_world_min = min(ctx->func_sim->g_rt_world_min, lo);
+                ctx->func_sim->g_rt_world_max = min(ctx->func_sim->g_rt_world_max, hi);
+            }
+        }
+        ctx->func_sim->g_rt_world_set = true;
+    }
 
     std::list<StackEntry> stack;
     stack.push_back(StackEntry(topRootAddr, true, false));
