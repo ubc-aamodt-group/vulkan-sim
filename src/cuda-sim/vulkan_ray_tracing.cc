@@ -269,7 +269,7 @@ bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& pat
 }
 
 
-bool debugTraversal = true;
+bool debugTraversal = false;
 
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
@@ -290,7 +290,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
     // std::list<uint8_t *> path;
-    // find_primitive((uint8_t*)_topLevelAS, 6207, path);
+    // find_primitive((uint8_t*)_topLevelAS, 9920, path);
 
     Traversal_data traversal_data;
 
@@ -572,6 +572,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
                         transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_QUAD_LEAF_length * 4, TransactionType::BVH_QUAD_LEAF));
 
+                        // if(leaf.PrimitiveIndex0 == 9600)
+                        // {
+                        //     leaf.QuadVertex[2].Z = -0.001213;
+                        // }
+
                         float3 p[3];
                         for(int i = 0; i < 3; i++)
                         {
@@ -594,10 +599,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                                 traversalFile << "miss quad node " << leaf_addr << " ";
                             traversalFile << "primitiveID = " << leaf.PrimitiveIndex0 << "\n";
 
-                            traversalFile << "p[0] = (" << p[0].x << p[0].y << p[0].z << ") ";
-                            traversalFile << "p[1] = (" << p[1].x << p[1].y << p[1].z << ") ";
-                            traversalFile << "p[2] = (" << p[2].x << p[2].y << p[2].z << ") ";
-                            traversalFile << "p[3] = (" << p[3].x << p[3].y << p[3].z << ")" << std::endl;
+                            traversalFile << "p[0] = (" << p[0].x << ", " << p[0].y << ", " << p[0].z << ") ";
+                            traversalFile << "p[1] = (" << p[1].x << ", " << p[1].y << ", " << p[1].z << ") ";
+                            traversalFile << "p[2] = (" << p[2].x << ", " << p[2].y << ", " << p[2].z << ") ";
+                            traversalFile << "p[3] = (" << p[3].x << ", " << p[3].y << ", " << p[3].z << ")" << std::endl;
                         }
 
                         float world_thit = thit / worldToObject_tMultiplier;
@@ -967,7 +972,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint64_t launch_size_addr) {
     
     // CmdTraceRaysKHRID++;
-    // if(CmdTraceRaysKHRID != 1)
+    // if(CmdTraceRaysKHRID != 6)
     //     return;
 
     // if(imageFile.is_open())
@@ -1476,31 +1481,31 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         // }
         case VK_FORMAT_R8G8B8A8_SRGB:
         {
-            // uint32_t tileWidth = 32;
-            // uint32_t tileHeight = 32;
+            uint32_t tileWidth = 32;
+            uint32_t tileHeight = 32;
 
-            // int tileX = x_int / tileWidth;
-            // int tileY = y_int / tileHeight;
-            // int tileID = tileX + tileY * image->extent.width / tileWidth;
+            int tileX = x_int / tileWidth;
+            int tileY = y_int / tileHeight;
+            int tileID = tileX + tileY * image->extent.width / tileWidth;
 
-            // uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
+            uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
 
             // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
-            // c0 = SRGB_to_linearRGB(address[offset] / 255.0);
-            // c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
-            // c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
-            // c3 = address[offset + 3] / 255.0;
+            c0 = SRGB_to_linearRGB(address[offset] / 255.0);
+            c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
+            c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
+            c3 = address[offset + 3] / 255.0;
 
-            uint8_t colors[4];
+            // uint8_t colors[4];
 
-            intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
-            colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
-            ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+            // intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
+            // colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
+            // ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
 
-            c0 = SRGB_to_linearRGB(colors[0] / 255.0);
-            c1 = SRGB_to_linearRGB(colors[1] / 255.0);
-            c2 = SRGB_to_linearRGB(colors[2] / 255.0);
-            c3 = colors[3] / 255.0;
+            // c0 = SRGB_to_linearRGB(colors[0] / 255.0);
+            // c1 = SRGB_to_linearRGB(colors[1] / 255.0);
+            // c2 = SRGB_to_linearRGB(colors[2] / 255.0);
+            // c3 = colors[3] / 255.0;
 
             break;
         }
@@ -1563,8 +1568,6 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     struct anv_image * image = image_view->image;
     assert(image->n_planes == 1);
     assert(image->samples == 1);
-    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
-    assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
 
     void* mem_address = anv_address_map(image->planes[0].address);
 
@@ -1586,36 +1589,86 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
             if(hitValue_W >= 1)
                 a = 255;
             
-            uint8_t colors[] = {r, g, b, a};
+            uint8_t colors[] = {b, g, r, a};
 
-            intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
-            mem_address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
-            ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+            switch (image->planes[0].surface.isl.tiling)
+            {
+                case ISL_TILING_Y0:
+                {
+                    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+                    intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
+                        mem_address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
+                        ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+                    break;
+                }
+            
+            default:
+                assert(0);
+                break;
+            }
+
+            
             break;
             
-            uint32_t tileWidth = 32;
-            uint32_t tileHeight = 32;
+            // uint32_t tileWidth = 32;
+            // uint32_t tileHeight = 32;
 
-            int tileX = gl_LaunchIDEXT_X / tileWidth;
-            int tileY = gl_LaunchIDEXT_Y / tileHeight;
-            int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
+            // int tileX = gl_LaunchIDEXT_X / tileWidth;
+            // int tileY = gl_LaunchIDEXT_Y / tileHeight;
+            // int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
 
-            uint32_t offset = (tileID * tileWidth * tileHeight + (gl_LaunchIDEXT_X % tileWidth) + (gl_LaunchIDEXT_Y % tileHeight) * tileWidth) * 4;
-            if(offset >= 3768320)
-                printf("this is where things go wrong\n");
-            assert (offset >= 0);
+            // uint32_t offset = (tileID * tileWidth * tileHeight + (gl_LaunchIDEXT_X % tileWidth) + (gl_LaunchIDEXT_Y % tileHeight) * tileWidth) * 4;
+            // if(offset >= 3768320)
+            //     printf("this is where things go wrong\n");
+            // assert (offset >= 0);
 
-            // offset = gl_LaunchIDEXT_Y * image->extent.width;
-            // offset += gl_LaunchIDEXT_X;
-            // offset *= 4;
+            // // offset = gl_LaunchIDEXT_Y * image->extent.width;
+            // // offset += gl_LaunchIDEXT_X;
+            // // offset *= 4;
 
-            uint8_t* p = ((uint8_t*)mem_address) + offset;
-            p[0] = b;
-            p[1] = g;
-            p[2] = r;
-            p[3] = a;
+            // uint8_t* p = ((uint8_t*)mem_address) + offset;
+            // p[0] = b;
+            // p[1] = g;
+            // p[2] = r;
+            // p[3] = a;
+            // break;
+        }
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        {
+            uint8_t r = hitValue_X * 255;
+            uint8_t g = hitValue_Y * 255;
+            uint8_t b = hitValue_Z * 255;
+            uint8_t a = hitValue_W * 255;
+
+            if(hitValue_X >= 1)
+                r = 255;
+            if(hitValue_Y >= 1)
+                g = 255;
+            if(hitValue_Z >= 1)
+                b = 255;
+            if(hitValue_W >= 1)
+                a = 255;
+            
+            uint8_t colors[] = {r, g, b, a};
+
+            switch (image->planes[0].surface.isl.tiling)
+            {
+                case ISL_TILING_Y0:
+                {
+                    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+                    intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
+                        mem_address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
+                        ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+                    break;
+                }
+            
+            default:
+                assert(0);
+                break;
+            }
             break;
         }
+
         
         default:
             assert(0);
