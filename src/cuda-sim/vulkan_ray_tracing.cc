@@ -1661,10 +1661,21 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
                         ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
                     break;
                 }
+
+                case ISL_TILING_LINEAR:
+                {
+                    uint32_t offset = (gl_LaunchIDEXT_Y * image->extent.width + gl_LaunchIDEXT_X) * 4;
+                    uint8_t* p = ((uint8_t*)mem_address) + offset;
+                    p[0] = b;
+                    p[1] = g;
+                    p[2] = r;
+                    p[3] = a;
+                    break;
+                }
             
-            default:
-                assert(0);
-                break;
+                default:
+                    assert(0);
+                    break;
             }
             break;
         }
