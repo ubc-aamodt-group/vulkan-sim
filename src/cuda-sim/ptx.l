@@ -194,6 +194,7 @@ unwrap_32_4 TC; yylval->int_value = UNWRAP_32_4_OP; return OPCODE;
 get_element_32 TC; yylval->int_value = GET_ELEMENT_32_OP; return OPCODE;
 set_element_32 TC; yylval->int_value = SET_ELEMENT_32_OP; return OPCODE;
 txl TC; yylval->int_value = TXL_OP; return OPCODE;
+shader_clock TC; yylval->int_value = SHADER_CLOCK_OP; return OPCODE;
 
 
 "CPTX_END"	printf("ENDING CUSTOM PTX.\n"); BEGIN(IN_COMMENT);

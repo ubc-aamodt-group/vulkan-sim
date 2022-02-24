@@ -7398,3 +7398,17 @@ void set_element_32_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   
   thread->set_operand_value(dst, data, BB128_TYPE, thread, pI);
 }
+
+void shader_clock_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  unsigned long long clock = thread->get_gpu()->gpu_tot_sim_cycle;
+  
+  ptx_reg_t data;
+
+  data.u32 = clock & ((1ULL << 32) - 1);
+  const operand_info &dst = pI->dst();
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+
+  data.u32 = clock >> 32;
+  const operand_info &dst2 = pI->operand_lookup(1);
+  thread->set_operand_value(dst2, data, U32_TYPE, thread, pI);
+}
