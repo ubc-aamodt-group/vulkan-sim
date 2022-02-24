@@ -42,9 +42,48 @@ struct {
 typedef std::deque<coherence_ray> coherence_packet;
 typedef unsigned long long ray_hash;
 
+enum class coherence_stats_type {
+  COALESCED_REQUESTS = 0,
+  ACTIVE_PACKETS,
+  TOTAL_TYPES
+};
+
+class coherence_stats {
+  public:
+    coherence_stats() {
+      total_packets = 0;
+      total_rays = 0;
+      max_rays = 0;
+      total_cycles = 0;
+      stalled_cycles = 0;
+      active_cycles = 0;
+      activate_by_rays = 0;
+      activate_by_timer = 0;
+      stalled_addition = 0;
+    }
+    ~coherence_stats();
+
+    void print(FILE *fout);
+    void average_stat(coherence_stats_type type, unsigned value);
+
+    unsigned total_packets;
+    unsigned total_rays;
+    unsigned max_rays;
+    unsigned long long total_cycles;
+    unsigned long long stalled_cycles;
+    unsigned long long active_cycles;
+    unsigned activate_by_rays;
+    unsigned activate_by_timer;
+    unsigned stalled_addition;
+  
+  private:
+    unsigned avg_counter[(int)coherence_stats_type::TOTAL_TYPES] = {0};
+    float avg_stats[(int)coherence_stats_type::TOTAL_TYPES] = {0};
+};
+
 class ray_coherence_engine {
   public:
-    ray_coherence_engine(unsigned sid, struct ray_coherence_config config, shader_core_ctx *core);
+    ray_coherence_engine(unsigned sid, struct ray_coherence_config config, coherence_stats *stats, shader_core_ctx *core);
     ~ray_coherence_engine();
     
     void cycle();
@@ -68,6 +107,7 @@ class ray_coherence_engine {
     void print(FILE *fout);
     void print(ray_hash &hash, FILE *fout);
     void print(coherence_packet &packet, FILE *fout) const;
+    void print_stats(FILE *fout);
 
   private:
     unsigned m_total_rays;
@@ -82,6 +122,8 @@ class ray_coherence_engine {
     float3 world_min;
     float3 world_max;
 
+    coherence_stats* m_stats;
+
     bool m_active;
 
     ray_hash m_active_hash;
@@ -89,6 +131,7 @@ class ray_coherence_engine {
     unsigned m_active_thread;
     RTMemoryTransactionRecord m_active_record;
 
+    bool is_empty(coherence_packet packet);
     bool is_stalled();
     bool is_stalled(ray_hash hash, coherence_packet packet);
 

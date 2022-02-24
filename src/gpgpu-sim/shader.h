@@ -1884,6 +1884,8 @@ struct shader_core_stats_pod {
   unsigned rt_max_store_q;
   unsigned *rt_mem_store_q_cycles;
 
+  coherence_stats **rt_coherence_stats;
+
   int gpgpu_n_mem_l2_writeback;
   int gpgpu_n_mem_l1_write_allocate;
   int gpgpu_n_mem_l2_write_allocate;
@@ -1989,6 +1991,11 @@ class shader_core_stats : public shader_core_stats_pod {
     rt_total_cycles = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
     rt_nwarps = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_nthreads_intersection = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    
+    rt_coherence_stats = (coherence_stats **)calloc(config->num_shader(), sizeof(coherence_stats *));
+    for (unsigned i=0; i<config->num_shader(); i++) {
+      rt_coherence_stats[i] = new coherence_stats();
+    }
     
     shader_cycle_distro =
         (unsigned *)calloc(config->warp_size + 3, sizeof(unsigned));

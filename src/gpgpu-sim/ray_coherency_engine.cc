@@ -2,12 +2,13 @@
 #include "../../libcuda/gpgpu_context.h"
 
 
-ray_coherence_engine::ray_coherence_engine(unsigned sid, struct ray_coherence_config config, shader_core_ctx *core) {
+ray_coherence_engine::ray_coherence_engine(unsigned sid, struct ray_coherence_config config, coherence_stats *stats, shader_core_ctx *core) {
   m_core = core;
   m_sid = sid;
   m_config = config;
   m_initialized = false;
   m_active = false;
+  m_stats = stats;
 }
 
 void ray_coherence_engine::set_world(float3 min, float3 max) {
@@ -44,13 +45,32 @@ void ray_coherence_engine::insert(warp_inst_t inst) {
       COHERENCE_DPRINTF("Shader %d: New coherence packet created for hash 0x%x\n", m_sid, hash);
       coherence_packet packet;
       m_ray_pool[hash] = packet;
+      m_stats->total_packets++;
+    }
+
+    if (!m_ray_pool[hash].empty() && is_stalled(hash, m_ray_pool[hash])) {
+      m_stats->stalled_addition++;
     }
     m_ray_pool[hash].push_back(ray);
     m_total_rays++;
+    m_stats->total_rays++;
     num_rays++;
   }
   
   COHERENCE_DPRINTF("Shader %d: %d rays added (%d rays total)\n", m_sid, num_rays, m_total_rays);
+  if (m_total_rays > m_stats->max_rays) {
+    m_stats->max_rays = m_total_rays;
+  }
+}
+
+bool ray_coherence_engine::is_empty(coherence_packet packet) {
+  for (auto it=packet.cbegin(); it!=packet.cend(); it++) {
+    coherence_ray ray = *it;
+    if (!ray.empty()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool ray_coherence_engine::is_stalled() {
@@ -82,11 +102,36 @@ void ray_coherence_engine::cycle() {
   // Turn engine off if there are no more rays
   if (m_total_rays == 0) m_active = false;
   // Turn engine off if stalled
-  else if (is_stalled()) m_active = false;
+  else if (is_stalled()) {
+    m_active = false;
+    m_stats->stalled_cycles++;
+  }
   // Turn engine on if there are enough rays
-  else if (m_total_rays > m_config.min_rays) m_active = true;
+  else if (m_total_rays > m_config.min_rays) {
+    if (!m_active) m_stats->activate_by_rays++;
+    m_active = true;
+  }
   // Turn engine on if timer expires
-  else if (current_cycle - m_last_insertion_cycle > m_config.max_cycles) m_active = true;
+  else if (current_cycle - m_last_insertion_cycle > m_config.max_cycles) {
+    if (!m_active) m_stats->activate_by_timer++;
+    m_active = true;
+  }
+
+  if (m_total_rays != 0) m_stats->total_cycles++;
+  if (m_active) {
+    m_stats->active_cycles++;
+
+    // Check all the coherence packets
+    unsigned active_packets = 0;
+    for (auto i=m_ray_pool.cbegin(); i!=m_ray_pool.cend(); i++) {
+      ray_hash hash = i->first;
+      coherence_packet packet = i->second;
+      if (!is_stalled(hash, packet) && !is_empty(packet)) {
+        active_packets++;
+      }
+    }
+    m_stats->average_stat(coherence_stats_type::ACTIVE_PACKETS, active_packets);
+  }
 }
 
 unsigned ray_coherence_engine::schedule_next_warp() {
@@ -133,6 +178,8 @@ unsigned ray_coherence_engine::schedule_next_warp() {
       next_addr = it->first;
     }
   }
+
+  m_stats->average_stat(coherence_stats_type::COALESCED_REQUESTS, occurrences);
 
   COHERENCE_DPRINTF("addr 0x%x ", next_addr);
 
@@ -428,4 +475,38 @@ void ray_coherence_engine::print_full(FILE *fout) {
     }
     fprintf(fout, "\n");
   }
+}
+
+void ray_coherence_engine::print_stats(FILE *fout) {
+  m_stats->print(fout);
+}
+
+
+void coherence_stats::print(FILE *fout) {
+  fprintf(fout, "coherence_packets = %d\n", total_packets);
+  fprintf(fout, "total_rays = %d\n", total_rays);
+  fprintf(fout, "max_coherence_rays = %d\n", max_rays);
+  fprintf(fout, "active_cycles = %d\n", active_cycles);
+  fprintf(fout, "stalled_cycles = %d\n", stalled_cycles);
+  fprintf(fout, "total_cycles = %d\n", total_cycles);
+  fprintf(fout, "activate_by_rays = %d\n", activate_by_rays);
+  fprintf(fout, "activate_by_timer = %d\n", activate_by_timer);
+
+  // Number of rays added to an already scheduled packet (currently stalled)
+  fprintf(fout, "stalled_addition = %d\n", stalled_addition);
+
+  // Average stats
+  fprintf(fout, "Average Stats:\n");
+  for (unsigned i=0; i<(int)coherence_stats_type::TOTAL_TYPES; i++) {
+    fprintf(fout, "%.3f\t", avg_stats[i]);
+  }
+  fprintf(fout, "\n");
+}
+
+void coherence_stats::average_stat(coherence_stats_type type, unsigned value) {
+  int stat = (int)type;
+  float update = avg_stats[stat] * avg_counter[stat];
+  update += value;
+  avg_counter[stat]++;
+  avg_stats[stat] = update / avg_counter[stat];
 }

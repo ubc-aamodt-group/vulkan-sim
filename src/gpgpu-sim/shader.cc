@@ -754,6 +754,12 @@ void shader_core_stats::print(FILE *fout) const {
   }
   fprintf(fout, "\n");
 
+  for (unsigned i=0; i<m_config->num_shader(); i++) {
+    fprintf(fout, "===========rt_coherence_engine[%d]===========\n", i);
+    rt_coherence_stats[i]->print(fout);
+  }
+  fprintf(fout, "---------------------------------------------\n");
+
   fprintf(fout, "Warp Occupancy Distribution:\n");
   fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
   fprintf(fout, "W0_Idle:%d\t", shader_cycle_distro[0]);
@@ -2691,7 +2697,7 @@ rt_unit::rt_unit(mem_fetch_interface *icnt,
 
   ray_coherence_config coherence_config = config->m_rt_coherence_engine_config;
   coherence_config.warp_size = config->warp_size;
-  m_ray_coherence_engine = new ray_coherence_engine(sid, coherence_config, core);
+  m_ray_coherence_engine = new ray_coherence_engine(sid, coherence_config, m_stats->rt_coherence_stats[sid], core);
 
   m_mem_rc = NO_RC_FAIL;
   m_name = "RT_CORE";
