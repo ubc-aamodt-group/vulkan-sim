@@ -6921,7 +6921,7 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   src8_data = thread->get_operand_value(src8, src8, F32_TYPE, thread, 1);
   float lod = src8_data.f32;
 
-  float c0, c1, c2, c3; // MRS_TODO: send c3 through
+  float c0, c1, c2, c3;
 
   VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3);
 
@@ -7248,6 +7248,45 @@ void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
 
   VulkanRayTracing::image_store(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_W, gl_LaunchIDEXT_W, 
               hitValue_X, hitValue_Y, hitValue_Z, hitValue_W, pI, thread);
+}
+
+void image_deref_load_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  ptx_reg_t src0_data, src1_data, src5_data, src6_data, data;
+  
+  const operand_info &src0 = pI->operand_lookup(0);
+  src0_data = thread->get_operand_value(src0, src0, U64_TYPE, thread, 1);
+  void* desc = (void*)(src0_data.u64);
+
+  const operand_info &src5 = pI->operand_lookup(5);
+  src5_data = thread->get_operand_value(src5, src5, U32_TYPE, thread, 1);
+  uint32_t x = src5_data.u32;
+
+  const operand_info &src6 = pI->operand_lookup(6);
+  src6_data = thread->get_operand_value(src6, src6, U32_TYPE, thread, 1);
+  uint32_t y = src6_data.u32;
+
+  //MRS_TODO: There are more operands
+
+  float c0, c1, c2, c3;
+
+  VulkanRayTracing::getTexture(desc, x, y, 0, c0, c1, c2, c3); // MRS_TODO: x and y are uint
+
+  const operand_info &dst1 = pI->operand_lookup(1);
+  const operand_info &dst2 = pI->operand_lookup(2);
+  const operand_info &dst3 = pI->operand_lookup(3);
+  const operand_info &dst4 = pI->operand_lookup(4);
+
+  data.f32 = c0;
+  thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
+
+  data.f32 = c1;
+  thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
+
+  data.f32 = c2;
+  thread->set_operand_value(dst3, data, F32_TYPE, thread, pI);
+
+  data.f32 = c3;
+  thread->set_operand_value(dst4, data, F32_TYPE, thread, pI);
 }
 
 void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {

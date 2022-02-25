@@ -157,6 +157,7 @@ OP_DEF(CALL_CLOSEST_HIT_SHADER_OP,call_closest_hit_shader_impl,"call_closest_hit
 OP_DEF(CALL_INTERSECTION_SHADER_OP,call_intersection_shader_impl,"call_intersection_shader",0,11)
 OP_DEF(CALL_ANY_HIT_SHADER_OP,call_any_hit_shader_impl,"call_any_hit_shader",0,11)
 OP_DEF(IMG_DEREF_ST_OP,image_deref_store_impl,"image_deref_store",0,11)
+OP_DEF(IMG_DEREF_LD_OP,image_deref_load_impl,"image_deref_load",0,11)
 OP_DEF(ST_DEREF_OP,store_deref_impl,"store_deref",0,11)
 OP_DEF(RT_ALLOC_MEM_OP,rt_alloc_mem_impl,"rt_alloc_mem",0,11)
 OP_DEF(WRAP_32_4_OP,wrap_32_4_impl,"wrap_32_4",0,11)

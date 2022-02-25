@@ -187,6 +187,7 @@ call_closest_hit_shader   TC; yylval->int_value = CALL_CLOSEST_HIT_SHADER_OP; re
 call_intersection_shader   TC; yylval->int_value = CALL_INTERSECTION_SHADER_OP; return OPCODE;
 call_any_hit_shader   TC; yylval->int_value = CALL_ANY_HIT_SHADER_OP; return OPCODE;
 image_deref_store   TC; yylval->int_value = IMG_DEREF_ST_OP; return OPCODE;
+image_deref_load   TC; yylval->int_value = IMG_DEREF_LD_OP; return OPCODE;
 store_deref TC; yylval->int_value = ST_DEREF_OP; return OPCODE;
 rt_alloc_mem TC; yylval->int_value = RT_ALLOC_MEM_OP; return OPCODE;
 wrap_32_4 TC; yylval->int_value = WRAP_32_4_OP; return OPCODE;
