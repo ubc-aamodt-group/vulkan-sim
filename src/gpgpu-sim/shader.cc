@@ -2810,12 +2810,15 @@ void rt_unit::cycle() {
       m_stats->rt_writes++;
 
       // Find warp (expect a unique warp)
+      bool found = false;
       for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
         if (it->second.check_pending_writes(uncoalesced_base_addr)) {
           // Found instruction that sent the pending write
+          found = true;
           break;
         }
       }
+      assert(found);
     }
 
     else {      
@@ -3233,9 +3236,16 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
 
   // Stalled
   if (status == RESERVATION_FAIL) {
+    // If write, add back to write queue
+    if (mf->get_is_write()) {
+      mem_store_q.push_front(
+        std::pair<unsigned, new_addr_type>(
+          mf->get_inst().get_uid(),
+          mf->get_uncoalesced_base_addr()));
+    }
 
     // Address already in MSHR, but MSHR entry is full
-    if (!cache->probe_mshr(mf->get_addr()).empty()) {
+    else if (!cache->probe_mshr(mf->get_addr()).empty()) {
       
       // If using warp coalescing, this is irrelevant
       if (m_config->m_rt_coalesce_warps) {
