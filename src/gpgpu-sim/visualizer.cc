@@ -315,12 +315,12 @@ class my_time_vector {
     calculate_dist();
     std::cout << "LD_mem_lat_dist ";
     for (i = 0; i < ld_vector_size; i++) {
-      std::cout << " " << (int)overal_ld_time_dist[i];
+      std::cout << " " << overal_ld_time_dist[i];
     }
     std::cout << std::endl;
     std::cout << "ST_mem_lat_dist ";
     for (i = 0; i < st_vector_size; i++) {
-      std::cout << " " << (int)overal_st_time_dist[i];
+      std::cout << " " << overal_st_time_dist[i];
     }
     std::cout << std::endl;
   }

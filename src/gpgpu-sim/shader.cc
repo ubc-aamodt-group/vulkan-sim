@@ -753,6 +753,13 @@ void shader_core_stats::print(FILE *fout) const {
     fprintf(fout, "\t%d", rt_mem_store_q_cycles[i]);
   }
   fprintf(fout, "\n");
+  fprintf(fout, "rt_latency_dist = ");
+  for (unsigned i=0; i<warp_statuses; i++) {
+    for (unsigned j=0; j<ray_statuses; j++) {
+      fprintf(fout, "%.2f\t", (float)rt_latency_dist[i][j] / rt_latency_counter);
+    }
+  }
+  fprintf(fout, "\n");
 
   for (unsigned i=0; i<m_config->num_shader(); i++) {
     fprintf(fout, "===========rt_coherence_engine[%d]===========\n", i);
@@ -2872,6 +2879,12 @@ void rt_unit::cycle() {
       m_current_warps.erase(warp_uid);
     }
   }
+  
+  // Get cycle status
+  if (!rt_inst.empty()) rt_inst.track_rt_cycles(true);
+  for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+    (it->second).track_rt_cycles(false);
+  }
 
   // Schedule next memory request
   memory_cycle(rt_inst);
@@ -2905,15 +2918,18 @@ void rt_unit::cycle() {
       // Track thread latency in RT unit
       unsigned long long total_thread_cycles = 0;
       for (unsigned i=0; i<m_config->warp_size; i++) {
-        unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
-        assert(end_cycle > 0);
-        int n_total_cycles = end_cycle - start_cycle;
-        assert(n_total_cycles >= 0);
-        total_thread_cycles += n_total_cycles;
+        if (it->second.thread_active(i)) {
+          unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
+          assert(end_cycle > 0);
+          int n_total_cycles = end_cycle - start_cycle;
+          assert(n_total_cycles >= 0);
+          total_thread_cycles += n_total_cycles;
+          m_stats->add_rt_latency_dist(it->second.get_latency_dist(i));
+        }
       }
       float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
       m_stats->rt_total_thread_latency += avg_thread_cycles;
-      
+
       float rt_warp_occupancy = (float)total_thread_cycles / (m_config->warp_size * total_cycles);
       m_stats->rt_total_warp_occupancy += rt_warp_occupancy;
       

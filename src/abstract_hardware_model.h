@@ -189,6 +189,23 @@ struct ray_coherence_config {
   unsigned warp_size;
 };
 
+enum rt_warp_status {
+  warp_stalled = 0,
+  warp_waiting,
+  warp_executing,
+  warp_statuses
+}; 
+
+enum rt_ray_status {
+  awaiting_processing = 0,
+  awaiting_scheduling,
+  awaiting_mf,
+  executing_op,
+  trace_complete,
+  ray_statuses
+};
+
+
 #define RT_WRITE_BACK_SIZE 32
 
 #include <assert.h>
@@ -1336,6 +1353,7 @@ class warp_inst_t : public inst_t {
       fprintf(fp, "%c", ((m_warp_active_mask[i]) ? '1' : '0'));
   }
   bool active(unsigned thread) const { return m_warp_active_mask.test(thread); }
+  bool thread_active(unsigned thread) const { return m_warp_active_mask.test(thread); }
   unsigned active_count() const { return m_warp_active_mask.count(); }
   unsigned issued_count() const {
     assert(m_empty == false);
@@ -1415,6 +1433,7 @@ class warp_inst_t : public inst_t {
     Ray ray_properties;
     unsigned intersection_delay;
     unsigned long long end_cycle;
+    unsigned status_num_cycles[warp_statuses][ray_statuses] = {};
     
     void clear_mem_accesses() {
       RT_mem_accesses.clear();
@@ -1450,8 +1469,10 @@ class warp_inst_t : public inst_t {
   void clear_thread_info(unsigned tid) { m_per_scalar_thread[tid].clear_mem_accesses(); }
   unsigned get_thread_latency(unsigned tid) const { return m_per_scalar_thread[tid].intersection_delay; }
   unsigned dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue);
+  void track_rt_cycles(bool active);
   bool check_pending_writes(new_addr_type addr);
   unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
+  unsigned * get_latency_dist(unsigned i);
   
   void set_start_cycle(unsigned long long cycle) { m_start_cycle = cycle; }
   unsigned long long get_start_cycle() const {return m_start_cycle; }

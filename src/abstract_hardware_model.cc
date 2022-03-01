@@ -809,6 +809,41 @@ unsigned warp_inst_t::dec_thread_latency(std::deque<std::pair<unsigned, new_addr
   return n_threads;
 }
 
+void warp_inst_t::track_rt_cycles(bool active) {
+  bool stalled = is_stalled();
+  unsigned warp_status = active ? warp_executing : stalled ? warp_stalled : warp_waiting;
+
+  // Check progress of each thread
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    // Only check active threads
+    if (thread_active(i)) {
+      // Easiest check is intersection tests
+      if (m_per_scalar_thread[i].intersection_delay != 0) {
+        m_per_scalar_thread[i].status_num_cycles[warp_status][executing_op]++;
+      }
+      // Check that the thread is not done and not performing intersection tests. 
+      else if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+        // This is the next address that the thread wants
+        RTMemoryTransactionRecord mem_record = m_per_scalar_thread[i].RT_mem_accesses.front();
+        if (mem_record.status == RT_MEM_UNMARKED) {
+          m_per_scalar_thread[i].status_num_cycles[warp_status][awaiting_scheduling]++;
+        }
+        else {
+          m_per_scalar_thread[i].status_num_cycles[warp_status][awaiting_mf]++;
+        }
+      }
+      // Otherwise the thread must be done or inactive
+      else {
+        m_per_scalar_thread[i].status_num_cycles[warp_status][trace_complete]++;
+      }
+    }
+  }
+}
+
+unsigned * warp_inst_t::get_latency_dist(unsigned i) {
+  return (unsigned *)m_per_scalar_thread[i].status_num_cycles;
+}
+
 void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions) {
   // Initialize
   if (!m_per_scalar_thread_valid) {

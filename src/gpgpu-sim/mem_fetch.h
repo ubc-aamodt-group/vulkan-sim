@@ -103,7 +103,7 @@ class mem_fetch {
   bool isconst() const;
   enum mf_type get_type() const { return m_type; }
   bool isatomic() const;
-  bool israytrace() const { return m_inst.op == RT_CORE_OP || m_israytrace; }
+  bool israytrace() const { return m_inst.empty() ? false : m_inst.op == RT_CORE_OP || m_israytrace; }
   void set_raytrace() {m_israytrace = true; }
 
   void set_return_timestamp(unsigned t) { m_timestamp2 = t; }

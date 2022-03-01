@@ -106,6 +106,7 @@ void mem_fetch::set_status(enum mem_fetch_status status,
                            unsigned long long cycle) {
   m_status = status;
   m_status_change = cycle;
+  if (israytrace()) time_vector_update(m_request_uid, status, cycle, m_type);
 }
 
 bool mem_fetch::isatomic() const {

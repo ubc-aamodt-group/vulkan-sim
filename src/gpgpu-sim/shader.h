@@ -1884,6 +1884,17 @@ struct shader_core_stats_pod {
   unsigned rt_max_store_q;
   unsigned *rt_mem_store_q_cycles;
 
+  unsigned long long rt_latency_dist[warp_statuses][ray_statuses] = {};
+  unsigned rt_latency_counter = 0;
+  void add_rt_latency_dist(unsigned *update) {
+    for (unsigned i=0; i<warp_statuses; i++) {
+      for (unsigned j=0; j<ray_statuses; j++) {
+        rt_latency_dist[i][j] += update[i*ray_statuses + j];
+      }
+    }
+    rt_latency_counter++;
+  }
+
   coherence_stats **rt_coherence_stats;
 
   int gpgpu_n_mem_l2_writeback;
