@@ -761,11 +761,13 @@ void shader_core_stats::print(FILE *fout) const {
   }
   fprintf(fout, "\n");
 
-  for (unsigned i=0; i<m_config->num_shader(); i++) {
-    fprintf(fout, "===========rt_coherence_engine[%d]===========\n", i);
-    rt_coherence_stats[i]->print(fout);
+  if (m_config->m_rt_coherence_engine) {
+    for (unsigned i=0; i<m_config->num_shader(); i++) {
+      fprintf(fout, "===========rt_coherence_engine[%d]===========\n", i);
+      rt_coherence_stats[i]->print(fout);
+    }
+    fprintf(fout, "---------------------------------------------\n");
   }
-  fprintf(fout, "---------------------------------------------\n");
 
   fprintf(fout, "Warp Occupancy Distribution:\n");
   fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
