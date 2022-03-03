@@ -57,6 +57,9 @@ bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
 RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
 struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
+void* VulkanRayTracing::ray_tracing_reflection_descriptorSets[1][4] = {NULL};
+
+bool use_external_launcher = true;
 
 float get_norm(float4 v)
 {
@@ -265,7 +268,7 @@ bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& pat
 }
 
 
-bool debugTraversal = false;
+bool debugTraversal = true;
 
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
@@ -442,13 +445,13 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             assert(instanceLeaf.BVHAddress != NULL);
             GEN_RT_BVH botLevelASAddr;
-            GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(instanceLeaf.BVHAddress));
-            transactions.push_back(MemoryTransactionRecord((void*)(instanceLeaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
+            GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
+            transactions.push_back(MemoryTransactionRecord((void*)(leaf_addr + instanceLeaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
 
             float worldToObject_tMultiplier;
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
 
-            uint8_t * botLevelRootAddr = ((uint8_t *)(instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
+            uint8_t * botLevelRootAddr = ((uint8_t *)(leaf_addr + instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
             stack.push_back(StackEntry(botLevelRootAddr, false, false));
 
             if (debugTraversal)
@@ -951,6 +954,13 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
     
+    // Dump Descriptor Sets
+    if (!use_external_launcher) 
+    {
+        dump_descriptor_sets(VulkanRayTracing::descriptorSet);
+        dump_callparams_and_sbt(raygen_sbt, miss_sbt, hit_sbt, callable_sbt, is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
+    }
+
     CmdTraceRaysKHRID++;
     if(CmdTraceRaysKHRID != 1)
         return;
@@ -1245,80 +1255,93 @@ void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *addr
     descriptors[setID][descID].type = type;
 }
 
+
+void VulkanRayTracing::setDescriptorSetFromLauncher(void *address, uint32_t setID, uint32_t descID)
+{
+    ray_tracing_reflection_descriptorSets[setID][descID] = address;
+}
+
 void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
 {
-    // assert(setID < descriptors.size());
-    // assert(binding < descriptors[setID].size());
-    
-    struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
-
-    const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
-    struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
-    void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
-
-    assert(desc->type == bind_layout->type);
-    
-    switch (desc->type)
+    if (use_external_launcher)
     {
-        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-        {
-            assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
-            assert(desc->sampler == NULL);
-
-            struct anv_image_view *image_view = desc->image_view;
-            assert(image_view != NULL);
-            struct anv_image * image = image_view->image;
-            void* address = anv_address_map(image->planes[0].address);
-            return address;
-        }
-        case VK_DESCRIPTOR_TYPE_SAMPLER:
-        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        {
-            return desc;
-        }
-
-        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-            assert(0);
-            break;
-
-        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-        {
-            if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-                desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
-            {
-                // MRS_TODO: account for desc->offset?
-                return anv_address_map(desc->buffer->address);
-            }
-            else
-            {
-                struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
-                return anv_address_map(bview->address);
-            }
-        }
-
-        case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-            assert(0);
-            break;
-
-        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
-        {
-            struct anv_address_range_descriptor *desc_data = desc_map;
-            return (void *)(desc_data->address);
-        }
-
-        default:
-            assert(0);
-            break;
+        return ray_tracing_reflection_descriptorSets[setID][binding];
     }
+    else 
+    {
+        // assert(setID < descriptors.size());
+        // assert(binding < descriptors[setID].size());
+        
+        struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
 
-    // return descriptors[setID][binding].address;
+        const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
+        struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+        void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+
+        assert(desc->type == bind_layout->type);
+        
+        switch (desc->type)
+        {
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            {
+                assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
+                assert(desc->sampler == NULL);
+
+                struct anv_image_view *image_view = desc->image_view;
+                assert(image_view != NULL);
+                struct anv_image * image = image_view->image;
+                void* address = anv_address_map(image->planes[0].address);
+                return address;
+            }
+            case VK_DESCRIPTOR_TYPE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            {
+                return desc;
+            }
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+                assert(0);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            {
+                if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                    desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+                {
+                    // MRS_TODO: account for desc->offset?
+                    return anv_address_map(desc->buffer->address);
+                }
+                else
+                {
+                    struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
+                    return anv_address_map(bview->address);
+                }
+            }
+
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+                assert(0);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            {
+                struct anv_address_range_descriptor *desc_data = desc_map;
+                return (void *)(desc_data->address);
+            }
+
+            default:
+                assert(0);
+                break;
+        }
+
+        // return descriptors[setID][binding].address;
+    }
 }
 
 void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3)
@@ -1498,3 +1521,236 @@ void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint3
 //     entry.size = size;
 //     thread->RT_thread_data->variable_decleration_table.push_back(entry);
 // }
+
+
+void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t desired_range)
+{
+   FILE *fp;
+   char *mesa_root = getenv("MESA_ROOT");
+   char *filePath = "gpgpusimShaders/";
+   char *extension = ".vkdescrptorsetdata";
+
+   int VkDescriptorTypeNum;
+
+   switch (type)
+   {
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+         VkDescriptorTypeNum = 1000150000;
+         break;
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+         VkDescriptorTypeNum = 1000165000;
+         break;
+      default:
+         abort(); // should not be here!
+   }
+
+   char fullPath[200];
+   snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, desc_size, VkDescriptorTypeNum, desired_range, extension);
+   // File name format: setID_descID_SizeInBytes_VkDescriptorType_desired_range.vkdescrptorsetdata
+
+   fp = fopen(fullPath, "wb+");
+   fwrite(address-(uint64_t)desired_range, 1, desc_size + desired_range*2, fp);
+   fclose(fp);
+}
+
+
+void VulkanRayTracing::dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
+{
+   FILE *fp;
+   char *mesa_root = getenv("MESA_ROOT");
+   char *filePath = "gpgpusimShaders/";
+   char *extension = ".vkdescrptorsetdata";
+
+   int VkDescriptorTypeNum;
+
+   switch (type)
+   {
+      case VK_DESCRIPTOR_TYPE_SAMPLER:
+         VkDescriptorTypeNum = 0;
+         break;
+      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         VkDescriptorTypeNum = 1;
+         break;
+      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+         VkDescriptorTypeNum = 2;
+         break;
+      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+         VkDescriptorTypeNum = 3;
+         break;
+      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+         VkDescriptorTypeNum = 4;
+         break;
+      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+         VkDescriptorTypeNum = 5;
+         break;
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+         VkDescriptorTypeNum = 6;
+         break;
+      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+         VkDescriptorTypeNum = 7;
+         break;
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+         VkDescriptorTypeNum = 8;
+         break;
+      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+         VkDescriptorTypeNum = 9;
+         break;
+      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+         VkDescriptorTypeNum = 10;
+         break;
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+         VkDescriptorTypeNum = 1000138000;
+         break;
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+         VkDescriptorTypeNum = 1000150000;
+         break;
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+         VkDescriptorTypeNum = 1000165000;
+         break;
+      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
+         VkDescriptorTypeNum = 1000351000;
+         break;
+      case VK_DESCRIPTOR_TYPE_MAX_ENUM:
+         VkDescriptorTypeNum = 0x7FFFFFF;
+         break;
+      default:
+         abort(); // should not be here!
+   }
+
+   char fullPath[200];
+   snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, size, VkDescriptorTypeNum, extension);
+   // File name format: setID_descID_SizeInBytes_VkDescriptorType.vkdescrptorsetdata
+
+   fp = fopen(fullPath, "wb+");
+   fwrite(address, 1, size, fp);
+   fclose(fp);
+}
+
+
+void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
+{
+   for(int i = 0; i < set->descriptor_count; i++)
+   {
+      const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
+      struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+      void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+
+      assert(desc->type == bind_layout->type);
+      
+      switch (desc->type)
+      {
+         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+         {
+            assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
+            assert(desc->sampler == NULL);
+
+            struct anv_image_view *image_view = desc->image_view;
+            assert(image_view != NULL);
+            struct anv_image * image = image_view->image;
+            void* address = anv_address_map(image->planes[0].address);
+            dump_descriptor_set(0, i, address, 0, set->descriptors[i].type);
+            break;
+            //return address;
+         }
+         case VK_DESCRIPTOR_TYPE_SAMPLER:
+         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+         {
+            //return desc;
+         }
+
+         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            assert(0);
+            break;
+
+         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+         {
+            if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            {
+                // MRS_TODO: account for desc->offset?
+                //return anv_address_map(desc->buffer->address);
+                dump_descriptor_set(0, i, anv_address_map(desc->buffer->address), set->descriptors[i].buffer->size, set->descriptors[i].type);
+                break;
+            }
+            else
+            {
+                struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
+                //return anv_address_map(bview->address);
+                dump_descriptor_set(0, i, anv_address_map(bview->address), bview->range, set->descriptors[i].type);
+                break;
+            }
+         }
+
+         case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+            assert(0);
+            break;
+
+         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+         {
+            struct anv_address_range_descriptor *desc_data = desc_map;
+            //return (void *)(desc_data->address);
+            dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10);
+            break;
+         }
+
+         default:
+            assert(0);
+            break;
+      }
+   }
+}
+
+void VulkanRayTracing::dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr)
+{
+    FILE *fp;
+    char *mesa_root = getenv("MESA_ROOT");
+    char *filePath = "gpgpusimShaders/";
+
+    char call_params_filename [200];
+    int trace_rays_call_count = 0; // just a placeholder for now
+    snprintf(call_params_filename, sizeof(call_params_filename), "%s%s%d.callparams", mesa_root, filePath, trace_rays_call_count);
+    fp = fopen(call_params_filename, "w+");
+    fprintf(fp, "%d,%d,%d,%d,%lu", is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
+    fclose(fp);
+
+    // TODO: Is the size always 32?
+    int sbt_size = 64;
+    if (raygen_sbt) {
+        char raygen_sbt_filename [200];
+        snprintf(raygen_sbt_filename, sizeof(raygen_sbt_filename), "%s%s%d.raygensbt", mesa_root, filePath, trace_rays_call_count);
+        fp = fopen(raygen_sbt_filename, "wb+");
+        fwrite(raygen_sbt, 1, sbt_size, fp); // max is 32 bytes according to struct anv_rt_shader_group.handle
+        fclose(fp);
+    }
+
+    if (miss_sbt) {
+        char miss_sbt_filename [200];
+        snprintf(miss_sbt_filename, sizeof(miss_sbt_filename), "%s%s%d.misssbt", mesa_root, filePath, trace_rays_call_count);
+        fp = fopen(miss_sbt_filename, "wb+");
+        fwrite(miss_sbt, 1, sbt_size, fp); // max is 32 bytes according to struct anv_rt_shader_group.handle
+        fclose(fp);
+    }
+
+    if (hit_sbt) {
+        char hit_sbt_filename [200];
+        snprintf(hit_sbt_filename, sizeof(hit_sbt_filename), "%s%s%d.hitsbt", mesa_root, filePath, trace_rays_call_count);
+        fp = fopen(hit_sbt_filename, "wb+");
+        fwrite(hit_sbt, 1, sbt_size, fp); // max is 32 bytes according to struct anv_rt_shader_group.handle
+        fclose(fp);
+    }
+
+    if (callable_sbt) {
+        char callable_sbt_filename [200];
+        snprintf(callable_sbt_filename, sizeof(callable_sbt_filename), "%s%s%d.callablesbt", mesa_root, filePath, trace_rays_call_count);
+        fp = fopen(callable_sbt_filename, "wb+");
+        fwrite(callable_sbt, 1, sbt_size, fp); // max is 32 bytes according to struct anv_rt_shader_group.handle
+        fclose(fp);
+    }
+}

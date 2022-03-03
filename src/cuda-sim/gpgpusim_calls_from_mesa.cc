@@ -55,4 +55,38 @@ extern "C" void gpgpusim_setDescriptorSet(struct anv_descriptor_set *set)
     VulkanRayTracing::setDescriptorSet(set);
 }
 
+
+
+// CPP externs
+extern uint32_t gpgpusim_registerShader_cpp(char * shaderPath, uint32_t shader_type)
+{
+    return VulkanRayTracing::registerShaders(shaderPath, gl_shader_stage(shader_type));
+}
+
+extern void gpgpusim_vkCmdTraceRaysKHR_cpp(
+                      void *raygen_sbt,
+                      void *miss_sbt,
+                      void *hit_sbt,
+                      void *callable_sbt,
+                      bool is_indirect,
+                      uint32_t launch_width,
+                      uint32_t launch_height,
+                      uint32_t launch_depth,
+                      uint64_t launch_size_addr)
+{
+    VulkanRayTracing::invoke_gpgpusim();
+    VulkanRayTracing::vkCmdTraceRaysKHR(raygen_sbt, miss_sbt, hit_sbt, callable_sbt,
+            is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
+}
+
+extern void gpgpusim_setDescriptorSet_cpp(void *set)
+{
+    VulkanRayTracing::setDescriptorSet((struct anv_descriptor_set*) set);
+}
+
+extern void gpgpusim_setDescriptorSetFromLauncher_cpp(void *address, uint32_t setID, uint32_t descID)
+{
+    VulkanRayTracing::setDescriptorSetFromLauncher(address, setID, descID);
+}
+
 #endif /* GPGPUSIM_CALLS_FROM_MESA_CC */
