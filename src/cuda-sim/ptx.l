@@ -171,6 +171,8 @@ load_primitive_id    TC; yylval->int_value = LOAD_PRIMITIVE_ID_OP; return OPCODE
 load_ray_world_to_object    TC; yylval->int_value = LOAD_RAY_WORLD_TO_OBJECT_OP; return OPCODE;
 load_ray_object_to_world    TC; yylval->int_value = LOAD_RAY_OBJECT_TO_WORLD_OP; return OPCODE;
 load_ray_world_direction    TC; yylval->int_value = LOAD_RAY_WORLD_DIRECTION_OP; return OPCODE;
+load_ray_world_origin    TC; yylval->int_value = LOAD_RAY_WORLD_ORIGIN_OP; return OPCODE;
+load_ray_t_max    TC; yylval->int_value = LOAD_RAY_T_MAX_OP; return OPCODE;
 vulkan_resource_index   TC; yylval->int_value = VK_RESOURCE_INDEX_OP; return OPCODE;
 load_vulkan_descriptor  TC; yylval->int_value = LD_VK_DESC_OP; return OPCODE;
 deref_var   TC; yylval->int_value = DEREF_VAR_OP; return OPCODE;
@@ -191,6 +193,7 @@ wrap_32_4 TC; yylval->int_value = WRAP_32_4_OP; return OPCODE;
 unwrap_32_4 TC; yylval->int_value = UNWRAP_32_4_OP; return OPCODE;
 get_element_32 TC; yylval->int_value = GET_ELEMENT_32_OP; return OPCODE;
 set_element_32 TC; yylval->int_value = SET_ELEMENT_32_OP; return OPCODE;
+txl TC; yylval->int_value = TXL_OP; return OPCODE;
 
 
 "CPTX_END"	printf("ENDING CUSTOM PTX.\n"); BEGIN(IN_COMMENT);
