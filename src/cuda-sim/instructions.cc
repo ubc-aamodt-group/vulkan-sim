@@ -6877,6 +6877,14 @@ void load_ray_t_max_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
 }
 
+void load_ray_t_min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst0 = pI->dst();
+
+  ptx_reg_t data;
+  data.f32 = thread->RT_thread_data->traversal_data.back().closest_hit.world_min_thit;
+  thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
+}
+
 void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   inst_not_implemented(pI);
 }

@@ -173,6 +173,7 @@ load_ray_object_to_world    TC; yylval->int_value = LOAD_RAY_OBJECT_TO_WORLD_OP;
 load_ray_world_direction    TC; yylval->int_value = LOAD_RAY_WORLD_DIRECTION_OP; return OPCODE;
 load_ray_world_origin    TC; yylval->int_value = LOAD_RAY_WORLD_ORIGIN_OP; return OPCODE;
 load_ray_t_max    TC; yylval->int_value = LOAD_RAY_T_MAX_OP; return OPCODE;
+load_ray_t_min    TC; yylval->int_value = LOAD_RAY_T_MIN_OP; return OPCODE;
 vulkan_resource_index   TC; yylval->int_value = VK_RESOURCE_INDEX_OP; return OPCODE;
 load_vulkan_descriptor  TC; yylval->int_value = LD_VK_DESC_OP; return OPCODE;
 deref_var   TC; yylval->int_value = DEREF_VAR_OP; return OPCODE;
