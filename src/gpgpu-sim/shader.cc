@@ -4987,14 +4987,6 @@ void shader_core_ctx::get_cache_stats(cache_stats &cs) {
   m_ldst_unit->get_cache_stats(cs);  // Get L1D, L1C, L1T stats
 }
 
-void shader_core_ctx::get_rt_cache_stats(cache_stats &cs) {
-  m_rt_unit->get_cache_stats(cs);
-}
-
-void shader_core_ctx::reset_rt_stats() {
-  m_rt_unit->reset_rt_stats();
-}
-
 void shader_core_ctx::get_L1I_sub_stats(struct cache_sub_stats &css) const {
   if (m_L1I) m_L1I->get_sub_stats(css);
 }
@@ -5683,17 +5675,6 @@ void simt_core_cluster::get_cache_stats(cache_stats &cs) const {
     m_core[i]->get_cache_stats(cs);
   }
 
-}
-void simt_core_cluster::get_rt_cache_stats(cache_stats &cs) const {
-  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
-    m_core[i]->get_rt_cache_stats(cs);
-  }
-}
-
-void simt_core_cluster::reset_rt_stats() {
-  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
-    m_core[i]->reset_rt_stats();
-  }
 }
 
 void simt_core_cluster::get_L1I_sub_stats(struct cache_sub_stats &css) const {

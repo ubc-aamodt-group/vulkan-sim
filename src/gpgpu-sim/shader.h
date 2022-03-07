@@ -1299,8 +1299,6 @@ class rt_unit : public pipelined_simd_unit {
         void writeback();
         
         void get_L0C_sub_stats(struct cache_sub_stats &css) const;
-        void get_cache_stats(cache_stats &cs);
-        void reset_rt_stats();
         
     protected:
       void process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg);
@@ -2198,8 +2196,6 @@ class shader_core_ctx : public core_t {
                          unsigned &dl1_misses);
 
   void get_cache_stats(cache_stats &cs);
-  void get_rt_cache_stats(cache_stats &cs);
-  void reset_rt_stats();
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
   void get_L1D_sub_stats(struct cache_sub_stats &css) const;
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
@@ -2608,8 +2604,6 @@ class simt_core_cluster {
                          unsigned &dl1_misses) const;
 
   void get_cache_stats(cache_stats &cs) const;
-  void get_rt_cache_stats(cache_stats &cs) const;
-  void reset_rt_stats();
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
   void get_L1D_sub_stats(struct cache_sub_stats &css) const;
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;

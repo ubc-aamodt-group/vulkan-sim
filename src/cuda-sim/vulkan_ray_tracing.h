@@ -8,9 +8,10 @@
 #include "vulkan/anv_public.h"
 #include "compiler/spirv/spirv.h"
 
-// #define HAVE_PTHREAD
-// #define UTIL_ARCH_LITTLE_ENDIAN 1
-// #define UTIL_ARCH_BIG_ENDIAN 0
+#include <cmath>
+// #define GLuint MESA_GLuint
+// #include "vulkan/anv_private.h"
+// #undef GLuint
 // #include "util/u_endian.h"
 // #include "vulkan/anv_private.h"
 // #include "vk_object.h"
@@ -112,6 +113,7 @@ typedef struct Hit_data{
     uint32_t primitive_index;
     float3 intersection_point;
     float3 barycentric_coordinates;
+    float world_min_thit;
 
     uint32_t instance_index;
     float4x4 worldToObjectMatrix;
@@ -198,6 +200,9 @@ typedef struct Vulkan_RT_thread_data {
     }
 } Vulkan_RT_thread_data;
 
+struct anv_descriptor_set;
+struct anv_descriptor;
+
 class VulkanRayTracing
 {
 private:
@@ -208,10 +213,14 @@ private:
     static std::vector<std::vector<Descriptor> > descriptors;
     static std::ofstream imageFile;
     static bool firstTime;
+    static struct anv_descriptor_set *descriptorSet;
+
+    // For Launcher
+    static void* ray_tracing_reflection_descriptorSets[1][4];
 public:
     static RayDebugGPUData rayDebugGPUData[2000][2000];
-
-private:
+    
+    private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
     static float3 Barycentric(float3 p, float3 a, float3 b, float3 c);
     static std::vector<shader_stage_info> shaders;
@@ -241,6 +250,7 @@ public:
     static void setPipelineInfo(VkRayTracingPipelineCreateInfoKHR* pCreateInfos);
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
     static void setAccelerationStructure(VkAccelerationStructureKHR accelerationStructure);
+    static void setDescriptorSet(struct anv_descriptor_set *set);
     static void invoke_gpgpusim();
     static uint32_t registerShaders(char * shaderPath, gl_shader_stage shaderType);
     static void vkCmdTraceRaysKHR( // called by vulkan application
@@ -259,10 +269,18 @@ public:
     static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
-    static void* getDescriptorAddress(uint32_t setID, uint32_t descID);
+    static void* getDescriptorAddress(uint32_t setID, uint32_t binding);
 
     static void image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread);
+    static void getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3);
+
+    static void dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
+    static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t desired_range);
+    static void dump_descriptor_sets(struct anv_descriptor_set *set);
+    static void dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr);
+    static void setDescriptorSetFromLauncher(void *address, uint32_t setID, uint32_t descID);
+
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

@@ -581,7 +581,9 @@ void ptx_instruction::set_fp_or_int_archop() {
       (m_opcode == GET_ELEMENT_32_OP) || (m_opcode == SET_ELEMENT_32_OP) ||
       (m_opcode == LOAD_RAY_WORLD_TO_OBJECT_OP) || (m_opcode == LOAD_RAY_OBJECT_TO_WORLD_OP) ||
       (m_opcode == LOAD_RAY_WORLD_DIRECTION_OP) || (m_opcode == LOAD_PRIMITIVE_ID_OP) ||
-      (m_opcode == LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP) || (m_opcode == END_TRACE_RAY_OP)) {
+      (m_opcode == LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP) || (m_opcode == END_TRACE_RAY_OP) ||
+      (m_opcode == LOAD_RAY_WORLD_ORIGIN_OP) || (m_opcode == LOAD_RAY_T_MAX_OP) ||
+      (m_opcode == TXL_OP)) {
     // do nothing
   } else if ((m_opcode == CVT_OP || m_opcode == SET_OP ||
               m_opcode == SLCT_OP)) {
@@ -613,7 +615,9 @@ void ptx_instruction::set_mul_div_or_other_archop() {
       (m_opcode != GET_ELEMENT_32_OP) && (m_opcode != SET_ELEMENT_32_OP) &&
       (m_opcode != LOAD_RAY_WORLD_TO_OBJECT_OP) && (m_opcode != LOAD_RAY_OBJECT_TO_WORLD_OP) &&
       (m_opcode != LOAD_RAY_WORLD_DIRECTION_OP) && (m_opcode != LOAD_PRIMITIVE_ID_OP) &&
-      (m_opcode != LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP) && (m_opcode != END_TRACE_RAY_OP)) {
+      (m_opcode != LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP) && (m_opcode != END_TRACE_RAY_OP) &&
+      (m_opcode != LOAD_RAY_WORLD_ORIGIN_OP) && (m_opcode != LOAD_RAY_T_MAX_OP) &&
+      (m_opcode != TXL_OP)) {
     if (get_type() == F32_TYPE || get_type() == F64_TYPE ||
         get_type() == FF64_TYPE) {
       switch (get_opcode()) {

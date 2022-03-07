@@ -97,13 +97,13 @@ GEN_RT_BVH_INTERNAL_NODE_unpack(struct GEN_RT_BVH_INTERNAL_NODE* dst,
 
    data += 1; //one unused byte
 
-   dst->ChildBoundsExponentX = (int32_t)(*data);
+   dst->ChildBoundsExponentX = (int32_t)(*((int8_t *)data));
    data += 1;
 
-   dst->ChildBoundsExponentY = (int32_t)(*data);
+   dst->ChildBoundsExponentY = (int32_t)(*((int8_t *)data));
    data += 1;
 
-   dst->ChildBoundsExponentZ = (int32_t)(*data);
+   dst->ChildBoundsExponentZ = (int32_t)(*((int8_t *)data));
    data += 1;
 
    dst->NodeRayMask = (uint32_t)(*data);
@@ -458,7 +458,6 @@ void set_child_bounds(struct GEN_RT_BVH_INTERNAL_NODE *node, int child, float3 *
    hi->y = node->Origin.Y + ldexpf(node->ChildUpperYBound[child], node->ChildBoundsExponentY - 8);
    hi->z = node->Origin.Z + ldexpf(node->ChildUpperZBound[child], node->ChildBoundsExponentZ - 8);
 }
-
 
 
 // struct RT_BVH_VEC3 {
