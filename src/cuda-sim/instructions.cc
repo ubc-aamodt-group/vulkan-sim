@@ -7451,3 +7451,20 @@ void shader_clock_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst2 = pI->operand_lookup(1);
   thread->set_operand_value(dst2, data, U32_TYPE, thread, pI);
 }
+
+void copysignf_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 2);
+
+  ptx_reg_t src_data, dst_data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+
+  dst_data = thread->get_operand_value(dst, dst, F32_TYPE, thread, 1);
+  src_data = thread->get_operand_value(src1, dst, F32_TYPE, thread, 1);
+
+  if((src_data.f32 > 0 && dst_data.f32 < 0) || (src_data.f32 < 0 && dst_data.f32 > 0))
+    dst_data.f32 *= 1;
+  
+  thread->set_operand_value(dst, dst_data, F32_TYPE, thread, pI);
+}

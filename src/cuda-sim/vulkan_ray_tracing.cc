@@ -975,9 +975,10 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // if(CmdTraceRaysKHRID != 6)
     //     return;
 
-    // if(imageFile.is_open())
-    //     return;
+    if(imageFile.is_open())
+        return;
     // imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    imageFile.open("image.binary", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1391,6 +1392,15 @@ float SRGB_to_linearRGB(float s)
         return pow(((s + 0.055) / 1.055), 2.4);
 }
 
+float linearRGB_to_SRGB(float s)
+{
+    // assert(0 <= s && s <= 1);
+    if(s < 0.0031308)
+        return s * 12.92;
+    else
+        return 1.055 * pow(s, 1 / 2.4) - 0.055;
+}
+
 inline uint64_t ceil_divide(uint64_t a, uint64_t b)
 {
     return (a + b - 1) / b;
@@ -1406,6 +1416,7 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     assert(image->samples == 1);
     assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
     assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
+    assert(sampler->conversion == NULL);
 
     uint8_t* address = anv_address_map(image->planes[0].address);
 
@@ -1468,6 +1479,20 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
             c1 = SRGB_to_linearRGB(pixel_color[1] / 255.0);
             c2 = SRGB_to_linearRGB(pixel_color[2] / 255.0);
             c3 = pixel_color[3] / 255.0;
+            // c0 = (pixel_color[0] / 255.0);
+            // c1 = (pixel_color[1] / 255.0);
+            // c2 = (pixel_color[2] / 255.0);
+            // c3 = pixel_color[3] / 255.0;
+
+            // // float norm = get_norm(float3(c0, c1, c2));
+            // float norm = c0 + c1 + c2;
+            // c0 /= norm;
+            // c1 /= norm;
+            // c2 /= norm;
+
+            // c0 = linearRGB_to_SRGB(c0);
+            // c1 = linearRGB_to_SRGB(c1);
+            // c2 = linearRGB_to_SRGB(c2);
             break;
         }
         // case VK_FORMAT_B8G8R8A8_UNORM:
@@ -1686,10 +1711,10 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
             break;
     }
 
-    // uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
-    // uint32_t offset = 0;
-    // offset += gl_LaunchIDEXT_Y * image_width;
-    // offset += gl_LaunchIDEXT_X;
+    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+    uint32_t offset = 0;
+    offset += gl_LaunchIDEXT_Y * image_width;
+    offset += gl_LaunchIDEXT_X;
 
     // float data[4];
     // data[0] = hitValue_X;
@@ -1699,6 +1724,10 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     // imageFile.write((char*) data, 3 * sizeof(float));
     // imageFile.write((char*) (&offset), sizeof(uint32_t));
     // imageFile.flush();
+
+    imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
+    imageFile << hitValue_X << ", " << hitValue_Y << ", " << hitValue_Z << ", " << hitValue_W << ")\n";
+
 
     // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
     // //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
