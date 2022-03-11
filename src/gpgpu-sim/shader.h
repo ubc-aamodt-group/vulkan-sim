@@ -1767,6 +1767,7 @@ class shader_core_config : public core_config {
   unsigned m_rt_max_mshr_entries;
   bool m_rt_coalesce_warps;
   bool m_rt_use_l1d;
+  bool m_rt_perfect_mem;
   bool m_rt_coherence_engine;
   char * m_rt_coherence_engine_config_str;
   ray_coherence_config m_rt_coherence_engine_config;

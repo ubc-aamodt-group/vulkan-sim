@@ -3237,6 +3237,43 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
       return;
     }
   }
+
+  else if (m_config->m_rt_perfect_mem) {
+    new_addr_type addr = mf->get_addr();
+    new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
+
+    // Every access is considered a cache hit
+    m_stats->rt_total_cacheline_fetched++;
+
+    // Handle write ACKs
+    if (mf->get_is_write()) {
+      m_stats->rt_writes++;
+      inst.check_pending_writes(uncoalesced_base_addr);
+    }
+    else if (m_config->m_rt_coherence_engine) {
+      if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
+      m_ray_coherence_engine->process_response(mf, m_current_warps);
+      inst.clear();
+    }
+    else {
+      unsigned found = 0;
+      found += inst.process_returned_mem_access(mf);
+      
+      if (m_config->m_rt_coalesce_warps) {
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+          if (found > 0) {
+            (it->second).process_returned_mem_access(mf);
+          }
+          else {
+            (it->second).process_returned_mem_access(mf);
+          }
+        }
+      }
+    }
+    
+    delete mf;
+    return;
+  }
     
   else {
     RT_DPRINTF("Shader %d: Sending cache request for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
