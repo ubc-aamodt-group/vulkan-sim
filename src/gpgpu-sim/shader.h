@@ -1070,6 +1070,7 @@ class simd_function_unit {
   }
   virtual void cycle() = 0;
   virtual void active_lanes_in_pipeline() = 0;
+  virtual unsigned active_warps() { return 0; }
 
   // accessors
   virtual unsigned clock_multiplier() const { return 1; }
@@ -1299,6 +1300,8 @@ class rt_unit : public pipelined_simd_unit {
         void writeback();
         
         void get_L0C_sub_stats(struct cache_sub_stats &css) const;
+
+        unsigned active_warps();
         
     protected:
       void process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg);
@@ -1882,6 +1885,8 @@ struct shader_core_stats_pod {
   unsigned long long rt_writes;
   unsigned rt_max_store_q;
   unsigned *rt_mem_store_q_cycles;
+  unsigned *rt_warp_dist;
+  unsigned *empty_warp_dist;
 
   unsigned long long rt_latency_dist[warp_statuses][ray_statuses] = {};
   unsigned rt_latency_counter = 0;
@@ -2001,7 +2006,9 @@ class shader_core_stats : public shader_core_stats_pod {
     rt_total_cycles = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
     rt_nwarps = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_nthreads_intersection = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
-    
+    rt_warp_dist = (unsigned *)calloc(11, sizeof(unsigned));
+    empty_warp_dist = (unsigned *)calloc(11, sizeof(unsigned));
+
     rt_coherence_stats = (coherence_stats **)calloc(config->num_shader(), sizeof(coherence_stats *));
     for (unsigned i=0; i<config->num_shader(); i++) {
       rt_coherence_stats[i] = new coherence_stats();
