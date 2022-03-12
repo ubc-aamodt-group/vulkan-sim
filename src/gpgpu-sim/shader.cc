@@ -761,6 +761,17 @@ void shader_core_stats::print(FILE *fout) const {
   }
   fprintf(fout, "\n");
 
+  fprintf(fout, "warp_dist_rt = ");
+  for (unsigned i=0; i<11; i++) {
+    fprintf(fout, "%d\t", rt_warp_dist[i]);
+  }
+  fprintf(fout, "\n");
+  fprintf(fout, "warp_dist_empty = ");
+  for (unsigned i=0; i<11; i++) {
+    fprintf(fout, "%d\t", empty_warp_dist[i]);
+  }
+  fprintf(fout, "\n");
+
   if (m_config->m_rt_coherence_engine) {
     for (unsigned i=0; i<m_config->num_shader(); i++) {
       fprintf(fout, "===========rt_coherence_engine[%d]===========\n", i);
@@ -2017,6 +2028,20 @@ void shader_core_ctx::execute() {
     }
   }
 
+  // Check all the warps in the shader
+  unsigned rt_active_warps = m_fu[m_num_function_units-1]->active_warps();
+  unsigned empty_warps = 0;
+  for (unsigned w = 0; w < m_config->max_warps_per_shader; w++) {
+    if (m_warp[w]->done_exit()) empty_warps++;
+  }
+  assert(rt_active_warps + empty_warps <= m_config->max_warps_per_shader);
+  unsigned other_warps = m_config->max_warps_per_shader - (rt_active_warps + empty_warps);
+
+  unsigned rt_ratio_bucket = rt_active_warps * 10 / (other_warps + rt_active_warps);
+  unsigned active_ratio_bucket = (rt_active_warps + other_warps) * 10 / m_config->max_warps_per_shader;
+  m_stats->rt_warp_dist[rt_ratio_bucket]++;
+  m_stats->empty_warp_dist[active_ratio_bucket]++;
+
   if (m_config->model == AWARE_RECONVERGENCE) {
     for (unsigned i = 0; i < m_warp_count; ++i) {
       AWARE_DPRINTF("Cycling SIMT tables for Shader %d: Warp %d...\n", m_sid, i);
@@ -2731,6 +2756,10 @@ void rt_unit::issue(register_set &reg_set) {
   pipelined_simd_unit::issue(reg_set);
 }
 
+unsigned rt_unit::active_warps() {
+  return m_current_warps.size();
+}
+
 void rt_unit::cycle() {
   
   // Copy ldst unit injection mechanism
@@ -3236,6 +3265,43 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
       m_icnt->push(mf);
       return;
     }
+  }
+
+  else if (m_config->m_rt_perfect_mem) {
+    new_addr_type addr = mf->get_addr();
+    new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
+
+    // Every access is considered a cache hit
+    m_stats->rt_total_cacheline_fetched++;
+
+    // Handle write ACKs
+    if (mf->get_is_write()) {
+      m_stats->rt_writes++;
+      inst.check_pending_writes(uncoalesced_base_addr);
+    }
+    else if (m_config->m_rt_coherence_engine) {
+      if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
+      m_ray_coherence_engine->process_response(mf, m_current_warps);
+      inst.clear();
+    }
+    else {
+      unsigned found = 0;
+      found += inst.process_returned_mem_access(mf);
+      
+      if (m_config->m_rt_coalesce_warps) {
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
+          if (found > 0) {
+            (it->second).process_returned_mem_access(mf);
+          }
+          else {
+            (it->second).process_returned_mem_access(mf);
+          }
+        }
+      }
+    }
+    
+    delete mf;
+    return;
   }
     
   else {

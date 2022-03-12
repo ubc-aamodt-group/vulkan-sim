@@ -258,6 +258,10 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "use existing L1 cache instead of dedicated L0 cache ",
       "1");
   option_parser_register(
+      opp, "-gpgpu_rt_perfect_mem", OPT_BOOL, &m_rt_perfect_mem,
+      "assume 0 latency BVH accesses ",
+      "0");
+  option_parser_register(
       opp, "-gpgpu_rt_coherence_engine", OPT_BOOL, &m_rt_coherence_engine,
       "enable coherency engine (ray sorting) ",
       "0");
