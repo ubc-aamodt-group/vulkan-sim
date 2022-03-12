@@ -1418,6 +1418,7 @@ class warp_inst_t : public inst_t {
         
         intersection_delay = 0;
         end_cycle = 0;
+        RT_mem_accesses = new std::deque<RTMemoryTransactionRecord>;
     }
     dram_callback_t callback;
     new_addr_type
@@ -1428,7 +1429,7 @@ class warp_inst_t : public inst_t {
                                                        // of 4B each)
                                                    
     // RT variables    
-    std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
+    std::deque<RTMemoryTransactionRecord> *RT_mem_accesses;
     bool ray_intersect = false;
     Ray ray_properties;
     unsigned intersection_delay;
@@ -1436,7 +1437,7 @@ class warp_inst_t : public inst_t {
     unsigned status_num_cycles[warp_statuses][ray_statuses] = {};
     
     void clear_mem_accesses() {
-      RT_mem_accesses.clear();
+      RT_mem_accesses->clear();
     }
   };
   
@@ -1448,7 +1449,7 @@ class warp_inst_t : public inst_t {
   bool rt_mem_accesses_empty();
   bool rt_intersection_delay_done();
   bool has_pending_writes() { return !m_pending_writes.empty(); }
-  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
+  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses->empty(); };
   bool is_stalled();
   void undo_rt_access(new_addr_type addr);
   void print_rt_accesses();
@@ -1471,7 +1472,7 @@ class warp_inst_t : public inst_t {
   unsigned dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue);
   void track_rt_cycles(bool active);
   bool check_pending_writes(new_addr_type addr);
-  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
+  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses->size(); }
   unsigned * get_latency_dist(unsigned i);
   
   void set_start_cycle(unsigned long long cycle) { m_start_cycle = cycle; }

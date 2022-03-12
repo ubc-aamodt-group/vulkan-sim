@@ -2747,7 +2747,7 @@ void rt_unit::cycle() {
     RT_DPRINTF("Shader %d: A new warp has arrived! uid: %d, warp id: %d\n", m_sid, pipe_reg.get_uid(), pipe_reg.warp_id());
     for (unsigned i=0; i<m_config->warp_size; i++) {
       RT_DPRINTF("\tThread %d (%d mem): ", i, pipe_reg.mem_list_length(i));
-      for (auto it=pipe_reg.get_thread_info(i).RT_mem_accesses.begin(); it!=pipe_reg.get_thread_info(i).RT_mem_accesses.end(); it++) {
+      for (auto it=pipe_reg.get_thread_info(i).RT_mem_accesses->begin(); it!=pipe_reg.get_thread_info(i).RT_mem_accesses->end(); it++) {
         RT_DPRINTF("0x%x\t", it->address);
       }
       RT_DPRINTF("\n");
