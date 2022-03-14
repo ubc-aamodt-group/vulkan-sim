@@ -2757,7 +2757,12 @@ void rt_unit::issue(register_set &reg_set) {
 }
 
 unsigned rt_unit::active_warps() {
-  return m_current_warps.size();
+  std::set<unsigned> warp_ids;
+  for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+    unsigned warp_id = it->second.get_warp_id();
+    warp_ids.insert(warp_id);
+  }
+  return warp_ids.size();
 }
 
 void rt_unit::cycle() {
