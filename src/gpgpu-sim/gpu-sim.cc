@@ -1546,16 +1546,31 @@ void shader_core_ctx::mem_instruction_stats(const warp_inst_t &inst) {
       m_stats->gpgpu_n_tex_insn += active_count;
       break;
     case global_space:
+      if (inst.is_store())
+        m_stats->gpgpu_n_global_store_insn += active_count;
+      else
+        m_stats->gpgpu_n_global_load_insn += active_count;
+      break;
     case local_space:
       if (inst.is_store())
-        m_stats->gpgpu_n_store_insn += active_count;
+        m_stats->gpgpu_n_local_store_insn += active_count;
       else
-        m_stats->gpgpu_n_load_insn += active_count;
+        m_stats->gpgpu_n_local_load_insn += active_count;
       break;
     default:
       abort();
   }
 }
+
+void shader_core_ctx::rt_mem_instruction_stats(const warp_inst_t &inst) {
+  unsigned active_count = inst.active_count();
+  m_stats->gpgpu_n_rt_insn += active_count;
+
+  for (unsigned i=0; i<m_config->warp_size; i++) {
+    m_stats->gpgpu_n_rt_access_insn += inst.mem_list_length(i);
+  }
+}
+
 bool shader_core_ctx::can_issue_1block(kernel_info_t &kernel) {
   // Jin: concurrent kernels on one SM
   if (m_config->gpgpu_concurrent_kernel_sm) {

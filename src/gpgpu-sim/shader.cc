@@ -632,13 +632,17 @@ void shader_core_stats::print(FILE *fout) const {
   }
   fprintf(fout, "\n");
 
-  fprintf(fout, "gpgpu_n_load_insn  = %d\n", gpgpu_n_load_insn);
-  fprintf(fout, "gpgpu_n_store_insn = %d\n", gpgpu_n_store_insn);
+  fprintf(fout, "gpgpu_n_local_load_insn  = %d\n", gpgpu_n_local_load_insn);
+  fprintf(fout, "gpgpu_n_local_store_insn = %d\n", gpgpu_n_local_store_insn);
+  fprintf(fout, "gpgpu_n_global_load_insn  = %d\n", gpgpu_n_global_load_insn);
+  fprintf(fout, "gpgpu_n_global_store_insn = %d\n", gpgpu_n_global_store_insn);
   fprintf(fout, "gpgpu_n_shmem_insn = %d\n", gpgpu_n_shmem_insn);
   fprintf(fout, "gpgpu_n_sstarr_insn = %d\n", gpgpu_n_sstarr_insn);
   fprintf(fout, "gpgpu_n_tex_insn = %d\n", gpgpu_n_tex_insn);
   fprintf(fout, "gpgpu_n_const_mem_insn = %d\n", gpgpu_n_const_insn);
   fprintf(fout, "gpgpu_n_param_mem_insn = %d\n", gpgpu_n_param_insn);
+  fprintf(fout, "gpgpu_n_rt_insn = %d\n", gpgpu_n_rt_insn);
+  fprintf(fout, "gpgpu_n_rt_access_insn = %d\n", gpgpu_n_rt_access_insn);
 
   fprintf(fout, "gpgpu_n_shmem_bkconflict = %d\n", gpgpu_n_shmem_bkconflict);
   fprintf(fout, "gpgpu_n_cache_bkconflict = %d\n", gpgpu_n_cache_bkconflict);
@@ -2754,6 +2758,7 @@ void rt_unit::issue(register_set &reg_set) {
   warp_inst_t *inst = *(reg_set.get_ready());
   inst->op_pipe = MEM__OP;
   pipelined_simd_unit::issue(reg_set);
+  m_core->rt_mem_instruction_stats(*inst);
 }
 
 unsigned rt_unit::active_warps() {

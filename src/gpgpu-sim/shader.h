@@ -1829,13 +1829,17 @@ struct shader_core_stats_pod {
   unsigned *rt_nwarps;
   unsigned *rt_nthreads_intersection;
   
-  unsigned gpgpu_n_load_insn;
-  unsigned gpgpu_n_store_insn;
+  unsigned gpgpu_n_local_load_insn;
+  unsigned gpgpu_n_local_store_insn;
+  unsigned gpgpu_n_global_load_insn;
+  unsigned gpgpu_n_global_store_insn;
   unsigned gpgpu_n_shmem_insn;
   unsigned gpgpu_n_sstarr_insn;
   unsigned gpgpu_n_tex_insn;
   unsigned gpgpu_n_const_insn;
   unsigned gpgpu_n_param_insn;
+  unsigned gpgpu_n_rt_insn;
+  unsigned gpgpu_n_rt_access_insn;
   unsigned gpgpu_n_shmem_bkconflict;
   unsigned gpgpu_n_cache_bkconflict;
   int gpgpu_n_intrawarp_mshr_merge;
@@ -2182,6 +2186,7 @@ class shader_core_ctx : public core_t {
   // used by pipeline timing model components:
   // modifiers
   void mem_instruction_stats(const warp_inst_t &inst);
+  void rt_mem_instruction_stats(const warp_inst_t &inst);
   void decrement_atomic_count(unsigned wid, unsigned n);
   void inc_store_req(unsigned warp_id) { m_warp[warp_id]->inc_store_req(); }
   void dec_inst_in_pipeline(unsigned warp_id) {
