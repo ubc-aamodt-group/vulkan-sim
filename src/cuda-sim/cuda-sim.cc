@@ -1694,7 +1694,7 @@ void cuda_sim::init_inst_classification_stat() {
          MAX_CLASS_KER);  // a static limit on number of kernels increase it if
                           // it fails!
   g_inst_classification_stat[g_ptx_kernel_count] =
-      StatCreate(kernelname, 1, 20);
+      StatCreate(kernelname, 1, 25);
   if (!g_inst_op_classification_stat)
     g_inst_op_classification_stat =
         (void **)calloc(MAX_CLASS_KER, sizeof(void *));
@@ -1937,26 +1937,26 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
       unsigned space_type = 0;
       switch (pI->get_space().get_type()) {
         case global_space:
-          space_type = 10;
+          space_type = 15;
           break;
         case local_space:
-          space_type = 11;
+          space_type = 16;
           break;
         case tex_space:
-          space_type = 12;
+          space_type = 17;
           break;
         case surf_space:
-          space_type = 13;
+          space_type = 18;
           break;
         case param_space_kernel:
         case param_space_local:
-          space_type = 14;
+          space_type = 19;
           break;
         case shared_space:
-          space_type = 15;
+          space_type = 20;
           break;
         case const_space:
-          space_type = 16;
+          space_type = 21;
           break;
         default:
           space_type = 0;
