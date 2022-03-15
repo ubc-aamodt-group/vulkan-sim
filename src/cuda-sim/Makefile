@@ -44,6 +44,7 @@ OUTPUT_DIR=$(SIM_OBJ_FILES_DIR)/cuda-sim
 
 MESA_PATH := ../../../mesa
 VULKAN_PATHS += -I$(MESA_PATH)/src/intel/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/
 VULKAN_PATHS += -I$(MESA_PATH)/include/
 VULKAN_PATHS += -I$(MESA_PATH)/src/
 VULKAN_PATHS += -I$(MESA_PATH)/src/gallium/include/
@@ -51,9 +52,10 @@ VULKAN_PATHS += -I$(MESA_PATH)/src/mesa
 VULKAN_PATHS += -I$(MESA_PATH)/src/mapi/
 VULKAN_PATHS += -I$(MESA_PATH)/src/vulkan/util/
 VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/vulkan/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/vulkan/
 VULKAN_PATHS += -I$(MESA_PATH)/src/vulkan/wsi/
 
-LIBANV_DIR = $(MESA_PATH)/build/src/intel/vulkan/
+LIB_Vulkan_Intel_DIR = $(MESA_PATH)/build/install/lib/x86_64-linux-gnu/
 
 OPT	:= -fpermissive -O3 -g3 -Wall -Wno-unused-function -Wno-sign-compare $(VULKAN_PATHS)
 ifeq ($(DEBUG),1)

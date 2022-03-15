@@ -89,4 +89,41 @@ extern void gpgpusim_setDescriptorSetFromLauncher_cpp(void *address, uint32_t se
     VulkanRayTracing::setDescriptorSetFromLauncher(address, setID, descID);
 }
 
+extern void gpgpusim_setStorageImageFromLauncher_cpp(void *address, 
+                                                    uint32_t setID, 
+                                                    uint32_t descID, 
+                                                    uint32_t width,
+                                                    uint32_t height,
+                                                    VkFormat format,
+                                                    uint32_t VkDescriptorTypeNum,
+                                                    uint32_t n_planes,
+                                                    uint32_t n_samples,
+                                                    VkImageTiling tiling,
+                                                    uint32_t isl_tiling_mode, 
+                                                    uint32_t row_pitch_B)
+{
+    VulkanRayTracing::setStorageImageFromLauncher(address, setID, descID, width, height, format, VkDescriptorTypeNum, n_planes, n_samples, tiling, isl_tiling_mode, row_pitch_B);
+}
+
+extern void gpgpusim_setTextureFromLauncher_cpp(void *address, 
+                                                uint32_t setID, 
+                                                uint32_t descID, 
+                                                uint64_t size,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                VkFormat format,
+                                                uint32_t VkDescriptorTypeNum,
+                                                uint32_t n_planes,
+                                                uint32_t n_samples,
+                                                VkImageTiling tiling,
+                                                uint32_t isl_tiling_mode)
+{
+    VulkanRayTracing::setTextureFromLauncher(address, setID, descID, size,width, height, format, VkDescriptorTypeNum, n_planes, n_samples, tiling, isl_tiling_mode);
+}
+
+extern "C" void gpgpusim_pass_child_addr(void *address)
+{
+    VulkanRayTracing::pass_child_addr(address);
+}
+
 #endif /* GPGPUSIM_CALLS_FROM_MESA_CC */

@@ -6737,8 +6737,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = thread->get_tid().x;
-  // v[1] = 0;
+  // v[0] = 600 + thread->get_tid().x;
+  // v[1] = 370;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6922,6 +6922,13 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   float lod = src8_data.f32;
 
   float c0, c1, c2, c3; // MRS_TODO: send c3 through
+
+  char *workload = getenv("VULKAN_SIM_LAUNCHER_WORKLOAD");
+  if(workload && !strcmp(workload, "raytracing_extended"))
+  {
+    std::string reg_name("%ssa_317_array_index_64");
+    ptx_reg_t offset_reg = thread->get_reg(reg_name);
+  }
 
   VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3);
 
