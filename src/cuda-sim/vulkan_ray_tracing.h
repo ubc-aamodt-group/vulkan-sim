@@ -250,6 +250,7 @@ private:
 
     // For Launcher
     static void* launcher_descriptorSets[1][10];
+    static std::vector<void*> child_addrs_from_driver;
     static void *child_addr_from_driver;
 public:
     static RayDebugGPUData rayDebugGPUData[2000][2000];
@@ -341,6 +342,7 @@ public:
                                        VkImageTiling tiling,
                                        uint32_t isl_tiling_mode);
     static void pass_child_addr(void *address);
+    static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

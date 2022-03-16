@@ -63,6 +63,7 @@ RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
 struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
 void* VulkanRayTracing::launcher_descriptorSets[1][10] = {NULL};
 void* VulkanRayTracing::child_addr_from_driver = NULL;
+std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
 
 bool use_external_launcher = true;
 
@@ -455,6 +456,14 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             GEN_RT_BVH botLevelASAddr;
             GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
             transactions.push_back(MemoryTransactionRecord((void*)(leaf_addr + instanceLeaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
+
+            // std::ofstream offsetfile;
+            // offsetfile.open("offsets.txt", std::ios::app);
+            // offsetfile << (int64_t)instanceLeaf.BVHAddress << std::endl;
+
+            // std::ofstream leaf_addr_file;
+            // leaf_addr_file.open("leaf.txt", std::ios::app);
+            // leaf_addr_file << (int64_t)((uint64_t)leaf_addr - (uint64_t)_topLevelAS) << std::endl;
 
             float worldToObject_tMultiplier;
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
@@ -2025,36 +2034,51 @@ void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descI
 
     char fullPath[200];
     int result;
+
+    int64_t max_backwards; // negative number
+    int64_t min_backwards; // negative number
+    int64_t min_forwards;
+    int64_t max_forwards;
+    int64_t back_buffer_amount = 1024*20; //20kB buffer just in case
+    int64_t front_buffer_amount = 1024*20; //20kB buffer just in case
+    findOffsetBounds(max_backwards, min_backwards, min_forwards, max_forwards);
+    
     if (split_files) // Used when the AS is too far apart between top tree and BVHAddress and cant just dump the whole thing
     {
-        //snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d_%d_%d%sfirst", mesa_root, filePath, setID, descID, desc_size, VkDescriptorTypeNum, backwards_range, forward_range, extension);
-        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asfirst", mesa_root, filePath, setID, descID);
+        // Main Top Level
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asmain", mesa_root, filePath, setID, descID);
         fp = fopen(fullPath, "wb+");
-        result = fwrite(address-(uint64_t)backwards_range, 1, desc_size + backwards_range + forward_range, fp);
-        assert(result == desc_size + backwards_range + forward_range);
+        result = fwrite(address, 1, desc_size, fp);
+        assert(result == desc_size);
         fclose(fp);
 
-        uint64_t offset = (uint64_t)child_addr_from_driver - (uint64_t)address;
-
+        // Bot level whose address is smaller than top level
         uint32_t second_forward_range = 1024*1024*5;
         uint32_t second_backwards_range = 1024*1024*5;
-        //snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d_%d_%d_%d%ssecond", mesa_root, filePath, setID, descID, desc_size, VkDescriptorTypeNum, second_backwards_range, second_forward_range, offset, extension);
-        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.assecond", mesa_root, filePath, setID, descID);
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asback", mesa_root, filePath, setID, descID);
         fp = fopen(fullPath, "wb+");
-        result = fwrite(child_addr_from_driver-(uint64_t)backwards_range, 1, second_backwards_range + second_forward_range, fp);
-        assert(result == second_backwards_range + second_forward_range);
+        result = fwrite(address + max_backwards, 1, min_backwards - max_backwards + back_buffer_amount, fp);
+        assert(result == min_backwards - max_backwards + back_buffer_amount);
+        fclose(fp);
+
+        // Bot level whose address is larger than top level
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asfront", mesa_root, filePath, setID, descID);
+        fp = fopen(fullPath, "wb+");
+        result = fwrite(address + min_forwards, 1, max_forwards - min_forwards + front_buffer_amount, fp);
+        assert(result == max_forwards - min_forwards + front_buffer_amount);
         fclose(fp);
 
         // AS metadata
         snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asmetadata", mesa_root, filePath, setID, descID);
         fp = fopen(fullPath, "w+");
-        fprintf(fp, "%d,%d,%d,%d,%d,%d,%lu", desc_size,
+        fprintf(fp, "%d,%d,%ld,%ld,%ld,%ld,%ld,%ld", desc_size,
                                             VkDescriptorTypeNum,
-                                            backwards_range,
-                                            forward_range,
-                                            second_backwards_range,
-                                            second_forward_range,
-                                            offset);
+                                            max_backwards,
+                                            min_backwards,
+                                            min_forwards,
+                                            max_forwards,
+                                            back_buffer_amount,
+                                            front_buffer_amount);
         fclose(fp);
 
         
@@ -2407,23 +2431,55 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
                                             uint32_t isl_tiling_mode)
 {
     texture_metadata *texture = new texture_metadata;
-    address = texture->address;
+    texture->address = address;
     setID = texture->setID;
-    descID = texture->descID;
-    size = texture->size;
-    width = texture->width;
-    height = texture->height;
-    format = texture->format;
-    VkDescriptorTypeNum = texture->VkDescriptorTypeNum;
-    n_planes = texture->n_planes;
-    n_samples = texture->n_samples;
-    tiling = texture->tiling;
-    isl_tiling_mode = texture->isl_tiling_mode;
+    texture->descID = descID;
+    texture->size = size;
+    texture->width = width;
+    texture->height = height;
+    texture->format = format;
+    texture->VkDescriptorTypeNum = VkDescriptorTypeNum;
+    texture->n_planes = n_planes;
+    texture->n_samples = n_samples;
+    texture->tiling = tiling;
+    texture->isl_tiling_mode = isl_tiling_mode;
 
     launcher_descriptorSets[setID][descID] = (void*) texture;
 }
 
 void VulkanRayTracing::pass_child_addr(void *address)
 {
+    child_addrs_from_driver.push_back(address);
+    
+    //old
     child_addr_from_driver = address;
+}
+
+void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards)
+{
+    // uint64_t current_min_backwards = 0;
+    // uint64_t current_max_backwards = 0;
+    // uint64_t current_min_forwards = 0;
+    // uint64_t current_max_forwards = 0;
+    int64_t offset;
+
+    std::vector<int64_t> positive_offsets;
+    std::vector<int64_t> negative_offsets;
+
+    for (auto addr : child_addrs_from_driver)
+    {
+        offset = (uint64_t)addr - (uint64_t)topLevelAS;
+        if (offset >= 0)
+            positive_offsets.push_back(offset);
+        else
+            negative_offsets.push_back(offset);
+    }
+
+    sort(positive_offsets.begin(), positive_offsets.end());
+    sort(negative_offsets.begin(), negative_offsets.end());
+
+    max_backwards = negative_offsets.front();
+    min_backwards = negative_offsets.back();
+    min_forwards = positive_offsets.front();
+    max_forwards = positive_offsets.back();
 }

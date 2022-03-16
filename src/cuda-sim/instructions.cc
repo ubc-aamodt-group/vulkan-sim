@@ -6928,6 +6928,7 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   {
     std::string reg_name("%ssa_317_array_index_64");
     ptx_reg_t offset_reg = thread->get_reg(reg_name);
+    desc = desc - offset_reg.u64;
   }
 
   VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3);
