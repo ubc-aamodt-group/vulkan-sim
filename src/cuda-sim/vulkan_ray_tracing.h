@@ -200,6 +200,40 @@ typedef struct Vulkan_RT_thread_data {
     }
 } Vulkan_RT_thread_data;
 
+// For launcher
+typedef struct storage_image_metadata
+{
+    void *address;
+    uint32_t setID;
+    uint32_t descID;
+    uint32_t width;
+    uint32_t height;
+    VkFormat format;
+    uint32_t VkDescriptorTypeNum;
+    uint32_t n_planes;
+    uint32_t n_samples;
+    VkImageTiling tiling;
+    uint32_t isl_tiling_mode; 
+    uint32_t row_pitch_B;
+} storage_image_metadata;
+
+typedef struct texture_metadata
+{
+    void *address;
+    uint32_t setID;
+    uint32_t descID;
+    uint64_t size;
+    uint32_t width;
+    uint32_t height;
+    VkFormat format;
+    uint32_t VkDescriptorTypeNum;
+    uint32_t n_planes;
+    uint32_t n_samples;
+    VkImageTiling tiling;
+    uint32_t isl_tiling_mode;
+} texture_metadata;
+
+
 struct anv_descriptor_set;
 struct anv_descriptor;
 
@@ -216,7 +250,9 @@ private:
     static struct anv_descriptor_set *descriptorSet;
 
     // For Launcher
-    static void* ray_tracing_reflection_descriptorSets[1][4];
+    static void* launcher_descriptorSets[1][10];
+    static std::vector<void*> child_addrs_from_driver;
+    static void *child_addr_from_driver;
 public:
     static RayDebugGPUData rayDebugGPUData[2000][2000];
     
@@ -271,16 +307,43 @@ public:
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t binding);
 
-    static void image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
+    static void image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchsIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread);
-    static void getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3);
+    static void getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3, uint64_t launcher_offset = 0);
 
     static void dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
-    static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t desired_range);
+    static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files);
     static void dump_descriptor_sets(struct anv_descriptor_set *set);
     static void dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr);
+    static void dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
+    static void dumpStorageImage(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
     static void setDescriptorSetFromLauncher(void *address, uint32_t setID, uint32_t descID);
-
+    static void setStorageImageFromLauncher(void *address, 
+                                            uint32_t setID, 
+                                            uint32_t descID, 
+                                            uint32_t width,
+                                            uint32_t height,
+                                            VkFormat format,
+                                            uint32_t VkDescriptorTypeNum,
+                                            uint32_t n_planes,
+                                            uint32_t n_samples,
+                                            VkImageTiling tiling,
+                                            uint32_t isl_tiling_mode, 
+                                            uint32_t row_pitch_B);
+    static void setTextureFromLauncher(void *address, 
+                                       uint32_t setID, 
+                                       uint32_t descID, 
+                                       uint64_t size,
+                                       uint32_t width,
+                                       uint32_t height,
+                                       VkFormat format,
+                                       uint32_t VkDescriptorTypeNum,
+                                       uint32_t n_planes,
+                                       uint32_t n_samples,
+                                       VkImageTiling tiling,
+                                       uint32_t isl_tiling_mode);
+    static void pass_child_addr(void *address);
+    static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */

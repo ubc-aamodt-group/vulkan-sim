@@ -36,17 +36,20 @@ namespace fs = boost::filesystem;
 #include "vulkan_acceleration_structure_util.h"
 #include "../gpgpu-sim/vector-math.h"
 
+//#include "intel_image_util.h"
  #include "astc_decomp.h"
+ 
+#define HAVE_PTHREAD
+#define UTIL_ARCH_LITTLE_ENDIAN 1
+#define UTIL_ARCH_BIG_ENDIAN 0
+#define signbit signbit
 
- #define HAVE_PTHREAD
- #define UTIL_ARCH_LITTLE_ENDIAN 1
- #define UTIL_ARCH_BIG_ENDIAN 0
- #define signbit signbit
-
- #define UINT_MAX 65535
- #define GLuint MESA_GLuint
- #include "vulkan/anv_private.h"
- #undef GLuint
+#define UINT_MAX 65535
+#define GLuint MESA_GLuint
+#include "isl/isl.h"
+#include "isl/isl_tiled_memcpy.c"
+#include "vulkan/anv_private.h"
+#undef GLuint
 
 VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
@@ -58,7 +61,9 @@ bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
 RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
 struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
-void* VulkanRayTracing::ray_tracing_reflection_descriptorSets[1][4] = {NULL};
+void* VulkanRayTracing::launcher_descriptorSets[1][10] = {NULL};
+void* VulkanRayTracing::child_addr_from_driver = NULL;
+std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
 
 bool use_external_launcher = true;
 
@@ -289,6 +294,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 {
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
+    // std::list<uint8_t *> path;
+    // find_primitive((uint8_t*)_topLevelAS, 9920, path);
+
     Traversal_data traversal_data;
 
     traversal_data.ray_world_direction = direction;
@@ -485,6 +493,14 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             transactions.push_back(MemoryTransactionRecord((void*)(leaf_addr + instanceLeaf.BVHAddress), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
 
+            // std::ofstream offsetfile;
+            // offsetfile.open("offsets.txt", std::ios::app);
+            // offsetfile << (int64_t)instanceLeaf.BVHAddress << std::endl;
+
+            // std::ofstream leaf_addr_file;
+            // leaf_addr_file.open("leaf.txt", std::ios::app);
+            // leaf_addr_file << (int64_t)((uint64_t)leaf_addr - (uint64_t)_topLevelAS) << std::endl;
+
             float worldToObject_tMultiplier;
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
 
@@ -515,6 +531,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                 {
                     node_addr = next_node_addr;
                     next_node_addr = NULL;
+
+                    // if(node_addr == *(++path.rbegin()))
+                    //     printf("this is where things go wrong\n");
+
                     struct GEN_RT_BVH_INTERNAL_NODE node;
                     GEN_RT_BVH_INTERNAL_NODE_unpack(&node, node_addr);
                     transactions.push_back(MemoryTransactionRecord(node_addr, GEN_RT_BVH_INTERNAL_NODE_length * 4, TransactionType::BVH_INTERNAL_NODE));
@@ -613,6 +633,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         struct GEN_RT_BVH_QUAD_LEAF leaf;
                         GEN_RT_BVH_QUAD_LEAF_unpack(&leaf, leaf_addr);
 
+                        // if(leaf.PrimitiveIndex0 == 9600)
+                        // {
+                        //     leaf.QuadVertex[2].Z = -0.001213;
+                        // }
+
                         float3 p[3];
                         for(int i = 0; i < 3; i++)
                         {
@@ -635,13 +660,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                                 traversalFile << "miss quad node " << leaf_addr << " ";
                             traversalFile << "primitiveID = " << leaf.PrimitiveIndex0 << "\n";
 
-                            traversalFile << "p[0] = (" << p[0].x << p[0].y << p[0].z << ") ";
-                            traversalFile << "p[1] = (" << p[1].x << p[1].y << p[1].z << ") ";
-                            traversalFile << "p[2] = (" << p[2].x << p[2].y << p[2].z << ") ";
-                            traversalFile << "p[3] = (" << p[3].x << p[3].y << p[3].z << ")" << std::endl;
+                            traversalFile << "p[0] = (" << p[0].x << ", " << p[0].y << ", " << p[0].z << ") ";
+                            traversalFile << "p[1] = (" << p[1].x << ", " << p[1].y << ", " << p[1].z << ") ";
+                            traversalFile << "p[2] = (" << p[2].x << ", " << p[2].y << ", " << p[2].z << ") ";
+                            traversalFile << "p[3] = (" << p[3].x << ", " << p[3].y << ", " << p[3].z << ")" << std::endl;
                         }
 
-                        if(hit && thit / worldToObject_tMultiplier < min_thit)
+                        float world_thit = thit / worldToObject_tMultiplier;
+
+                        //TODO: why the Tmin Tmax consition wasn't handled in the object coordinates?
+                        if(hit && Tmin <= world_thit && world_thit <= Tmax && world_thit < min_thit)
                         {
                             if (debugTraversal)
                             {
@@ -696,6 +724,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         traversal_data.closest_hit.instance_index = closest_instanceLeaf.InstanceID;
         float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * min_thit, ray.get_direction().y * min_thit, ray.get_direction().z * min_thit);
+        float3 rayatinter = ray.at(min_thit);
         // assert(intersection_point.x == ray.at(min_thit).x && intersection_point.y == ray.at(min_thit).y && intersection_point.z == ray.at(min_thit).z);
         traversal_data.closest_hit.intersection_point = intersection_point;
         traversal_data.closest_hit.worldToObjectMatrix = closest_worldToObject;
@@ -854,11 +883,11 @@ void copyHardCodedShaders()
     // src.close();
     // dst.close();
     
-    src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
-    dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
-    dst << src.rdbuf();
-    src.close();
-    dst.close();
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_CLOSEST_HIT_2.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
 
     // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
     // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_RAYGEN_0.ptx", std::ios::binary);
@@ -1030,7 +1059,7 @@ void VulkanRayTracing::invoke_gpgpusim()
     }
 }
 
-int CmdTraceRaysKHRID = 0;
+// int CmdTraceRaysKHRID = 0;
 
 void VulkanRayTracing::vkCmdTraceRaysKHR(
                       void *raygen_sbt,
@@ -1050,13 +1079,13 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
         dump_callparams_and_sbt(raygen_sbt, miss_sbt, hit_sbt, callable_sbt, is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
     }
 
-    CmdTraceRaysKHRID++;
-    if(CmdTraceRaysKHRID != 1)
-        return;
+    // CmdTraceRaysKHRID++;
+    // if(CmdTraceRaysKHRID != 1)
+    //     return;
 
-    if(imageFile.is_open())
-        return;
-    imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // if(imageFile.is_open())
+    //     return;
+    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1129,7 +1158,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 32;
+    // launch_width = 1;
     // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
@@ -1342,20 +1371,20 @@ void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *addr
 
 void VulkanRayTracing::setDescriptorSetFromLauncher(void *address, uint32_t setID, uint32_t descID)
 {
-    ray_tracing_reflection_descriptorSets[setID][descID] = address;
+    launcher_descriptorSets[setID][descID] = address;
 }
 
 void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
 {
     if (use_external_launcher)
     {
-        return ray_tracing_reflection_descriptorSets[setID][binding];
+        return launcher_descriptorSets[setID][binding];
     }
     else 
     {
         // assert(setID < descriptors.size());
         // assert(binding < descriptors[setID].size());
-        
+
         struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
 
         const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
@@ -1363,19 +1392,12 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
         void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
 
         assert(desc->type == bind_layout->type);
-        
+
         switch (desc->type)
         {
             case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
             {
-                assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
-                assert(desc->sampler == NULL);
-
-                struct anv_image_view *image_view = desc->image_view;
-                assert(image_view != NULL);
-                struct anv_image * image = image_view->image;
-                void* address = anv_address_map(image->planes[0].address);
-                return address;
+                return (void *)(desc);
             }
             case VK_DESCRIPTOR_TYPE_SAMPLER:
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
@@ -1428,62 +1450,304 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     }
 }
 
-void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3)
+void show_decompress_ASTC_texture_block(const uint8_t * data, bool isSRGB, int blockWidth, int blockHeight)
+{
+    uint8_t dst_colors[1024];
+    basisu::astc::decompress(dst_colors, data, isSRGB, blockWidth, blockHeight);
+
+    for(int i = 0; i < blockHeight; i++)
+    {
+        for(int j = 0; j < blockWidth; j++)
+        {
+            uint8_t* pixel_color = &dst_colors[0] + (i * blockWidth + j) * 4;
+            printf("pixel (%d, %d) = (%d, %d, %d, %d) = (%f, %f, %f, %f)\n", i, j, 
+                    pixel_color[0], pixel_color[1], pixel_color[2], pixel_color[3],
+                    pixel_color[0] / 255.0, pixel_color[1] / 255.0, pixel_color[2] / 255.0, pixel_color[3] / 255.0);
+        }
+        printf("\n");
+    }
+}
+
+void save_ASTC_texture_to_text_file(const struct anv_image *image)
+{
+    FILE * pFile;
+    pFile = fopen ("ASTC_texture.txt","w");
+    assert(image->vk_format == VK_FORMAT_ASTC_8x8_SRGB_BLOCK);
+    uint8_t* address = anv_address_map(image->planes[0].address);
+
+    for(int block = 0; block * (128 / 8) < image->planes[0].size; block++)
+    {
+        uint8_t dst_colors[1024];
+        basisu::astc::decompress(dst_colors, address + block * (128 / 8), true, 8, 8);
+
+        fprintf(pFile, "block %d:", block);
+        for(int i = 0; i < 8; i++)
+        {
+            for(int j = 0; j < 8; j++)
+            {
+                uint8_t* pixel_color = &dst_colors[0] + (i * 8 + j) * 4;
+                fprintf(pFile, "\tpixel (%d, %d) = (%d, %d, %d, %d) = (%f, %f, %f, %f)\n", i, j, 
+                        pixel_color[0], pixel_color[1], pixel_color[2], pixel_color[3],
+                        pixel_color[0] / 255.0, pixel_color[1] / 255.0, pixel_color[2] / 255.0, pixel_color[3] / 255.0);
+            }
+            fprintf(pFile, "\n");
+        }
+        fprintf(pFile, "\n\n");
+    }
+
+    fclose (pFile);
+}
+
+float SRGB_to_linearRGB(float s)
+{
+    assert(0 <= s && s <= 1);
+    if(s <= 0.04045)
+        return s / 12.92;
+    else
+        return pow(((s + 0.055) / 1.055), 2.4);
+}
+
+inline uint64_t ceil_divide(uint64_t a, uint64_t b)
+{
+    return (a + b - 1) / b;
+}
+
+void VulkanRayTracing::dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
 {
     struct anv_image_view *image_view =  desc->image_view;
     struct anv_sampler *sampler = desc->sampler;
 
     const struct anv_image *image = image_view->image;
-    uint8_t* address = anv_address_map(image->planes[0].address);
+    assert(image->n_planes == 1);
+    assert(image->samples == 1);
+    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+    assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
 
-    int x_int = x; //MRS_TODO: change this to NN or bilinear
+    uint8_t* address = anv_address_map(image->planes[0].address);
+    uint32_t image_extent_width = image->extent.width;
+    uint32_t image_extent_height = image->extent.height;
+    VkFormat format = image->vk_format;
+    uint64_t size = image->size;
+
+    // Data to dump
+    FILE *fp;
+    char *mesa_root = getenv("MESA_ROOT");
+    char *filePath = "gpgpusimShaders/";
+    char *extension = ".vkdescrptorsettexturedata";
+
+    int VkDescriptorTypeNum;
+
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_SAMPLER:
+            VkDescriptorTypeNum = 0;
+            break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            VkDescriptorTypeNum = 1;
+            break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            VkDescriptorTypeNum = 2;
+            break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            VkDescriptorTypeNum = 10;
+            break;
+        default:
+            abort(); // should not be here!
+    }
+
+    // Texture data
+    char fullPath[200];
+    snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.vktexturedata", mesa_root, filePath, setID, binding);
+    // File name format: setID_descID.vktexturedata
+
+    fp = fopen(fullPath, "wb+");
+    fwrite(address, 1, size, fp);
+    fclose(fp);
+
+    // Texture metadata
+    snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.vktexturemetadata", mesa_root, filePath, setID, binding);
+    fp = fopen(fullPath, "w+");
+    // File name format: setID_descID.vktexturemetadata
+
+    fprintf(fp, "%d,%d,%d,%d,%d,%d,%d,%d,%d",   size, 
+                                                image_extent_width, 
+                                                image_extent_height, 
+                                                format, 
+                                                VkDescriptorTypeNum, 
+                                                image->n_planes, 
+                                                image->samples, 
+                                                image->tiling, 
+                                                image->planes[0].surface.isl.tiling);
+    fclose(fp);
+
+}
+
+void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3, uint64_t launcher_offset)
+{
+    uint8_t *address;
+    uint32_t setID;
+    uint32_t descID;
+    uint64_t size;
+    uint32_t width;
+    uint32_t height;
+    VkFormat vk_format;
+    uint32_t VkDescriptorTypeNum;
+    uint32_t n_planes;
+    uint32_t n_samples;
+    VkImageTiling tiling;
+    isl_tiling isl_tiling_mode;
+
+    if (use_external_launcher)
+    {
+        texture_metadata *texture = (texture_metadata*) desc;
+        setID = texture->setID;
+        descID = texture->descID;
+        size = texture->size;
+        width = texture->width;
+        height = texture->height;
+        vk_format = texture->format;
+        VkDescriptorTypeNum = texture->VkDescriptorTypeNum;
+        n_planes = texture->n_planes;
+        n_samples = texture->n_samples;
+        tiling = texture->tiling;
+        isl_tiling_mode = texture->isl_tiling_mode;
+        address = (uint8_t*) texture->address + launcher_offset;
+    }
+    else
+    {
+        struct anv_image_view *image_view =  desc->image_view;
+        struct anv_sampler *sampler = desc->sampler;
+
+        const struct anv_image *image = image_view->image;
+        assert(image->n_planes == 1);
+        assert(image->samples == 1);
+        assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+        assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
+
+        width = image->extent.width;
+        height = image->extent.height;
+        vk_format = image->vk_format;
+        n_planes = image->n_planes;
+        n_samples = image->samples;
+        tiling = image->tiling;
+        isl_tiling_mode = image->planes[0].surface.isl.tiling;
+        address = anv_address_map(image->planes[0].address);
+    }
+
+    // struct anv_image_view *image_view =  desc->image_view;
+    // struct anv_sampler *sampler = desc->sampler;
+
+    // const struct anv_image *image = image_view->image;
+    // assert(image->n_planes == 1);
+    // assert(image->samples == 1);
+    // assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+    // assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
+
+    // uint8_t* address = anv_address_map(image->planes[0].address);
+
+    //save_ASTC_texture_to_text_file(image);
+    // save_ASTC_texture_to_image_file(descriptorSet->descriptors[24].image_view->image, imageFile);
+    // exit(-1);
+
+    int x_int = x * width; //MRS_TODO: change this to NN or bilinear
+    x_int %= width;
     if(x_int < 0)
-        x_int = 0;
-    int y_int = y;
+        x_int += width;
+    // if(x_int >= image->extent.width)
+    //     x_int = image->extent.width - 1;
+    int y_int = y * height;
+    y_int %= height;
     if(y_int < 0)
-        y_int = 0;
-    switch(image->vk_format)
+        y_int += height;
+    // if(y_int >= image->extent.height)
+    //     y_int = image->extent.height - 1;
+    switch(vk_format)
     {
         case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
         {
-            int blockX = x_int / 8;
-            int blockY = y_int / 8;
+            // int blockX = x_int / 8;
+            // int blockY = y_int / 8;
 
-            uint32_t block_offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
-            assert(block_offset < image->planes[0].size);
-            assert(block_offset >= 0);
+            // uint32_t block_offset = (blockX  * (image->extent.height / 8) + blockY) * (128 / 8);
+            // assert(block_offset < image->planes[0].size);
+            // assert(block_offset >= 0);
+
+            // uint8_t dst_colors[256];
+            // basisu::astc::decompress(dst_colors, address + block_offset, true, 8, 8);
+            // uint8_t* pixel_color = &dst_colors[0] + ((x_int % 8) + (y_int % 8)  * 8) * 4;
+
+            uint32_t tileWidth = 8;
+            uint32_t tileHeight = 32;
+            uint32_t ASTC_block_size = 128 / 8;
+
+            int tileX = x_int / 8 / tileWidth;
+            int tileY = y_int / 8 / tileHeight;
+            int tileID = tileX + tileY * width / 8 / tileWidth;
+
+            int blockX = ((x_int / 8) % tileWidth);
+            int blockY = ((y_int / 8) % tileHeight);
+            int blockID = blockX * (tileHeight) + blockY;
+
+            uint32_t offset = (tileID * (tileWidth * tileHeight) + blockID) * ASTC_block_size;
+            // uint32_t offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
+            // uint32_t offset = (blockX * (image->extent.height / 8) + blockY) * (128 / 8);
 
             uint8_t dst_colors[256];
-            basisu::astc::decompress(dst_colors, address + block_offset, true, 8, 8);
-            uint8_t* pixel_color = &dst_colors[0] + (x_int % 8 + (y_int % 8) * 8) * 4;
+            if(!basisu::astc::decompress(dst_colors, address + offset, true, 8, 8))
+            {
+                printf("decoding error\n");
+                exit(-2);
+            }
+            uint8_t* pixel_color = &dst_colors[0] + ((x_int % 8) + (y_int % 8) * 8) * 4;
 
-            c0 = pixel_color[0] / 255.0;
-            c1 = pixel_color[1] / 255.0;
-            c2 = pixel_color[2] / 255.0;
+            c0 = SRGB_to_linearRGB(pixel_color[0] / 255.0);
+            c1 = SRGB_to_linearRGB(pixel_color[1] / 255.0);
+            c2 = SRGB_to_linearRGB(pixel_color[2] / 255.0);
             c3 = pixel_color[3] / 255.0;
             break;
         }
-        case VK_FORMAT_B8G8R8A8_UNORM:
-        {
-            uint32_t offset = (x * image->extent.height + y) * 4;
-            c0 = address[offset + 2] / 255.0;
-            c1 = address[offset + 1] / 255.0;
-            c2 = address[offset] / 255.0;
-            c3 = address[offset + 3] / 255.0;
-            break;
-        }
+        // case VK_FORMAT_B8G8R8A8_UNORM:
+        // {
+        //     uint32_t offset = (x * image->extent.height + y) * 4;
+        //     c0 = address[offset + 2] / 255.0;
+        //     c1 = address[offset + 1] / 255.0;
+        //     c2 = address[offset] / 255.0;
+        //     c3 = address[offset + 3] / 255.0;
+        //     break;
+        // }
         case VK_FORMAT_R8G8B8A8_SRGB:
         {
-            uint32_t offset = (x * image->extent.height + y) * 4;
-            c0 = address[offset] / 255.0;
-            c1 = address[offset + 1] / 255.0;
-            c2 = address[offset + 2] / 255.0;
-            c2 = address[offset + 3] / 255.0;
+            uint32_t tileWidth = 32;
+            uint32_t tileHeight = 32;
+
+            int tileX = x_int / tileWidth;
+            int tileY = y_int / tileHeight;
+            int tileID = tileX + tileY * width / tileWidth;
+
+            uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
+
+            // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
+            c0 = SRGB_to_linearRGB(address[offset] / 255.0);
+            c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
+            c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
+            c3 = address[offset + 3] / 255.0;
+
+            // uint8_t colors[4];
+
+            // intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
+            // colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
+            // ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+
+            // c0 = SRGB_to_linearRGB(colors[0] / 255.0);
+            // c1 = SRGB_to_linearRGB(colors[1] / 255.0);
+            // c2 = SRGB_to_linearRGB(colors[2] / 255.0);
+            // c3 = colors[3] / 255.0;
+
             break;
         }
         // case VK_FORMAT_D32_SFLOAT:
         default:
-            printf("%d not implemented\n", image->vk_format);
+            printf("%d not implemented\n", vk_format);
             assert(0);
             break;
     }
@@ -1528,59 +1792,282 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     // c2 = address[offset + 2] / 255.0;
 }
 
-void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
+void VulkanRayTracing::dumpStorageImage(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
+{
+    assert(type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+
+    assert(desc->sampler == NULL);
+
+    struct anv_image_view *image_view = desc->image_view;
+    assert(image_view != NULL);
+    struct anv_image * image = image_view->image;
+    assert(image->n_planes == 1);
+    assert(image->samples == 1);
+
+    void* mem_address = anv_address_map(image->planes[0].address);
+
+    VkFormat format = image->vk_format;
+    VkImageTiling tiling = image->tiling;
+    isl_tiling isl_tiling_mode = image->planes[0].surface.isl.tiling;
+    uint32_t row_pitch_B  = image->planes[0].surface.isl.row_pitch_B;
+
+    uint32_t width = image->extent.width;
+    uint32_t height = image->extent.height;
+
+    // Dump storage image metadata
+    FILE *fp;
+    char *mesa_root = getenv("MESA_ROOT");
+    char *filePath = "gpgpusimShaders/";
+    char *extension = ".vkdescrptorsetdata";
+
+    int VkDescriptorTypeNum = 3;
+
+    char fullPath[200];
+    snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.vkstorageimagemetadata", mesa_root, filePath, setID, binding);
+    fp = fopen(fullPath, "w+");
+    // File name format: setID_descID.vktexturemetadata
+
+    fprintf(fp, "%d,%d,%d,%d,%d,%d,%d,%d,%d",   width, 
+                                                height, 
+                                                format, 
+                                                VkDescriptorTypeNum, 
+                                                image->n_planes, 
+                                                image->samples, 
+                                                tiling, 
+                                                isl_tiling_mode,
+                                                row_pitch_B);
+    fclose(fp);
+}
+
+void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
     // if(hitValue_X != 0 || hitValue_Y != 0 || hitValue_Z != 0)
-    //     printf("image store (%f, %f, %f)\n", hitValue_X, hitValue_Y, hitValue_Z);
-    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
-    uint32_t offset = 0;
-    offset += gl_LaunchIDEXT_Y * image_width;
-    offset += gl_LaunchIDEXT_X;
-
-    float data[4];
-    data[0] = hitValue_X;
-    data[1] = hitValue_Y;
-    data[2] = hitValue_Z;
-    data[3] = hitValue_W;
-    imageFile.write((char*) data, 3 * sizeof(float));
-    imageFile.write((char*) (&offset), sizeof(uint32_t));
-    imageFile.flush();
-
-    // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
-    //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
-    //     std::abs(hitValue_Z - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.z) > 0.0001)
-    //     {
-    //         printf("wrong value. (%d, %d): (%f, %f, %f)\n"
-    //                 , gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
-    //     }
+        // printf("launch_ID = (%d, %d), image store (%f, %f, %f)\n", gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
     
-    // if (gl_LaunchIDEXT_X == 1070 && gl_LaunchIDEXT_Y == 220)
-    //     printf("this one has wrong value\n");
+    void *mem_address;
+    uint32_t setID;
+    uint32_t descID;
+    uint32_t width;
+    uint32_t height;
+    VkFormat format;
+    uint32_t VkDescriptorTypeNum;
+    uint32_t n_planes;
+    uint32_t n_samples;
+    VkImageTiling tiling;
+    isl_tiling isl_tiling_mode; 
+    uint32_t row_pitch_B;
 
-    // if(hitValue_X > 1 || hitValue_Y > 1 || hitValue_Z > 1)
-    // {
-    //     printf("this one has wrong value.\n");
-    // }
+    if (use_external_launcher)
+    {
+        storage_image_metadata *metadata = (storage_image_metadata*) desc;
+        setID = metadata->setID;
+        descID = metadata->descID;
+        width = metadata->width;
+        height = metadata->height;
+        format = metadata->format;
+        VkDescriptorTypeNum = metadata->VkDescriptorTypeNum;
+        n_planes = metadata->n_planes;
+        n_samples = metadata->n_samples;
+        tiling = metadata->tiling;
+        isl_tiling_mode = metadata->isl_tiling_mode;
+        row_pitch_B = metadata->row_pitch_B;
+        mem_address = metadata->address;
+    }
+    else
+    {
+        assert(desc->sampler == NULL);
+
+        struct anv_image_view *image_view = desc->image_view;
+        assert(image_view != NULL);
+        struct anv_image * image = image_view->image;
+        assert(image->n_planes == 1);
+        assert(image->samples == 1);
+        
+        width = image->extent.width;
+        height = image->extent.height;
+        format = image->vk_format;
+        n_planes = image->n_planes;
+        n_samples = image->samples;
+        tiling = image->tiling;
+        isl_tiling_mode = image->planes[0].surface.isl.tiling;
+        row_pitch_B = image->planes[0].surface.isl.row_pitch_B;
+        mem_address = anv_address_map(image->planes[0].address);
+    }
+
+    // assert(desc->sampler == NULL);
+
+    // struct anv_image_view *image_view = desc->image_view;
+    // assert(image_view != NULL);
+    // struct anv_image * image = image_view->image;
+    // assert(image->n_planes == 1);
+    // assert(image->samples == 1);
+
+    // void* mem_address = anv_address_map(image->planes[0].address);
+
+    switch (format)
+    {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        {
+            uint8_t r = hitValue_X * 255;
+            uint8_t g = hitValue_Y * 255;
+            uint8_t b = hitValue_Z * 255;
+            uint8_t a = hitValue_W * 255;
+
+            if(hitValue_X >= 1)
+                r = 255;
+            if(hitValue_Y >= 1)
+                g = 255;
+            if(hitValue_Z >= 1)
+                b = 255;
+            if(hitValue_W >= 1)
+                a = 255;
+            
+            uint8_t colors[] = {b, g, r, a};
+
+            switch (isl_tiling_mode)
+            {
+                case ISL_TILING_Y0:
+                {
+                    assert(tiling == VK_IMAGE_TILING_OPTIMAL);
+                    intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
+                        mem_address, colors, row_pitch_B, 1280 * 4, false,
+                        ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+                    break;
+                }
+            
+            default:
+                assert(0);
+                break;
+            }
+
+            
+            break;
+            
+            // uint32_t tileWidth = 32;
+            // uint32_t tileHeight = 32;
+
+            // int tileX = gl_LaunchIDEXT_X / tileWidth;
+            // int tileY = gl_LaunchIDEXT_Y / tileHeight;
+            // int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
+
+            // uint32_t offset = (tileID * tileWidth * tileHeight + (gl_LaunchIDEXT_X % tileWidth) + (gl_LaunchIDEXT_Y % tileHeight) * tileWidth) * 4;
+            // if(offset >= 3768320)
+            //     printf("this is where things go wrong\n");
+            // assert (offset >= 0);
+
+            // // offset = gl_LaunchIDEXT_Y * image->extent.width;
+            // // offset += gl_LaunchIDEXT_X;
+            // // offset *= 4;
+
+            // uint8_t* p = ((uint8_t*)mem_address) + offset;
+            // p[0] = b;
+            // p[1] = g;
+            // p[2] = r;
+            // p[3] = a;
+            // break;
+        }
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        {
+            uint8_t r = hitValue_X * 255;
+            uint8_t g = hitValue_Y * 255;
+            uint8_t b = hitValue_Z * 255;
+            uint8_t a = hitValue_W * 255;
+
+            if(hitValue_X >= 1)
+                r = 255;
+            if(hitValue_Y >= 1)
+                g = 255;
+            if(hitValue_Z >= 1)
+                b = 255;
+            if(hitValue_W >= 1)
+                a = 255;
+            
+            uint8_t colors[] = {r, g, b, a};
+
+            switch (isl_tiling_mode)
+            {
+                case ISL_TILING_Y0:
+                {
+                    assert(tiling == VK_IMAGE_TILING_OPTIMAL);
+                    intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
+                        mem_address, colors, row_pitch_B, 1280 * 4, false,
+                        ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+                    break;
+                }
+
+                case ISL_TILING_LINEAR:
+                {
+                    uint32_t offset = (gl_LaunchIDEXT_Y * width + gl_LaunchIDEXT_X) * 4;
+                    uint8_t* p = ((uint8_t*)mem_address) + offset;
+                    p[0] = b;
+                    p[1] = g;
+                    p[2] = r;
+                    p[3] = a;
+                    break;
+                }
+            
+                default:
+                    assert(0);
+                    break;
+            }
+            break;
+        }
+
+        
+        default:
+            assert(0);
+            break;
+    }
+
+    // uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+    // uint32_t offset = 0;
+    // offset += gl_LaunchIDEXT_Y * image_width;
+    // offset += gl_LaunchIDEXT_X;
+
+    // float data[4];
+    // data[0] = hitValue_X;
+    // data[1] = hitValue_Y;
+    // data[2] = hitValue_Z;
+    // data[3] = hitValue_W;
+    // imageFile.write((char*) data, 3 * sizeof(float));
+    // imageFile.write((char*) (&offset), sizeof(uint32_t));
+    // imageFile.flush();
+
+    // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
+    // //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
+    // //     std::abs(hitValue_Z - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.z) > 0.0001)
+    // //     {
+    // //         printf("wrong value. (%d, %d): (%f, %f, %f)\n"
+    // //                 , gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
+    // //     }
     
-    uint8_t r = hitValue_X * 255;
-    uint8_t g = hitValue_Y * 255;
-    uint8_t b = hitValue_Z * 255;
-    uint8_t a = hitValue_W * 255;
-    if(hitValue_X >= 1)
-        r = 255;
-    if(hitValue_Y >= 1)
-        g = 255;
-    if(hitValue_Z >= 1)
-        b = 255;
-    if(hitValue_W >= 1)
-        a = 255;
+    // // if (gl_LaunchIDEXT_X == 1070 && gl_LaunchIDEXT_Y == 220)
+    // //     printf("this one has wrong value\n");
 
-    uint8_t* p = ((uint8_t*)image) + offset * 4;
-    p[0] = b;
-    p[1] = g;
-    p[2] = r;
-    p[3] = a;
+    // // if(hitValue_X > 1 || hitValue_Y > 1 || hitValue_Z > 1)
+    // // {
+    // //     printf("this one has wrong value.\n");
+    // // }
+    
+    // uint8_t r = hitValue_X * 255;
+    // uint8_t g = hitValue_Y * 255;
+    // uint8_t b = hitValue_Z * 255;
+    // uint8_t a = hitValue_W * 255;
+    // if(hitValue_X >= 1)
+    //     r = 255;
+    // if(hitValue_Y >= 1)
+    //     g = 255;
+    // if(hitValue_Z >= 1)
+    //     b = 255;
+    // if(hitValue_W >= 1)
+    //     a = 255;
+
+    // uint8_t* p = ((uint8_t*)mem_address) + offset * 4;
+    // p[0] = b;
+    // p[1] = g;
+    // p[2] = r;
+    // p[3] = a;
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
@@ -1607,107 +2094,173 @@ void VulkanRayTracing::image_store(void* image, uint32_t gl_LaunchIDEXT_X, uint3
 // }
 
 
-void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t desired_range)
+void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files)
 {
-   FILE *fp;
-   char *mesa_root = getenv("MESA_ROOT");
-   char *filePath = "gpgpusimShaders/";
-   char *extension = ".vkdescrptorsetdata";
+    FILE *fp;
+    char *mesa_root = getenv("MESA_ROOT");
+    char *filePath = "gpgpusimShaders/";
+    char *extension = ".vkdescrptorsetdata";
 
-   int VkDescriptorTypeNum;
+    int VkDescriptorTypeNum;
 
-   switch (type)
-   {
-      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-         VkDescriptorTypeNum = 1000150000;
-         break;
-      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
-         VkDescriptorTypeNum = 1000165000;
-         break;
-      default:
-         abort(); // should not be here!
-   }
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            VkDescriptorTypeNum = 1000150000;
+            break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            VkDescriptorTypeNum = 1000165000;
+            break;
+        default:
+            abort(); // should not be here!
+    }
 
-   char fullPath[200];
-   snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, desc_size, VkDescriptorTypeNum, desired_range, extension);
-   // File name format: setID_descID_SizeInBytes_VkDescriptorType_desired_range.vkdescrptorsetdata
+    char fullPath[200];
+    int result;
 
-   fp = fopen(fullPath, "wb+");
-   fwrite(address-(uint64_t)desired_range, 1, desc_size + desired_range*2, fp);
-   fclose(fp);
+    int64_t max_backwards; // negative number
+    int64_t min_backwards; // negative number
+    int64_t min_forwards;
+    int64_t max_forwards;
+    int64_t back_buffer_amount = 1024*20; //20kB buffer just in case
+    int64_t front_buffer_amount = 1024*20; //20kB buffer just in case
+    findOffsetBounds(max_backwards, min_backwards, min_forwards, max_forwards);
+    
+    if (split_files) // Used when the AS is too far apart between top tree and BVHAddress and cant just dump the whole thing
+    {
+        // Main Top Level
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asmain", mesa_root, filePath, setID, descID);
+        fp = fopen(fullPath, "wb+");
+        result = fwrite(address, 1, desc_size, fp);
+        assert(result == desc_size);
+        fclose(fp);
+
+        // Bot level whose address is smaller than top level
+        uint32_t second_forward_range = 1024*1024*5;
+        uint32_t second_backwards_range = 1024*1024*5;
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asback", mesa_root, filePath, setID, descID);
+        fp = fopen(fullPath, "wb+");
+        result = fwrite(address + max_backwards, 1, min_backwards - max_backwards + back_buffer_amount, fp);
+        assert(result == min_backwards - max_backwards + back_buffer_amount);
+        fclose(fp);
+
+        // Bot level whose address is larger than top level
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asfront", mesa_root, filePath, setID, descID);
+        fp = fopen(fullPath, "wb+");
+        result = fwrite(address + min_forwards, 1, max_forwards - min_forwards + front_buffer_amount, fp);
+        assert(result == max_forwards - min_forwards + front_buffer_amount);
+        fclose(fp);
+
+        // AS metadata
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d.asmetadata", mesa_root, filePath, setID, descID);
+        fp = fopen(fullPath, "w+");
+        fprintf(fp, "%d,%d,%ld,%ld,%ld,%ld,%ld,%ld", desc_size,
+                                            VkDescriptorTypeNum,
+                                            max_backwards,
+                                            min_backwards,
+                                            min_forwards,
+                                            max_forwards,
+                                            back_buffer_amount,
+                                            front_buffer_amount);
+        fclose(fp);
+
+        
+        // uint64_t total_size = (desc_size + backwards_range + forward_range);
+        // uint64_t chunk_size = 1024*1024*20; // 20MB chunks
+        // int totalFiles =  (total_size + chunk_size) / chunk_size; // rounds up
+
+        // for (int i = 0; i < totalFiles; i++)
+        // {
+        //     // if split_files is 1, then look at the next number to see what the file part number is
+        //     snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d_%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, desc_size, VkDescriptorTypeNum, backwards_range, forward_range, split_files, i, extension);
+        //     fp = fopen(fullPath, "wb+");
+        //     int result = fwrite(address-(uint64_t)backwards_range + chunk_size * i, 1, chunk_size, fp);
+        //     printf("File part %d, %d bytes written, starting address 0x%.12" PRIXPTR "\n", i, result, (uintptr_t)(address-(uint64_t)backwards_range + chunk_size * i));
+        //     fclose(fp);
+        // }
+    }
+    else 
+    {
+        snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, desc_size, VkDescriptorTypeNum, backwards_range, forward_range, extension);
+        // File name format: setID_descID_SizeInBytes_VkDescriptorType_desired_range.vkdescrptorsetdata
+
+        fp = fopen(fullPath, "wb+");
+        int result = fwrite(address-(uint64_t)backwards_range, 1, desc_size + backwards_range + forward_range, fp);
+        fclose(fp);
+    }
 }
 
 
 void VulkanRayTracing::dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
 {
-   FILE *fp;
-   char *mesa_root = getenv("MESA_ROOT");
-   char *filePath = "gpgpusimShaders/";
-   char *extension = ".vkdescrptorsetdata";
+    FILE *fp;
+    char *mesa_root = getenv("MESA_ROOT");
+    char *filePath = "gpgpusimShaders/";
+    char *extension = ".vkdescrptorsetdata";
 
-   int VkDescriptorTypeNum;
+    int VkDescriptorTypeNum;
 
-   switch (type)
-   {
-      case VK_DESCRIPTOR_TYPE_SAMPLER:
-         VkDescriptorTypeNum = 0;
-         break;
-      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-         VkDescriptorTypeNum = 1;
-         break;
-      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-         VkDescriptorTypeNum = 2;
-         break;
-      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-         VkDescriptorTypeNum = 3;
-         break;
-      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-         VkDescriptorTypeNum = 4;
-         break;
-      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-         VkDescriptorTypeNum = 5;
-         break;
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-         VkDescriptorTypeNum = 6;
-         break;
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-         VkDescriptorTypeNum = 7;
-         break;
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-         VkDescriptorTypeNum = 8;
-         break;
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-         VkDescriptorTypeNum = 9;
-         break;
-      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-         VkDescriptorTypeNum = 10;
-         break;
-      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-         VkDescriptorTypeNum = 1000138000;
-         break;
-      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-         VkDescriptorTypeNum = 1000150000;
-         break;
-      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
-         VkDescriptorTypeNum = 1000165000;
-         break;
-      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
-         VkDescriptorTypeNum = 1000351000;
-         break;
-      case VK_DESCRIPTOR_TYPE_MAX_ENUM:
-         VkDescriptorTypeNum = 0x7FFFFFF;
-         break;
-      default:
-         abort(); // should not be here!
-   }
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_SAMPLER:
+            VkDescriptorTypeNum = 0;
+            break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            VkDescriptorTypeNum = 1;
+            break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            VkDescriptorTypeNum = 2;
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            VkDescriptorTypeNum = 3;
+            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            VkDescriptorTypeNum = 4;
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            VkDescriptorTypeNum = 5;
+            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            VkDescriptorTypeNum = 6;
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            VkDescriptorTypeNum = 7;
+            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            VkDescriptorTypeNum = 8;
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            VkDescriptorTypeNum = 9;
+            break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            VkDescriptorTypeNum = 10;
+            break;
+        case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+            VkDescriptorTypeNum = 1000138000;
+            break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            VkDescriptorTypeNum = 1000150000;
+            break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            VkDescriptorTypeNum = 1000165000;
+            break;
+        case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
+            VkDescriptorTypeNum = 1000351000;
+            break;
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:
+            VkDescriptorTypeNum = 0x7FFFFFF;
+            break;
+        default:
+            abort(); // should not be here!
+    }
 
-   char fullPath[200];
-   snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, size, VkDescriptorTypeNum, extension);
-   // File name format: setID_descID_SizeInBytes_VkDescriptorType.vkdescrptorsetdata
+    char fullPath[200];
+    snprintf(fullPath, sizeof(fullPath), "%s%s%d_%d_%d_%d%s", mesa_root, filePath, setID, descID, size, VkDescriptorTypeNum, extension);
+    // File name format: setID_descID_SizeInBytes_VkDescriptorType.vkdescrptorsetdata
 
-   fp = fopen(fullPath, "wb+");
-   fwrite(address, 1, size, fp);
-   fclose(fp);
+    fp = fopen(fullPath, "wb+");
+    fwrite(address, 1, size, fp);
+    fclose(fp);
 }
 
 
@@ -1715,79 +2268,157 @@ void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
 {
    for(int i = 0; i < set->descriptor_count; i++)
    {
-      const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
-      struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
-      void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+       if(i == 3 || i > 9)
+       {
+            // for some reason raytracing_extended skipped binding = 3
+            // and somehow they have 34 descriptor sets but only 10 are used
+            // so we just skip those
+            continue;
+       }
 
-      assert(desc->type == bind_layout->type);
+       struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
+
+        const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
+        struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+        void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+
+        assert(desc->type == bind_layout->type);
+
+        switch (desc->type)
+        {
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            {
+                //return (void *)(desc);
+                dumpStorageImage(desc, 0, i, desc->type);
+                break;
+            }
+            case VK_DESCRIPTOR_TYPE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            {
+                //return desc;
+                dumpTextures(desc, 0, i, desc->type);
+                break;
+            }
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+                assert(0);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            {
+                if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                    desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+                {
+                    // MRS_TODO: account for desc->offset?
+                    //return anv_address_map(desc->buffer->address);
+                    dump_descriptor_set(0, i, anv_address_map(desc->buffer->address), set->descriptors[i].buffer->size, set->descriptors[i].type);
+                    break;
+                }
+                else
+                {
+                    struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
+                    //return anv_address_map(bview->address);
+                    dump_descriptor_set(0, i, anv_address_map(bview->address), bview->range, set->descriptors[i].type);
+                    break;
+                }
+            }
+
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+                assert(0);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            {
+                struct anv_address_range_descriptor *desc_data = desc_map;
+                //return (void *)(desc_data->address);
+                dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10, 1024*1024*10, true);
+                break;
+            }
+
+            default:
+                assert(0);
+                break;
+        }
+    //   const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
+    //   struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+    //   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+
+    //   assert(desc->type == bind_layout->type);
       
-      switch (desc->type)
-      {
-         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-         {
-            assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
-            assert(desc->sampler == NULL);
+    //   switch (desc->type)
+    //   {
+    //      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+    //      {
+    //         assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
+    //         assert(desc->sampler == NULL);
 
-            struct anv_image_view *image_view = desc->image_view;
-            assert(image_view != NULL);
-            struct anv_image * image = image_view->image;
-            void* address = anv_address_map(image->planes[0].address);
-            dump_descriptor_set(0, i, address, 0, set->descriptors[i].type);
-            break;
-            //return address;
-         }
-         case VK_DESCRIPTOR_TYPE_SAMPLER:
-         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-         {
-            //return desc;
-         }
+    //         struct anv_image_view *image_view = desc->image_view;
+    //         assert(image_view != NULL);
+    //         struct anv_image * image = image_view->image;
+    //         void* address = anv_address_map(image->planes[0].address);
+    //         dump_descriptor_set(0, i, address, 0, set->descriptors[i].type);
+    //         break;
+    //         //return address;
+    //      }
+    //      case VK_DESCRIPTOR_TYPE_SAMPLER:
+    //      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+    //      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+    //      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+    //      {
+    //         //return desc;
+    //      }
 
-         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-            assert(0);
-            break;
+    //      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+    //      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+    //         assert(0);
+    //         break;
 
-         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-         {
-            if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-                desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
-            {
-                // MRS_TODO: account for desc->offset?
-                //return anv_address_map(desc->buffer->address);
-                dump_descriptor_set(0, i, anv_address_map(desc->buffer->address), set->descriptors[i].buffer->size, set->descriptors[i].type);
-                break;
-            }
-            else
-            {
-                struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
-                //return anv_address_map(bview->address);
-                dump_descriptor_set(0, i, anv_address_map(bview->address), bview->range, set->descriptors[i].type);
-                break;
-            }
-         }
+    //      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+    //      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+    //      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+    //      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+    //      {
+    //         if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+    //             desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+    //         {
+    //             // MRS_TODO: account for desc->offset?
+    //             //return anv_address_map(desc->buffer->address);
+    //             dump_descriptor_set(0, i, anv_address_map(desc->buffer->address), set->descriptors[i].buffer->size, set->descriptors[i].type);
+    //             break;
+    //         }
+    //         else
+    //         {
+    //             struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
+    //             //return anv_address_map(bview->address);
+    //             dump_descriptor_set(0, i, anv_address_map(bview->address), bview->range, set->descriptors[i].type);
+    //             break;
+    //         }
+    //      }
 
-         case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-            assert(0);
-            break;
+    //      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+    //         assert(0);
+    //         break;
 
-         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
-         {
-            struct anv_address_range_descriptor *desc_data = desc_map;
-            //return (void *)(desc_data->address);
-            dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10);
-            break;
-         }
+    //      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+    //      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+    //      {
+    //         struct anv_address_range_descriptor *desc_data = desc_map;
+    //         //return (void *)(desc_data->address);
+    //         dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10);
+    //         break;
+    //      }
 
-         default:
-            assert(0);
-            break;
-      }
+    //      default:
+    //         assert(0);
+    //         break;
+    //   }
    }
 }
 
@@ -1837,4 +2468,101 @@ void VulkanRayTracing::dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt,
         fwrite(callable_sbt, 1, sbt_size, fp); // max is 32 bytes according to struct anv_rt_shader_group.handle
         fclose(fp);
     }
+}
+
+void VulkanRayTracing::setStorageImageFromLauncher(void *address, 
+                                                uint32_t setID, 
+                                                uint32_t descID, 
+                                                uint32_t width,
+                                                uint32_t height,
+                                                VkFormat format,
+                                                uint32_t VkDescriptorTypeNum,
+                                                uint32_t n_planes,
+                                                uint32_t n_samples,
+                                                VkImageTiling tiling,
+                                                uint32_t isl_tiling_mode, 
+                                                uint32_t row_pitch_B)
+{
+    storage_image_metadata *storage_image = new storage_image_metadata;
+    storage_image->address = address;
+    storage_image->setID = setID;
+    storage_image->descID = descID;
+    storage_image->width = width;
+    storage_image->height = height;
+    storage_image->format = format;
+    storage_image->VkDescriptorTypeNum = VkDescriptorTypeNum;
+    storage_image->n_planes = n_planes;
+    storage_image->n_samples = n_samples;
+    storage_image->tiling = tiling;
+    storage_image->isl_tiling_mode = isl_tiling_mode; 
+    storage_image->row_pitch_B = row_pitch_B;
+
+    launcher_descriptorSets[setID][descID] = (void*) storage_image;
+}
+
+void VulkanRayTracing::setTextureFromLauncher(void *address, 
+                                            uint32_t setID, 
+                                            uint32_t descID, 
+                                            uint64_t size,
+                                            uint32_t width,
+                                            uint32_t height,
+                                            VkFormat format,
+                                            uint32_t VkDescriptorTypeNum,
+                                            uint32_t n_planes,
+                                            uint32_t n_samples,
+                                            VkImageTiling tiling,
+                                            uint32_t isl_tiling_mode)
+{
+    texture_metadata *texture = new texture_metadata;
+    texture->address = address;
+    setID = texture->setID;
+    texture->descID = descID;
+    texture->size = size;
+    texture->width = width;
+    texture->height = height;
+    texture->format = format;
+    texture->VkDescriptorTypeNum = VkDescriptorTypeNum;
+    texture->n_planes = n_planes;
+    texture->n_samples = n_samples;
+    texture->tiling = tiling;
+    texture->isl_tiling_mode = isl_tiling_mode;
+
+    launcher_descriptorSets[setID][descID] = (void*) texture;
+}
+
+void VulkanRayTracing::pass_child_addr(void *address)
+{
+    child_addrs_from_driver.push_back(address);
+    
+    //old
+    child_addr_from_driver = address;
+}
+
+void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards)
+{
+    // uint64_t current_min_backwards = 0;
+    // uint64_t current_max_backwards = 0;
+    // uint64_t current_min_forwards = 0;
+    // uint64_t current_max_forwards = 0;
+    int64_t offset;
+
+    std::vector<int64_t> positive_offsets;
+    std::vector<int64_t> negative_offsets;
+
+    for (auto addr : child_addrs_from_driver)
+    {
+        offset = (uint64_t)addr - (uint64_t)topLevelAS;
+        if (offset >= 0)
+            positive_offsets.push_back(offset);
+        else
+            negative_offsets.push_back(offset);
+    }
+
+    sort(positive_offsets.begin(), positive_offsets.end());
+    sort(negative_offsets.begin(), negative_offsets.end());
+
+    max_backwards = negative_offsets.front();
+    min_backwards = negative_offsets.back();
+    min_forwards = positive_offsets.front();
+    max_forwards = positive_offsets.back();
 }
