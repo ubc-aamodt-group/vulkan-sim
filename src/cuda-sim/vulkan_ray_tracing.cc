@@ -2432,7 +2432,7 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
 {
     texture_metadata *texture = new texture_metadata;
     texture->address = address;
-    setID = texture->setID;
+    texture->setID = setID;
     texture->descID = descID;
     texture->size = size;
     texture->width = width;
