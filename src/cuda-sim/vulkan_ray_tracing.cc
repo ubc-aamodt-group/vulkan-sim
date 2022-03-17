@@ -803,6 +803,12 @@ void copyHardCodedShaders()
     // src.close();
     // dst.close();
 
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_INTERSECTION_4.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_INTERSECTION_4.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
+
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
     //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_1.ptx",   std::ios::binary);
@@ -977,8 +983,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     if(imageFile.is_open())
         return;
-    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
-    imageFile.open("image.binary", std::ios::out);
+    imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // imageFile.open("image-sqrt3.txt", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1506,31 +1512,31 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         // }
         case VK_FORMAT_R8G8B8A8_SRGB:
         {
-            uint32_t tileWidth = 32;
-            uint32_t tileHeight = 32;
+            // uint32_t tileWidth = 32;
+            // uint32_t tileHeight = 32;
 
-            int tileX = x_int / tileWidth;
-            int tileY = y_int / tileHeight;
-            int tileID = tileX + tileY * image->extent.width / tileWidth;
+            // int tileX = x_int / tileWidth;
+            // int tileY = y_int / tileHeight;
+            // int tileID = tileX + tileY * image->extent.width / tileWidth;
 
-            uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
+            // uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
 
-            // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
-            c0 = SRGB_to_linearRGB(address[offset] / 255.0);
-            c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
-            c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
-            c3 = address[offset + 3] / 255.0;
+            // // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
+            // c0 = SRGB_to_linearRGB(address[offset] / 255.0);
+            // c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
+            // c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
+            // c3 = address[offset + 3] / 255.0;
 
-            // uint8_t colors[4];
+            uint8_t colors[4];
 
-            // intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
-            // colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
-            // ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+            intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
+            colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
+            ISL_TILING_Y0, ISL_MEMCPY);
 
-            // c0 = SRGB_to_linearRGB(colors[0] / 255.0);
-            // c1 = SRGB_to_linearRGB(colors[1] / 255.0);
-            // c2 = SRGB_to_linearRGB(colors[2] / 255.0);
-            // c3 = colors[3] / 255.0;
+            c0 = SRGB_to_linearRGB(colors[0] / 255.0);
+            c1 = SRGB_to_linearRGB(colors[1] / 255.0);
+            c2 = SRGB_to_linearRGB(colors[2] / 255.0);
+            c3 = colors[3] / 255.0;
 
             break;
         }
@@ -1614,7 +1620,8 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
             if(hitValue_W >= 1)
                 a = 255;
             
-            uint8_t colors[] = {b, g, r, a};
+            // uint8_t colors[] = {b, g, r, a};
+            uint8_t colors[] = {r, g, b, a};
 
             switch (image->planes[0].surface.isl.tiling)
             {
@@ -1691,9 +1698,9 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
                 {
                     uint32_t offset = (gl_LaunchIDEXT_Y * image->extent.width + gl_LaunchIDEXT_X) * 4;
                     uint8_t* p = ((uint8_t*)mem_address) + offset;
-                    p[0] = b;
+                    p[0] = r;
                     p[1] = g;
-                    p[2] = r;
+                    p[2] = b;
                     p[3] = a;
                     break;
                 }
@@ -1711,10 +1718,10 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
             break;
     }
 
-    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
-    uint32_t offset = 0;
-    offset += gl_LaunchIDEXT_Y * image_width;
-    offset += gl_LaunchIDEXT_X;
+    // uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+    // uint32_t offset = 0;
+    // offset += gl_LaunchIDEXT_Y * image_width;
+    // offset += gl_LaunchIDEXT_X;
 
     // float data[4];
     // data[0] = hitValue_X;
@@ -1725,8 +1732,8 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     // imageFile.write((char*) (&offset), sizeof(uint32_t));
     // imageFile.flush();
 
-    imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
-    imageFile << hitValue_X << ", " << hitValue_Y << ", " << hitValue_Z << ", " << hitValue_W << ")\n";
+    // imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
+    // imageFile << hitValue_X / sqrt(3) << ", " << hitValue_Y / sqrt(3) << ", " << hitValue_Z / sqrt(3) << ", " << hitValue_W << ")\n";
 
 
     // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 

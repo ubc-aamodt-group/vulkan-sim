@@ -6737,8 +6737,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 600 + thread->get_tid().x;
-  // v[1] = 370;
+  // v[0] = 350 + thread->get_tid().x;
+  // v[1] = 650;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6950,6 +6950,11 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.f32 = c3;
   thread->set_operand_value(dst5, data, F32_TYPE, thread, pI);
 }
+
+void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(0);
+}
+
 
 void deref_var_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
