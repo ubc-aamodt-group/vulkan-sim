@@ -38,7 +38,7 @@ namespace fs = boost::filesystem;
 
 //#include "intel_image_util.h"
  #include "astc_decomp.h"
- 
+
 #define HAVE_PTHREAD
 #define UTIL_ARCH_LITTLE_ENDIAN 1
 #define UTIL_ARCH_BIG_ENDIAN 0
@@ -445,8 +445,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     }
                     else
                     {
-                        if(next_node_addr == NULL)
+                        if(next_node_addr == NULL) {
                             next_node_addr = child_addr; // TODO: sort by thit
+                            assert(tree_level_map.find(node_addr) != tree_level_map.end());
+                            tree_level_map[child_addr] = tree_level_map[node_addr] + 1;
+                        }
                         else {
                             stack.push_back(StackEntry(child_addr, true, false));
                             assert(tree_level_map.find(node_addr) != tree_level_map.end());
@@ -2515,7 +2518,7 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
 {
     texture_metadata *texture = new texture_metadata;
     texture->address = address;
-    setID = texture->setID;
+    texture->setID = setID;
     texture->descID = descID;
     texture->size = size;
     texture->width = width;
