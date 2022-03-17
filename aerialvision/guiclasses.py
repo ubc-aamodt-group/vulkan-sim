@@ -1055,6 +1055,13 @@ class graphManager:
                 Legendname.append('W' + `c`)
             BarSequence = range(0,numRows)
 
+        if yAxis == 'RTWarpDist':
+            Legendname = []
+            Legendname.append('Empty')
+            Legendname.append('Shader')
+            Legendname.append('TraceRay')
+            BarSequence = range(0,numRows)
+
         dynamic_warp_resolution = 32
         if yAxis == 'WarpIssueDynamicIdBreakdown':
             Legendname = []

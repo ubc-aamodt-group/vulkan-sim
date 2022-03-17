@@ -1932,6 +1932,8 @@ void simt_splits_table::print (FILE *fout) {
       fprintf(fout," rp: 0x%03x    %s", splits_table_entry.m_recvg_pc, (splits_table_entry.m_valid==true?" V ":" N "));
     }
 
+    fprintf(fout, " %d ", splits_table_entry.m_type);
+
     GPGPU_Context()->func_sim->ptx_print_insn( splits_table_entry.m_pc, fout );
 
     if (splits_table_entry.m_recvg_entry == (unsigned)-1) {
@@ -2303,6 +2305,7 @@ void simt_reconvergence_table::print (FILE *fout) {
     } else {
       fprintf(fout," rp: 0x%03x     %s", recvg_table_entry.m_recvg_pc, (recvg_table_entry.m_valid==true?" V ":" N "));
     }
+    fprintf(fout, " %d ", recvg_table_entry.m_type);
     GPGPU_Context()->func_sim->ptx_print_insn( recvg_table_entry.m_pc, fout );
     if (recvg_table_entry.m_recvg_entry == (unsigned)-1) {
       fprintf(fout," rp: ----       ");
@@ -2528,7 +2531,7 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
         assert(num_divergent_paths == 1);
 
         // Move top entry to the reconvergence table
-        new_recvg_entry = m_simt_recvg_table->insert_new_entry(top_pc, top_recvg_pc, top_recvg_entry, top_active_mask_keep, SPLITS_TABLE_ENTRY_TYPE_NORMAL);
+        new_recvg_entry = m_simt_recvg_table->insert_new_entry(top_pc, top_recvg_pc, top_recvg_entry, top_active_mask_keep, top_type);
         assert(new_recvg_entry != (unsigned)-1);
         
         m_simt_splits_table->invalidate();

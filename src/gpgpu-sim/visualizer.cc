@@ -193,11 +193,9 @@ class my_time_vector {
     while (iter != ld_time_map.end()) {
       last_update = 0;
       first = -1;
-      if (!iter->second[IN_SHADER_FETCHED]) {
-        // this request is not done yet skip it!
-        ++iter;
-        continue;
-      }
+      assert(iter->second[IN_SHADER_FETCHED]);
+
+      // Find the first status
       while (!last_update) {
         first++;
         assert(first < iter->second.size());
@@ -207,8 +205,9 @@ class my_time_vector {
       for (i = first; i < ld_vector_size; i++) {
         diff = iter->second[i] - last_update;
         if (diff > 0) {
-          ld_time_dist[i] += diff;
+          ld_time_dist[first] += diff;
           last_update = iter->second[i];
+          first = i;
         }
       }
       iter_temp = iter;

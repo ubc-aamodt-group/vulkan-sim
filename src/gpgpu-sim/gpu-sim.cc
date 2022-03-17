@@ -1489,6 +1489,13 @@ void gpgpu_sim::gpu_print_stat() {
   fprintf(statfout, "\n");
 
   fprintf(statfout, "rt_num_hits = %d\n", gpgpu_ctx->func_sim->g_rt_num_hits);
+  fprintf(statfout, "rt_n_anyhit_rays = %d\n", gpgpu_ctx->func_sim->g_n_anyhit_rays);
+  fprintf(statfout, "rt_n_closesthit_rays = %d\n", gpgpu_ctx->func_sim->g_n_closesthit_rays);
+  fprintf(statfout, "rt_n_total_rays = %d\n", gpgpu_ctx->func_sim->g_n_closesthit_rays + gpgpu_ctx->func_sim->g_n_anyhit_rays);
+  fprintf(statfout, "rt_max_tree_depth = %d\n", gpgpu_ctx->func_sim->g_max_tree_depth);
+  fprintf(statfout, "rt_max_nodes_per_ray = %d\n", gpgpu_ctx->func_sim->g_max_nodes_per_ray);
+  fprintf(statfout, "rt_tot_nodes_per_ray = %d\n", gpgpu_ctx->func_sim->g_tot_nodes_per_ray);
+  fprintf(statfout, "rt_avg_nodes_per_ray = %f\n", (float)gpgpu_ctx->func_sim->g_tot_nodes_per_ray/(gpgpu_ctx->func_sim->g_n_closesthit_rays + gpgpu_ctx->func_sim->g_n_anyhit_rays));
 
 #ifdef GPGPUSIM_POWER_MODEL
   if (m_config.g_power_simulation_enabled) {

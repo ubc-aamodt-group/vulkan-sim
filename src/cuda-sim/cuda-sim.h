@@ -157,6 +157,11 @@ class cuda_sim {
   bool g_rt_world_set = false;
   float3 g_rt_world_min;
   float3 g_rt_world_max;
+  unsigned g_n_anyhit_rays;
+  unsigned g_n_closesthit_rays;
+  unsigned g_max_nodes_per_ray;
+  unsigned g_tot_nodes_per_ray;
+  unsigned g_max_tree_depth;
   
   char *cdp_latency_str;
   int g_ptx_kernel_count;  // used for classification stat collection purposes

@@ -177,6 +177,7 @@ def parseMe(filename):
         'averagemflatency' :vc.variable('', 1, 0, 'custom'), 
         'LDmemlatdist':vc.variable('', 3, 0, 'stackbar'), 
         'STmemlatdist':vc.variable('', 3, 0, 'stackbar'), 
+        'RTWarpDist':vc.variable('', 3, 0, 'stackbar'), 
         'WarpDivergenceBreakdown':vc.variable('', 3, 0, 'stackbar'), 
         'WarpIssueSlotBreakdown':vc.variable('', 3, 0, 'stackbar'), 
         'WarpIssueDynamicIdBreakdown':vc.variable('', 3, 0, 'stackbar'), 

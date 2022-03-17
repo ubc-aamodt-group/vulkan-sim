@@ -1891,6 +1891,9 @@ struct shader_core_stats_pod {
   unsigned *rt_mem_store_q_cycles;
   unsigned *rt_warp_dist;
   unsigned *empty_warp_dist;
+  unsigned n_rt_warps;
+  unsigned n_shd_warps;
+  unsigned n_empty_warps;
 
   unsigned long long rt_latency_dist[warp_statuses][ray_statuses] = {};
   unsigned rt_latency_counter = 0;

@@ -908,6 +908,12 @@ void shader_core_stats::visualizer_print(gzFile visualizer_file) {
   }
   gzprintf(visualizer_file, "\n");
 
+  gzprintf(visualizer_file, "RTWarpDist:");
+  gzprintf(visualizer_file, " %d", n_empty_warps);
+  gzprintf(visualizer_file, " %d", n_shd_warps);
+  gzprintf(visualizer_file, " %d", n_rt_warps);
+  gzprintf(visualizer_file, "\n");
+
   gzprintf(visualizer_file, "ctas_completed: %d\n", ctas_completed);
   ctas_completed = 0;
   // warp issue breakdown
@@ -2040,6 +2046,10 @@ void shader_core_ctx::execute() {
   }
   assert(rt_active_warps + empty_warps <= m_config->max_warps_per_shader);
   unsigned other_warps = m_config->max_warps_per_shader - (rt_active_warps + empty_warps);
+  
+  m_stats->n_rt_warps = rt_active_warps;
+  m_stats->n_shd_warps = other_warps;
+  m_stats->n_empty_warps = empty_warps;
 
   unsigned rt_ratio_bucket = rt_active_warps * 10 / (other_warps + rt_active_warps);
   unsigned active_ratio_bucket = (rt_active_warps + other_warps) * 10 / m_config->max_warps_per_shader;

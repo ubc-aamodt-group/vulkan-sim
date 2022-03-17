@@ -30,6 +30,7 @@
 #define MC_PARTITION_INCLUDED
 
 #include "../abstract_hardware_model.h"
+#include "../../libcuda/gpgpu_context.h"
 #include "dram.h"
 
 #include <list>
@@ -247,7 +248,8 @@ class L2interface : public mem_fetch_interface {
     return m_unit->m_L2_dram_queue->full();
   }
   virtual void push(mem_fetch *mf) {
-    mf->set_status(IN_PARTITION_L2_TO_DRAM_QUEUE, 0 /*FIXME*/);
+    unsigned long long gpgpusim_total_cycles = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle;
+    mf->set_status(IN_PARTITION_L2_TO_DRAM_QUEUE, gpgpusim_total_cycles /*FIXME*/);
     m_unit->m_L2_dram_queue->push(mf);
   }
 
