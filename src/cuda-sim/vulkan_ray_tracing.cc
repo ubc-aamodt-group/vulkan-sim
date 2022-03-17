@@ -981,9 +981,9 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // if(CmdTraceRaysKHRID != 6)
     //     return;
 
-    if(imageFile.is_open())
-        return;
-    imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // if(imageFile.is_open())
+    //     return;
+    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
     // imageFile.open("image-sqrt3.txt", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
