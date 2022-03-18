@@ -816,6 +816,12 @@ void copyHardCodedShaders()
     // src.close();
     // dst.close();
 
+    // src.open("/home/mrs/emerald-ray-tracing/hardcodeShader/MESA_SHADER_INTERSECTION_4.ptx", std::ios::binary);
+    // dst.open("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_INTERSECTION_4.ptx", std::ios::binary);
+    // dst << src.rdbuf();
+    // src.close();
+    // dst.close();
+
     // {
     //     std::ifstream  src("/home/mrs/emerald-ray-tracing/MESA_SHADER_MISS_0.ptx", std::ios::binary);
     //     std::ofstream  dst("/home/mrs/emerald-ray-tracing/mesagpgpusimShaders/MESA_SHADER_MISS_1.ptx",   std::ios::binary);
@@ -998,6 +1004,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // if(imageFile.is_open())
     //     return;
     // imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // imageFile.open("image-sqrt3.txt", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1424,6 +1431,15 @@ float SRGB_to_linearRGB(float s)
         return pow(((s + 0.055) / 1.055), 2.4);
 }
 
+float linearRGB_to_SRGB(float s)
+{
+    // assert(0 <= s && s <= 1);
+    if(s < 0.0031308)
+        return s * 12.92;
+    else
+        return 1.055 * pow(s, 1 / 2.4) - 0.055;
+}
+
 inline uint64_t ceil_divide(uint64_t a, uint64_t b)
 {
     return (a + b - 1) / b;
@@ -1439,6 +1455,7 @@ void VulkanRayTracing::dumpTextures(struct anv_descriptor *desc, uint32_t setID,
     assert(image->samples == 1);
     assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
     assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
+    assert(sampler->conversion == NULL);
 
     uint8_t* address = anv_address_map(image->planes[0].address);
     uint32_t image_extent_width = image->extent.width;
@@ -1486,15 +1503,16 @@ void VulkanRayTracing::dumpTextures(struct anv_descriptor *desc, uint32_t setID,
     fp = fopen(fullPath, "w+");
     // File name format: setID_descID.vktexturemetadata
 
-    fprintf(fp, "%d,%d,%d,%d,%d,%d,%d,%d,%d",   size, 
-                                                image_extent_width, 
-                                                image_extent_height, 
-                                                format, 
-                                                VkDescriptorTypeNum, 
-                                                image->n_planes, 
-                                                image->samples, 
-                                                image->tiling, 
-                                                image->planes[0].surface.isl.tiling);
+    fprintf(fp, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", size, 
+                                                 image_extent_width, 
+                                                 image_extent_height, 
+                                                 format, 
+                                                 VkDescriptorTypeNum, 
+                                                 image->n_planes, 
+                                                 image->samples, 
+                                                 image->tiling, 
+                                                 image->planes[0].surface.isl.tiling,
+                                                 image->planes[0].surface.isl.row_pitch_B);
     fclose(fp);
 
 }
@@ -1513,6 +1531,7 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     uint32_t n_samples;
     VkImageTiling tiling;
     isl_tiling isl_tiling_mode;
+    uint32_t row_pitch_B;
 
     if (use_external_launcher)
     {
@@ -1528,6 +1547,7 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         n_samples = texture->n_samples;
         tiling = texture->tiling;
         isl_tiling_mode = texture->isl_tiling_mode;
+        row_pitch_B = texture->row_pitch_B;
         address = (uint8_t*) texture->address + launcher_offset;
     }
     else
@@ -1548,6 +1568,7 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         n_samples = image->samples;
         tiling = image->tiling;
         isl_tiling_mode = image->planes[0].surface.isl.tiling;
+        row_pitch_B = image->planes[0].surface.isl.row_pitch_B;
         address = anv_address_map(image->planes[0].address);
     }
 
@@ -1621,6 +1642,20 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
             c1 = SRGB_to_linearRGB(pixel_color[1] / 255.0);
             c2 = SRGB_to_linearRGB(pixel_color[2] / 255.0);
             c3 = pixel_color[3] / 255.0;
+            // c0 = (pixel_color[0] / 255.0);
+            // c1 = (pixel_color[1] / 255.0);
+            // c2 = (pixel_color[2] / 255.0);
+            // c3 = pixel_color[3] / 255.0;
+
+            // // float norm = get_norm(float3(c0, c1, c2));
+            // float norm = c0 + c1 + c2;
+            // c0 /= norm;
+            // c1 /= norm;
+            // c2 /= norm;
+
+            // c0 = linearRGB_to_SRGB(c0);
+            // c1 = linearRGB_to_SRGB(c1);
+            // c2 = linearRGB_to_SRGB(c2);
             break;
         }
         // case VK_FORMAT_B8G8R8A8_UNORM:
@@ -1634,31 +1669,31 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         // }
         case VK_FORMAT_R8G8B8A8_SRGB:
         {
-            uint32_t tileWidth = 32;
-            uint32_t tileHeight = 32;
+            // uint32_t tileWidth = 32;
+            // uint32_t tileHeight = 32;
 
-            int tileX = x_int / tileWidth;
-            int tileY = y_int / tileHeight;
-            int tileID = tileX + tileY * width / tileWidth;
+            // int tileX = x_int / tileWidth;
+            // int tileY = y_int / tileHeight;
+            // int tileID = tileX + tileY * image->extent.width / tileWidth;
 
-            uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
+            // uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
 
-            // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
-            c0 = SRGB_to_linearRGB(address[offset] / 255.0);
-            c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
-            c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
-            c3 = address[offset + 3] / 255.0;
+            // // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
+            // c0 = SRGB_to_linearRGB(address[offset] / 255.0);
+            // c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
+            // c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
+            // c3 = address[offset + 3] / 255.0;
 
-            // uint8_t colors[4];
+            uint8_t colors[4];
 
-            // intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
-            // colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
-            // ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
+            intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
+            colors, address, width * 4 ,row_pitch_B, false,
+            ISL_TILING_Y0, ISL_MEMCPY);
 
-            // c0 = SRGB_to_linearRGB(colors[0] / 255.0);
-            // c1 = SRGB_to_linearRGB(colors[1] / 255.0);
-            // c2 = SRGB_to_linearRGB(colors[2] / 255.0);
-            // c3 = colors[3] / 255.0;
+            c0 = SRGB_to_linearRGB(colors[0] / 255.0);
+            c1 = SRGB_to_linearRGB(colors[1] / 255.0);
+            c2 = SRGB_to_linearRGB(colors[2] / 255.0);
+            c3 = colors[3] / 255.0;
 
             break;
         }
@@ -1840,7 +1875,8 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
             if(hitValue_W >= 1)
                 a = 255;
             
-            uint8_t colors[] = {b, g, r, a};
+            // uint8_t colors[] = {b, g, r, a};
+            uint8_t colors[] = {r, g, b, a};
 
             switch (isl_tiling_mode)
             {
@@ -1917,9 +1953,9 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
                 {
                     uint32_t offset = (gl_LaunchIDEXT_Y * width + gl_LaunchIDEXT_X) * 4;
                     uint8_t* p = ((uint8_t*)mem_address) + offset;
-                    p[0] = b;
+                    p[0] = r;
                     p[1] = g;
-                    p[2] = r;
+                    p[2] = b;
                     p[3] = a;
                     break;
                 }
@@ -1950,6 +1986,10 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     // imageFile.write((char*) data, 3 * sizeof(float));
     // imageFile.write((char*) (&offset), sizeof(uint32_t));
     // imageFile.flush();
+
+    // imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
+    // imageFile << hitValue_X / sqrt(3) << ", " << hitValue_Y / sqrt(3) << ", " << hitValue_Z / sqrt(3) << ", " << hitValue_W << ")\n";
+
 
     // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
     // //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||
@@ -2428,7 +2468,8 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
                                             uint32_t n_planes,
                                             uint32_t n_samples,
                                             VkImageTiling tiling,
-                                            uint32_t isl_tiling_mode)
+                                            uint32_t isl_tiling_mode,
+                                            uint32_t row_pitch_B)
 {
     texture_metadata *texture = new texture_metadata;
     texture->address = address;
@@ -2443,6 +2484,7 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
     texture->n_samples = n_samples;
     texture->tiling = tiling;
     texture->isl_tiling_mode = isl_tiling_mode;
+    texture->row_pitch_B = row_pitch_B;
 
     launcher_descriptorSets[setID][descID] = (void*) texture;
 }

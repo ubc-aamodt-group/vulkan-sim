@@ -6737,8 +6737,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 600 + thread->get_tid().x;
-  // v[1] = 370;
+  // v[0] = 350 + thread->get_tid().x;
+  // v[1] = 650;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6877,6 +6877,14 @@ void load_ray_t_max_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
 }
 
+void load_ray_t_min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst0 = pI->dst();
+
+  ptx_reg_t data;
+  data.f32 = thread->RT_thread_data->traversal_data.back().closest_hit.world_min_thit;
+  thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
+}
+
 void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   inst_not_implemented(pI);
 }
@@ -6921,7 +6929,7 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   src8_data = thread->get_operand_value(src8, src8, F32_TYPE, thread, 1);
   float lod = src8_data.f32;
 
-  float c0, c1, c2, c3; // MRS_TODO: send c3 through
+  float c0, c1, c2, c3;
 
   char *workload = getenv("VULKAN_SIM_LAUNCHER_WORKLOAD");
   if(workload && !strcmp(workload, "raytracing_extended"))
@@ -6950,6 +6958,11 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.f32 = c3;
   thread->set_operand_value(dst5, data, F32_TYPE, thread, pI);
 }
+
+void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(0);
+}
+
 
 void deref_var_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
@@ -7258,6 +7271,45 @@ void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
               hitValue_X, hitValue_Y, hitValue_Z, hitValue_W, pI, thread);
 }
 
+void image_deref_load_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  ptx_reg_t src0_data, src1_data, src5_data, src6_data, data;
+  
+  const operand_info &src0 = pI->operand_lookup(0);
+  src0_data = thread->get_operand_value(src0, src0, U64_TYPE, thread, 1);
+  void* desc = (void*)(src0_data.u64);
+
+  const operand_info &src5 = pI->operand_lookup(5);
+  src5_data = thread->get_operand_value(src5, src5, U32_TYPE, thread, 1);
+  uint32_t x = src5_data.u32;
+
+  const operand_info &src6 = pI->operand_lookup(6);
+  src6_data = thread->get_operand_value(src6, src6, U32_TYPE, thread, 1);
+  uint32_t y = src6_data.u32;
+
+  //MRS_TODO: There are more operands
+
+  float c0, c1, c2, c3;
+
+  VulkanRayTracing::getTexture(desc, x, y, 0, c0, c1, c2, c3); // MRS_TODO: x and y are uint
+
+  const operand_info &dst1 = pI->operand_lookup(1);
+  const operand_info &dst2 = pI->operand_lookup(2);
+  const operand_info &dst3 = pI->operand_lookup(3);
+  const operand_info &dst4 = pI->operand_lookup(4);
+
+  data.f32 = c0;
+  thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
+
+  data.f32 = c1;
+  thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
+
+  data.f32 = c2;
+  thread->set_operand_value(dst3, data, F32_TYPE, thread, pI);
+
+  data.f32 = c3;
+  thread->set_operand_value(dst4, data, F32_TYPE, thread, pI);
+}
+
 void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   inst_not_implemented(pI);
 }
@@ -7405,4 +7457,35 @@ void set_element_32_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
     assert(0);
   
   thread->set_operand_value(dst, data, BB128_TYPE, thread, pI);
+}
+
+void shader_clock_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  unsigned long long clock = thread->get_gpu()->gpu_tot_sim_cycle;
+  
+  ptx_reg_t data;
+
+  data.u32 = clock & ((1ULL << 32) - 1);
+  const operand_info &dst = pI->dst();
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+
+  data.u32 = clock >> 32;
+  const operand_info &dst2 = pI->operand_lookup(1);
+  thread->set_operand_value(dst2, data, U32_TYPE, thread, pI);
+}
+
+void copysignf_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(pI->get_num_operands() == 2);
+
+  ptx_reg_t src_data, dst_data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+
+  dst_data = thread->get_operand_value(dst, dst, F32_TYPE, thread, 1);
+  src_data = thread->get_operand_value(src1, dst, F32_TYPE, thread, 1);
+
+  if((src_data.f32 > 0 && dst_data.f32 < 0) || (src_data.f32 < 0 && dst_data.f32 > 0))
+    dst_data.f32 *= 1;
+  
+  thread->set_operand_value(dst, dst_data, F32_TYPE, thread, pI);
 }
