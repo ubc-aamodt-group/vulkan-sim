@@ -2895,7 +2895,7 @@ void rt_unit::cycle() {
         }
       }
       
-      if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->process_response(mf, m_current_warps);
+      if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->process_response(mf, m_current_warps, pipe_reg);
       else process_memory_response(mf, pipe_reg);
     }
   }
@@ -3300,8 +3300,8 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
       inst.check_pending_writes(uncoalesced_base_addr);
     }
     else if (m_config->m_rt_coherence_engine) {
+      m_ray_coherence_engine->process_response(mf, m_current_warps, inst);
       if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
-      m_ray_coherence_engine->process_response(mf, m_current_warps);
       inst.clear();
     }
     else {
@@ -3390,8 +3390,8 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
     m_stats->rt_total_cacheline_fetched++;
 
     if (m_config->m_rt_coherence_engine) {
+      m_ray_coherence_engine->process_response(mf, m_current_warps, inst);
       if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
-      m_ray_coherence_engine->process_response(mf, m_current_warps);
       inst.clear();
     }
     else {
@@ -4300,12 +4300,12 @@ void rt_unit::print(FILE *fout) const {
     inst.print(fout);
     fprintf(fout, "Latency Delay: [");
     for (unsigned i=0; i<m_config->warp_size; i++) {
-      fprintf(fout, "%4d", inst.get_thread_latency(i));
+      fprintf(fout, "%5d", inst.get_thread_latency(i));
     }
     fprintf(fout, "]\n");
     fprintf(fout, "Thread Length: [");
     for (unsigned i=0; i<m_config->warp_size; i++) {
-      fprintf(fout, "%4d", inst.mem_list_length(i));
+      fprintf(fout, "%5d", inst.mem_list_length(i));
     }
     fprintf(fout, "]\n");
   }

@@ -151,18 +151,20 @@ unsigned ray_coherence_engine::schedule_next_warp() {
   COHERENCE_DPRINTF("Shader %d: Scheduling next access (hash 0x%x ", m_sid, m_active_hash);
 
   // Choose the most common request
-  std::map<new_addr_type, unsigned> requests;
+  // map (addr, size)->occurrences
+  std::map<addr_size_pair, unsigned> requests;
   // Gather all the addresses
   for (auto it=m_ray_pool[m_active_hash].cbegin(); it!=m_ray_pool[m_active_hash].cend(); it++) {
     coherence_ray ray = *it;
 
     if (!ray.empty()) {
-      // Check if address is already in progress
-      if (ray.next_status() != RT_MEM_AWAITING) {
-        if (requests.find(ray.next_addr()) == requests.end()) {
-          requests[ray.next_addr()] = 0;
+      // Check if address is already in progress or ray is not ready yet
+      if (ray.next_status() != RT_MEM_AWAITING && ray.latency_delay == 0) {
+        addr_size_pair request = addr_size_pair(ray.next_access().address, ray.next_access().size);
+        if (requests.find(request) == requests.end()) {
+          requests[request] = 0;
         }
-        requests[ray.next_addr()]++;
+        requests[request]++;
       }
     }
   }
@@ -171,24 +173,24 @@ unsigned ray_coherence_engine::schedule_next_warp() {
 
   // Find the most common
   unsigned occurrences = 0;
-  new_addr_type next_addr;
+  addr_size_pair next_request;
   for (auto it=requests.cbegin(); it!=requests.cend(); it++) {
     if (it->second > occurrences) {
       occurrences = it->second;
-      next_addr = it->first;
+      next_request = it->first;
     }
   }
 
   m_stats->average_stat(coherence_stats_type::COALESCED_REQUESTS, occurrences);
 
-  COHERENCE_DPRINTF("addr 0x%x ", next_addr);
+  COHERENCE_DPRINTF("addr 0x%x size %d ", next_request.first, next_request.second);
 
 
   // Find thread
   for (auto it=m_ray_pool[m_active_hash].cbegin(); it!=m_ray_pool[m_active_hash].cend(); it++) {
     coherence_ray ray = *it;
-    if (!ray.empty()) {
-      if (ray.next_addr() == next_addr) {
+    if (!ray.empty() && ray.latency_delay == 0) {
+      if (ray.next_access().address == next_request.first && ray.next_access().size == next_request.second) {
         m_active_thread = ray.origin_thread_id;
         m_active_warp = ray.origin_warp_uid;
         m_active_record = ray.next_access();
@@ -205,10 +207,11 @@ RTMemoryTransactionRecord ray_coherence_engine::get_next_access() {
   // Mark memory record status
   for (coherence_ray &ray : m_ray_pool[m_active_hash]) {
     if (!ray.empty()) {
-      if (ray.next_addr() == m_active_record.address) {
-        // TODO: Figure out if it's necessary to match the size as well
-        assert(ray.RT_mem_accesses.front().size == m_active_record.size);
+      if (ray.next_addr() == m_active_record.address &&
+          ray.next_access().size == m_active_record.size &&
+          ray.latency_delay == 0) {
         ray.RT_mem_accesses.front().status = RT_MEM_AWAITING;
+        COHERENCE_DPRINTF("Shader %d: Mark mem awaiting for warp &d thread %d\n", m_sid, ray.origin_warp_uid, ray.origin_thread_id);
       }
     }
   }
@@ -241,6 +244,17 @@ RTMemoryTransactionRecord ray_coherence_engine::get_next_access() {
 void ray_coherence_engine::undo_access(new_addr_type addr) {
   // Assume that this was the most recent request
   assert(m_active_record.address == addr);
+  
+  for (coherence_ray &ray : m_ray_pool[m_active_hash]) {
+    if (!ray.empty()) {
+      if (ray.next_addr() == m_active_record.address &&
+          ray.next_access().size == m_active_record.size &&
+          ray.RT_mem_accesses.front().status == RT_MEM_AWAITING) {
+        ray.RT_mem_accesses.front().status = RT_MEM_UNMARKED;
+        COHERENCE_DPRINTF("Shader %d: Undo mem awaiting for warp &d thread %d\n", m_sid, ray.origin_warp_uid, ray.origin_thread_id);
+      }
+    }
+  }
 
   // Remove the most recent hash from the MSHR
   assert(m_request_mshr.find(addr) != m_request_mshr.end());
@@ -248,9 +262,9 @@ void ray_coherence_engine::undo_access(new_addr_type addr) {
   COHERENCE_DPRINTF("Shader %d: Undoing MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, addr);
 }
 
-void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t> &m_current_warps) {
-  // Get the original address (TODO: CHECK THIS)
+void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t> &m_current_warps, warp_inst_t &pipe_reg) {
   new_addr_type uncoalesced_addr = mf->get_uncoalesced_addr();
+  new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
   COHERENCE_DPRINTF("Shader %d: Processing memory response for addr 0x%x\n", m_sid, uncoalesced_addr);
 
   unsigned found = 0;
@@ -267,19 +281,25 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
       
       // Go through each ray in the packet
       for (coherence_ray &ray : packet) {
-        if (!ray.empty()) {
+        if (!ray.empty() && ray.latency_delay == 0) {
           unsigned thread_id = ray.origin_thread_id;
           unsigned warp_uid = ray.origin_warp_uid;
 
-          assert(m_current_warps.find(warp_uid) != m_current_warps.end());
-          COHERENCE_DPRINTF("Shader %d: Ray coherency packet includes warp %d thread %d\n", m_sid, warp_uid, thread_id);
-          bool mem_record_done = m_current_warps[warp_uid].process_returned_mem_access(mf, thread_id);
+          assert(pipe_reg.get_uid() == warp_uid || m_current_warps.find(warp_uid) != m_current_warps.end());
+          if (uncoalesced_base_addr == ray.next_addr()) {
+            COHERENCE_DPRINTF("Shader %d: Ray coherency packet includes warp %d thread %d\n", m_sid, warp_uid, thread_id);
+            bool mem_record_done = (pipe_reg.get_uid() == warp_uid) ?
+              pipe_reg.process_returned_mem_access(mf, thread_id) :
+              m_current_warps[warp_uid].process_returned_mem_access(mf, thread_id);
 
-          if (mem_record_done) {
-            assert(ray.next_addr() == mf->get_uncoalesced_base_addr());
-            ray.RT_mem_accesses.pop_front();
-            ray.latency_delay = m_current_warps[warp_uid].get_thread_latency(thread_id);
-            if (ray.empty()) m_total_rays--;
+            if (mem_record_done) {
+              assert(ray.next_addr() == mf->get_uncoalesced_base_addr());
+              ray.RT_mem_accesses.pop_front();
+              ray.latency_delay = (pipe_reg.get_uid() == warp_uid) ?
+                pipe_reg.get_thread_latency(thread_id):
+                m_current_warps[warp_uid].get_thread_latency(thread_id);
+              if (ray.empty()) m_total_rays--;
+            }
           }
         }
       }
@@ -427,7 +447,8 @@ void ray_coherence_engine::print(FILE *fout) {
     ray_hash hash = it->first;
     fprintf(fout, "[0x%x] (%d)\t", hash, is_stalled(hash, it->second));
     for (coherence_ray ray : it->second) {
-      fprintf(fout, "w%d:t%d\t", ray.origin_warp_uid, ray.origin_thread_id);
+      if (!ray.empty())
+        fprintf(fout, "w%d:t%d\t", ray.origin_warp_uid, ray.origin_thread_id);
     }
     fprintf(fout, "\n");
   }
