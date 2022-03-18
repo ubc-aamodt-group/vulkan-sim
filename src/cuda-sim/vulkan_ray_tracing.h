@@ -231,6 +231,7 @@ typedef struct texture_metadata
     uint32_t n_samples;
     VkImageTiling tiling;
     uint32_t isl_tiling_mode;
+    uint32_t row_pitch_B;
 } texture_metadata;
 
 
@@ -341,7 +342,8 @@ public:
                                        uint32_t n_planes,
                                        uint32_t n_samples,
                                        VkImageTiling tiling,
-                                       uint32_t isl_tiling_mode);
+                                       uint32_t isl_tiling_mode,
+                                       uint32_t row_pitch_B);
     static void pass_child_addr(void *address);
     static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards);
 };
