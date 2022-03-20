@@ -35,21 +35,30 @@ namespace fs = boost::filesystem;
 #include "../stream_manager.h"
 #include "../abstract_hardware_model.h"
 #include "vulkan_acceleration_structure_util.h"
-#include "astc_decomp.h"
 
-#include "intel_image_util.h"
+// #include "intel_image_util.h"
 
-#define HAVE_PTHREAD
-#define UTIL_ARCH_LITTLE_ENDIAN 1
-#define UTIL_ARCH_BIG_ENDIAN 0
-#define signbit signbit
+// #define HAVE_PTHREAD
+// #define UTIL_ARCH_LITTLE_ENDIAN 1
+// #define UTIL_ARCH_BIG_ENDIAN 0
+// #define signbit signbit
 
-#define UINT_MAX 65535
-#define GLuint MESA_GLuint
-#include "isl/isl.h"
-#include "isl/isl_tiled_memcpy.c"
-#include "vulkan/anv_private.h"
-#undef GLuint
+// #define UINT_MAX 65535
+// #define GLuint MESA_GLuint
+// // #include "isl/isl.h"
+// // #include "isl/isl_tiled_memcpy.c"
+// #include "vulkan/anv_private.h"
+// #undef GLuint
+
+// #undef HAVE_PTHREAD
+// #undef UTIL_ARCH_LITTLE_ENDIAN
+// #undef UTIL_ARCH_BIG_ENDIAN
+// #undef signbit
+
+// #include "vulkan/anv_public.h"
+#include "intel_image.h"
+
+// #include "anv_include.h"
 
 VkRayTracingPipelineCreateInfoKHR* VulkanRayTracing::pCreateInfos = NULL;
 VkAccelerationStructureGeometryKHR* VulkanRayTracing::pGeometries = NULL;
@@ -981,10 +990,10 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // if(CmdTraceRaysKHRID != 6)
     //     return;
 
-    // if(imageFile.is_open())
-    //     return;
-    // imageFile.open("image.binary", std::ios::out | std::ios::binary);
-    // imageFile.open("image-sqrt3.txt", std::ios::out);
+    if(imageFile.is_open())
+        return;
+    imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // imageFile.open("image.txt", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1341,79 +1350,10 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     // return descriptors[setID][binding].address;
 }
 
-void show_decompress_ASTC_texture_block(const uint8_t * data, bool isSRGB, int blockWidth, int blockHeight)
-{
-    uint8_t dst_colors[1024];
-    basisu::astc::decompress(dst_colors, data, isSRGB, blockWidth, blockHeight);
-
-    for(int i = 0; i < blockHeight; i++)
-    {
-        for(int j = 0; j < blockWidth; j++)
-        {
-            uint8_t* pixel_color = &dst_colors[0] + (i * blockWidth + j) * 4;
-            printf("pixel (%d, %d) = (%d, %d, %d, %d) = (%f, %f, %f, %f)\n", i, j, 
-                    pixel_color[0], pixel_color[1], pixel_color[2], pixel_color[3],
-                    pixel_color[0] / 255.0, pixel_color[1] / 255.0, pixel_color[2] / 255.0, pixel_color[3] / 255.0);
-        }
-        printf("\n");
-    }
-}
-
-void save_ASTC_texture_to_text_file(const struct anv_image *image)
-{
-    FILE * pFile;
-    pFile = fopen ("ASTC_texture.txt","w");
-    assert(image->vk_format == VK_FORMAT_ASTC_8x8_SRGB_BLOCK);
-    uint8_t* address = anv_address_map(image->planes[0].address);
-
-    for(int block = 0; block * (128 / 8) < image->planes[0].size; block++)
-    {
-        uint8_t dst_colors[1024];
-        basisu::astc::decompress(dst_colors, address + block * (128 / 8), true, 8, 8);
-
-        fprintf(pFile, "block %d:", block);
-        for(int i = 0; i < 8; i++)
-        {
-            for(int j = 0; j < 8; j++)
-            {
-                uint8_t* pixel_color = &dst_colors[0] + (i * 8 + j) * 4;
-                fprintf(pFile, "\tpixel (%d, %d) = (%d, %d, %d, %d) = (%f, %f, %f, %f)\n", i, j, 
-                        pixel_color[0], pixel_color[1], pixel_color[2], pixel_color[3],
-                        pixel_color[0] / 255.0, pixel_color[1] / 255.0, pixel_color[2] / 255.0, pixel_color[3] / 255.0);
-            }
-            fprintf(pFile, "\n");
-        }
-        fprintf(pFile, "\n\n");
-    }
-
-    fclose (pFile);
-}
-
-float SRGB_to_linearRGB(float s)
-{
-    assert(0 <= s && s <= 1);
-    if(s <= 0.04045)
-        return s / 12.92;
-    else
-        return pow(((s + 0.055) / 1.055), 2.4);
-}
-
-float linearRGB_to_SRGB(float s)
-{
-    // assert(0 <= s && s <= 1);
-    if(s < 0.0031308)
-        return s * 12.92;
-    else
-        return 1.055 * pow(s, 1 / 2.4) - 0.055;
-}
-
-inline uint64_t ceil_divide(uint64_t a, uint64_t b)
-{
-    return (a + b - 1) / b;
-}
-
 void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3)
 {
+    std::vector<ImageMemoryTransactionRecord> transactions;
+
     struct anv_image_view *image_view =  desc->image_view;
     struct anv_sampler *sampler = desc->sampler;
 
@@ -1424,130 +1364,13 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
     assert(sampler->conversion == NULL);
 
-    uint8_t* address = anv_address_map(image->planes[0].address);
+    get_interpolated_pixel(image_view, sampler, x, y, transactions);
 
-    //save_ASTC_texture_to_text_file(image);
-    // save_ASTC_texture_to_image_file(descriptorSet->descriptors[24].image_view->image, imageFile);
-    // exit(-1);
+    for(auto transaction : transactions)
+        transaction.type = ImageTransactionType::TEXTURE_LOAD;
 
-    int x_int = x * image->extent.width; //MRS_TODO: change this to NN or bilinear
-    x_int %= image->extent.width;
-    if(x_int < 0)
-        x_int += image->extent.width;
-    // if(x_int >= image->extent.width)
-    //     x_int = image->extent.width - 1;
-    int y_int = y * image->extent.height;
-    y_int %= image->extent.height;
-    if(y_int < 0)
-        y_int += image->extent.height;
-    // if(y_int >= image->extent.height)
-    //     y_int = image->extent.height - 1;
-    switch(image->vk_format)
-    {
-        case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
-        {
-            // int blockX = x_int / 8;
-            // int blockY = y_int / 8;
 
-            // uint32_t block_offset = (blockX  * (image->extent.height / 8) + blockY) * (128 / 8);
-            // assert(block_offset < image->planes[0].size);
-            // assert(block_offset >= 0);
-
-            // uint8_t dst_colors[256];
-            // basisu::astc::decompress(dst_colors, address + block_offset, true, 8, 8);
-            // uint8_t* pixel_color = &dst_colors[0] + ((x_int % 8) + (y_int % 8)  * 8) * 4;
-
-            uint32_t tileWidth = 8;
-            uint32_t tileHeight = 32;
-            uint32_t ASTC_block_size = 128 / 8;
-
-            int tileX = x_int / 8 / tileWidth;
-            int tileY = y_int / 8 / tileHeight;
-            int tileID = tileX + tileY * image->extent.width / 8 / tileWidth;
-
-            int blockX = ((x_int / 8) % tileWidth);
-            int blockY = ((y_int / 8) % tileHeight);
-            int blockID = blockX * (tileHeight) + blockY;
-
-            uint32_t offset = (tileID * (tileWidth * tileHeight) + blockID) * ASTC_block_size;
-            // uint32_t offset = (blockX + blockY * (image->extent.width / 8)) * (128 / 8);
-            // uint32_t offset = (blockX * (image->extent.height / 8) + blockY) * (128 / 8);
-
-            uint8_t dst_colors[256];
-            if(!basisu::astc::decompress(dst_colors, address + offset, true, 8, 8))
-            {
-                printf("decoding error\n");
-                exit(-2);
-            }
-            uint8_t* pixel_color = &dst_colors[0] + ((x_int % 8) + (y_int % 8) * 8) * 4;
-
-            c0 = SRGB_to_linearRGB(pixel_color[0] / 255.0);
-            c1 = SRGB_to_linearRGB(pixel_color[1] / 255.0);
-            c2 = SRGB_to_linearRGB(pixel_color[2] / 255.0);
-            c3 = pixel_color[3] / 255.0;
-            // c0 = (pixel_color[0] / 255.0);
-            // c1 = (pixel_color[1] / 255.0);
-            // c2 = (pixel_color[2] / 255.0);
-            // c3 = pixel_color[3] / 255.0;
-
-            // // float norm = get_norm(float3(c0, c1, c2));
-            // float norm = c0 + c1 + c2;
-            // c0 /= norm;
-            // c1 /= norm;
-            // c2 /= norm;
-
-            // c0 = linearRGB_to_SRGB(c0);
-            // c1 = linearRGB_to_SRGB(c1);
-            // c2 = linearRGB_to_SRGB(c2);
-            break;
-        }
-        // case VK_FORMAT_B8G8R8A8_UNORM:
-        // {
-        //     uint32_t offset = (x * image->extent.height + y) * 4;
-        //     c0 = address[offset + 2] / 255.0;
-        //     c1 = address[offset + 1] / 255.0;
-        //     c2 = address[offset] / 255.0;
-        //     c3 = address[offset + 3] / 255.0;
-        //     break;
-        // }
-        case VK_FORMAT_R8G8B8A8_SRGB:
-        {
-            // uint32_t tileWidth = 32;
-            // uint32_t tileHeight = 32;
-
-            // int tileX = x_int / tileWidth;
-            // int tileY = y_int / tileHeight;
-            // int tileID = tileX + tileY * image->extent.width / tileWidth;
-
-            // uint32_t offset = (tileID * tileWidth * tileHeight + (x_int % tileWidth) * tileHeight + (y_int % tileHeight)) * 4;
-
-            // // uint32_t offset = (x_int * image->extent.height + y_int) * 4;
-            // c0 = SRGB_to_linearRGB(address[offset] / 255.0);
-            // c1 = SRGB_to_linearRGB(address[offset + 1] / 255.0);
-            // c2 = SRGB_to_linearRGB(address[offset + 2] / 255.0);
-            // c3 = address[offset + 3] / 255.0;
-
-            uint8_t colors[4];
-
-            intel_tiled_to_linear(x_int * 4, x_int * 4 + 4, y_int, y_int + 1,
-            colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
-            ISL_TILING_Y0, ISL_MEMCPY);
-
-            c0 = SRGB_to_linearRGB(colors[0] / 255.0);
-            c1 = SRGB_to_linearRGB(colors[1] / 255.0);
-            c2 = SRGB_to_linearRGB(colors[2] / 255.0);
-            c3 = colors[3] / 255.0;
-
-            break;
-        }
-        // case VK_FORMAT_D32_SFLOAT:
-        default:
-            printf("%d not implemented\n", image->vk_format);
-            assert(0);
-            break;
-    }
-
-    // printf("writing image with extant = (%d, %d)\n", image->extent.height, image->extent.width);
+    // uint8_t* address = anv_address_map(image->planes[0].address);
 
     // for(int x = 0; x < image->extent.width; x++)
     // {
@@ -1574,166 +1397,39 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     //         imageFile.flush();
     //     }
     // }
-    // exit(-1);
-
-    // uint32_t offset = (x * image->extent.height + y) * 4;
-    // if(offset < 0)
-    //     offset = 0;
-    // if(offset >= image->size)
-    //     offset = image->size - 1;
-
-    // c0 = address[offset] / 255.0;
-    // c1 = address[offset + 1] / 255.0;
-    // c2 = address[offset + 2] / 255.0;
 }
 
 void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
-    // if(hitValue_X != 0 || hitValue_Y != 0 || hitValue_Z != 0)
-        // printf("launch_ID = (%d, %d), image store (%f, %f, %f)\n", gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, hitValue_X, hitValue_Y, hitValue_Z);
+    ImageMemoryTransactionRecord transaction;
+
     assert(desc->sampler == NULL);
 
     struct anv_image_view *image_view = desc->image_view;
     assert(image_view != NULL);
     struct anv_image * image = image_view->image;
-    assert(image->n_planes == 1);
-    assert(image->samples == 1);
 
-    void* mem_address = anv_address_map(image->planes[0].address);
+    Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
+    store_image_pixel(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, 0, pixel, transaction);
+    transaction.type = ImageTransactionType::IMAGE_STORE;
 
-    switch (image->vk_format)
-    {
-        case VK_FORMAT_B8G8R8A8_UNORM:
-        {
-            uint8_t r = hitValue_X * 255;
-            uint8_t g = hitValue_Y * 255;
-            uint8_t b = hitValue_Z * 255;
-            uint8_t a = hitValue_W * 255;
+    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+    uint32_t offset = 0;
+    offset += gl_LaunchIDEXT_Y * image_width;
+    offset += gl_LaunchIDEXT_X;
 
-            if(hitValue_X >= 1)
-                r = 255;
-            if(hitValue_Y >= 1)
-                g = 255;
-            if(hitValue_Z >= 1)
-                b = 255;
-            if(hitValue_W >= 1)
-                a = 255;
-            
-            // uint8_t colors[] = {b, g, r, a};
-            uint8_t colors[] = {r, g, b, a};
-
-            switch (image->planes[0].surface.isl.tiling)
-            {
-                case ISL_TILING_Y0:
-                {
-                    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
-                    intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
-                        mem_address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
-                        ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
-                    break;
-                }
-            
-            default:
-                assert(0);
-                break;
-            }
-
-            
-            break;
-            
-            // uint32_t tileWidth = 32;
-            // uint32_t tileHeight = 32;
-
-            // int tileX = gl_LaunchIDEXT_X / tileWidth;
-            // int tileY = gl_LaunchIDEXT_Y / tileHeight;
-            // int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
-
-            // uint32_t offset = (tileID * tileWidth * tileHeight + (gl_LaunchIDEXT_X % tileWidth) + (gl_LaunchIDEXT_Y % tileHeight) * tileWidth) * 4;
-            // if(offset >= 3768320)
-            //     printf("this is where things go wrong\n");
-            // assert (offset >= 0);
-
-            // // offset = gl_LaunchIDEXT_Y * image->extent.width;
-            // // offset += gl_LaunchIDEXT_X;
-            // // offset *= 4;
-
-            // uint8_t* p = ((uint8_t*)mem_address) + offset;
-            // p[0] = b;
-            // p[1] = g;
-            // p[2] = r;
-            // p[3] = a;
-            // break;
-        }
-        case VK_FORMAT_R8G8B8A8_UNORM:
-        {
-            uint8_t r = hitValue_X * 255;
-            uint8_t g = hitValue_Y * 255;
-            uint8_t b = hitValue_Z * 255;
-            uint8_t a = hitValue_W * 255;
-
-            if(hitValue_X >= 1)
-                r = 255;
-            if(hitValue_Y >= 1)
-                g = 255;
-            if(hitValue_Z >= 1)
-                b = 255;
-            if(hitValue_W >= 1)
-                a = 255;
-            
-            uint8_t colors[] = {r, g, b, a};
-
-            switch (image->planes[0].surface.isl.tiling)
-            {
-                case ISL_TILING_Y0:
-                {
-                    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
-                    intel_linear_to_tiled(gl_LaunchIDEXT_X * 4, gl_LaunchIDEXT_X * 4 + 4, gl_LaunchIDEXT_Y, gl_LaunchIDEXT_Y + 1,
-                        mem_address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
-                        ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
-                    break;
-                }
-
-                case ISL_TILING_LINEAR:
-                {
-                    uint32_t offset = (gl_LaunchIDEXT_Y * image->extent.width + gl_LaunchIDEXT_X) * 4;
-                    uint8_t* p = ((uint8_t*)mem_address) + offset;
-                    p[0] = r;
-                    p[1] = g;
-                    p[2] = b;
-                    p[3] = a;
-                    break;
-                }
-            
-                default:
-                    assert(0);
-                    break;
-            }
-            break;
-        }
-
-        
-        default:
-            assert(0);
-            break;
-    }
-
-    // uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
-    // uint32_t offset = 0;
-    // offset += gl_LaunchIDEXT_Y * image_width;
-    // offset += gl_LaunchIDEXT_X;
-
-    // float data[4];
-    // data[0] = hitValue_X;
-    // data[1] = hitValue_Y;
-    // data[2] = hitValue_Z;
-    // data[3] = hitValue_W;
-    // imageFile.write((char*) data, 3 * sizeof(float));
-    // imageFile.write((char*) (&offset), sizeof(uint32_t));
-    // imageFile.flush();
+    float data[4];
+    data[0] = hitValue_X;
+    data[1] = hitValue_Y;
+    data[2] = hitValue_Z;
+    data[3] = hitValue_W;
+    imageFile.write((char*) data, 3 * sizeof(float));
+    imageFile.write((char*) (&offset), sizeof(uint32_t));
+    imageFile.flush();
 
     // imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
-    // imageFile << hitValue_X / sqrt(3) << ", " << hitValue_Y / sqrt(3) << ", " << hitValue_Z / sqrt(3) << ", " << hitValue_W << ")\n";
+    // imageFile << hitValue_X << ", " << hitValue_Y << ", " << hitValue_Z << ", " << hitValue_W << ")\n";
 
 
     // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
@@ -1751,25 +1447,6 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     // // {
     // //     printf("this one has wrong value.\n");
     // // }
-    
-    // uint8_t r = hitValue_X * 255;
-    // uint8_t g = hitValue_Y * 255;
-    // uint8_t b = hitValue_Z * 255;
-    // uint8_t a = hitValue_W * 255;
-    // if(hitValue_X >= 1)
-    //     r = 255;
-    // if(hitValue_Y >= 1)
-    //     g = 255;
-    // if(hitValue_Z >= 1)
-    //     b = 255;
-    // if(hitValue_W >= 1)
-    //     a = 255;
-
-    // uint8_t* p = ((uint8_t*)mem_address) + offset * 4;
-    // p[0] = b;
-    // p[1] = g;
-    // p[2] = r;
-    // p[3] = a;
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)

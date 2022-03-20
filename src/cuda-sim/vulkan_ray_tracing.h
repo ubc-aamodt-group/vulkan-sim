@@ -5,22 +5,13 @@
 #include "vulkan/vulkan_intel.h"
 
 #include "vulkan/anv_acceleration_structure.h"
-#include "vulkan/anv_public.h"
 #include "compiler/spirv/spirv.h"
 
-#include <cmath>
-// #define GLuint MESA_GLuint
-// #include "vulkan/anv_private.h"
-// #undef GLuint
-// #include "util/u_endian.h"
-// #include "vulkan/anv_private.h"
-// #include "vk_object.h"
-
 #include "ptx_ir.h"
-//#include "vector-math.h"
 #include "../../libcuda/gpgpu_context.h"
 #include "compiler/shader_enums.h"
 #include <fstream>
+#include <cmath>
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
