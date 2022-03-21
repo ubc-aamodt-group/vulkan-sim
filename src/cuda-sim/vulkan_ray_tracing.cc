@@ -1364,10 +1364,15 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
     assert(sampler->conversion == NULL);
 
-    get_interpolated_pixel(image_view, sampler, x, y, transactions);
+    Pixel pixel = get_interpolated_pixel(image_view, sampler, x, y, transactions);
 
     for(auto transaction : transactions)
         transaction.type = ImageTransactionType::TEXTURE_LOAD;
+    
+    c0 = pixel.c0;
+    c1 = pixel.c1;
+    c2 = pixel.c2;
+    c3 = pixel.c3;
 
 
     // uint8_t* address = anv_address_map(image->planes[0].address);
