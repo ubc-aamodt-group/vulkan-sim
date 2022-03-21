@@ -289,7 +289,7 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
 
                     assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
                     intel_linear_to_tiled(x * 4, x * 4 + 4, y, y + 1,
-                        (char *)address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
+                        (char *)address, colors, image->planes[0].surface.isl.row_pitch_B, image->extent.width * 4, false,
                         ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
                     break;
                 }
@@ -343,7 +343,7 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
 
                     assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
                     intel_linear_to_tiled(x * 4, x * 4 + 4, y, y + 1,
-                        (char *)address, colors, image->planes[0].surface.isl.row_pitch_B, 1280 * 4, false,
+                        (char *)address, colors, image->planes[0].surface.isl.row_pitch_B, image->extent.width * 4, false,
                         ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
                     break;
                 }
