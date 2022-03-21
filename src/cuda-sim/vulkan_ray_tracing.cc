@@ -975,6 +975,8 @@ void VulkanRayTracing::invoke_gpgpusim()
 
 // int CmdTraceRaysKHRID = 0;
 
+const bool writeImageBinary = true;
+
 void VulkanRayTracing::vkCmdTraceRaysKHR(
                       void *raygen_sbt,
                       void *miss_sbt,
@@ -990,9 +992,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // if(CmdTraceRaysKHRID != 6)
     //     return;
 
-    if(imageFile.is_open())
-        return;
-    imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    if(writeImageBinary && !imageFile.is_open())
+        imageFile.open("image.binary", std::ios::out | std::ios::binary);
     // imageFile.open("image.txt", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
@@ -1419,22 +1420,25 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     store_image_pixel(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, 0, pixel, transaction);
     transaction.type = ImageTransactionType::IMAGE_STORE;
 
-    uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
-    uint32_t offset = 0;
-    offset += gl_LaunchIDEXT_Y * image_width;
-    offset += gl_LaunchIDEXT_X;
+    if(writeImageBinary)
+    {
+        uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+        uint32_t offset = 0;
+        offset += gl_LaunchIDEXT_Y * image_width;
+        offset += gl_LaunchIDEXT_X;
 
-    float data[4];
-    data[0] = hitValue_X;
-    data[1] = hitValue_Y;
-    data[2] = hitValue_Z;
-    data[3] = hitValue_W;
-    imageFile.write((char*) data, 3 * sizeof(float));
-    imageFile.write((char*) (&offset), sizeof(uint32_t));
-    imageFile.flush();
+        float data[4];
+        data[0] = hitValue_X;
+        data[1] = hitValue_Y;
+        data[2] = hitValue_Z;
+        data[3] = hitValue_W;
+        imageFile.write((char*) data, 3 * sizeof(float));
+        imageFile.write((char*) (&offset), sizeof(uint32_t));
+        imageFile.flush();
 
-    // imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
-    // imageFile << hitValue_X << ", " << hitValue_Y << ", " << hitValue_Z << ", " << hitValue_W << ")\n";
+        // imageFile << "(" << gl_LaunchIDEXT_X << ", " << gl_LaunchIDEXT_Y << ") : (";
+        // imageFile << hitValue_X << ", " << hitValue_Y << ", " << hitValue_Z << ", " << hitValue_W << ")\n";
+    }
 
 
     // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
