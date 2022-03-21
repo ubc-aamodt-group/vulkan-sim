@@ -6737,8 +6737,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 350 + thread->get_tid().x;
-  // v[1] = 650;
+  // v[0] = 512 + thread->get_tid().x;
+  // v[1] = 360;
   // v[2] = 0;
 
   ptx_reg_t data;

@@ -103,7 +103,7 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             uint8_t dst_colors[256];
             if(!basisu::astc::decompress(dst_colors, address + offset, true, 8, 8))
             {
-                printf("decoding error\n");
+                printf("decoding error at pixel (%d, %d)\n", x, y);
                 exit(-2);
             }
             uint8_t* pixel_color = &dst_colors[0] + ((x % 8) + (y % 8) * 8) * 4;
@@ -153,6 +153,11 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
     const struct anv_image *image = image_view->image;
     assert(sampler->conversion == NULL);
 
+    if(x < 0 || x > 1)
+        x -= std::floor(x);
+    if(y < 0 || y > 1)
+        y -= std::floor(y);
+
     VkFilter filter;
     if(sampler->conversion == NULL)
         filter = VK_FILTER_NEAREST;
@@ -161,19 +166,65 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
     {
         case VK_FILTER_NEAREST:
         {
-            uint32_t x_int = x * image->extent.width; //MRS_TODO: change this to NN or bilinear
-            x_int %= image->extent.width;
-            if(x_int < 0)
-                x_int += image->extent.width;
-            uint32_t y_int = y * image->extent.height;
-            y_int %= image->extent.height;
-            if(y_int < 0)
-                y_int += image->extent.height;
+            // uint32_t x_int = std::lround(x * image->extent.width);
+            // uint32_t y_int = std::lround(y * image->extent.height);
+            uint32_t x_int = std::floor(x * image->extent.width);
+            uint32_t y_int = std::floor(y * image->extent.height);
+            if(x_int >= image->extent.width)
+                x_int -= image->extent.width;
+            if(y_int >= image->extent.height)
+                y_int -= image->extent.height;
+
+            assert(0 <= x_int && x_int < image->extent.width);
+            assert(0 <= y_int && y_int < image->extent.height);
+
             ImageMemoryTransactionRecord transaction;
             Pixel pixel = load_image_pixel(image, x_int, y_int, 0, transaction);
             transactions.push_back(transaction);
             return pixel;
         }
+        case VK_FILTER_LINEAR:
+        {
+            uint32_t xs[2];
+            xs[0] = std::floor(x * image->extent.width);
+            xs[1] = std::ceil(x * image->extent.width);
+            
+            uint32_t ys[2];
+            ys[0] = std::floor(y * image->extent.height);
+            ys[1] = std::ceil(y * image->extent.height);
+            
+            Pixel pixel[2][2];
+            float weight[2][2];
+
+            for(int i = 0; i < 2; i++)
+                for(int j = 0; j < 2; j++)
+                {
+                    weight[i][j] = std::abs(x * image->extent.width - xs[(i + 1) % 2]) * std::abs(y * image->extent.height - ys[(j + 1) % 2]);
+
+                    ImageMemoryTransactionRecord transaction;
+                    uint32_t xc = xs[i];
+                    uint32_t yc = ys[i];
+                    if(xc >= image->extent.width)
+                        xc -= image->extent.width;
+                    if(yc >= image->extent.height)
+                        yc -= image->extent.height;
+                    
+                    pixel[i][j] = load_image_pixel(image, xc, yc, 0, transaction);
+                    transactions.push_back(transaction);
+                }
+            
+            Pixel final_pixel(0, 0, 0, 0);
+            for(int i = 0; i < 2; i++)
+                for(int j = 0; j < 2; j++)
+                {
+                    final_pixel.c0 += pixel[i][j].c0 * weight[i][j];
+                    final_pixel.c1 += pixel[i][j].c1 * weight[i][j];
+                    final_pixel.c2 += pixel[i][j].c2 * weight[i][j];
+                    final_pixel.c3 += pixel[i][j].c3 * weight[i][j];
+                }
+            return final_pixel;
+        }
+
         default:
         {
             assert(0);
@@ -219,13 +270,20 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             {
                 case ISL_TILING_Y0:
                 {
-                    uint32_t tileWidth = 32;
-                    uint32_t tileHeight = 32;
-                    int tileX = x / tileWidth;
-                    int tileY = y / tileHeight;
-                    int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
+                    // uint32_t tileWidth = 32;
+                    // uint32_t tileHeight = 32;
+                    // int tileX = x / tileWidth;
+                    // int tileY = y / tileHeight;
+                    // int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
 
-                    uint32_t offset = (tileID * tileWidth * tileHeight + (x % tileWidth) + (y % tileHeight) * tileWidth) * 4;
+                    // uint32_t offset = (tileID * tileWidth * tileHeight + (x % tileWidth) + (y % tileHeight) * tileWidth) * 4;
+                    uint32_t ytile_span = 16;
+                    uint32_t bytes_per_column = 512;
+                    uint32_t ytile_height = 32;
+
+                    uint32_t offset = (y / ytile_height) * ytile_height * image->planes[0].surface.isl.row_pitch_B;
+                    offset += (x * 4 % ytile_span) + (x * 4 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
+
                     transaction.address = address + offset;
                     transaction.size = 4;
 
@@ -265,13 +323,21 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             {
                 case ISL_TILING_Y0:
                 {
-                    uint32_t tileWidth = 32;
-                    uint32_t tileHeight = 32;
-                    int tileX = x / tileWidth;
-                    int tileY = y / tileHeight;
-                    int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
+                    // uint32_t tileWidth = 32;
+                    // uint32_t tileHeight = 32;
+                    // int tileX = x / tileWidth;
+                    // int tileY = y / tileHeight;
+                    // int tileID = tileX + tileY * ceil_divide(image->extent.width, tileWidth);
 
-                    uint32_t offset = (tileID * tileWidth * tileHeight + (x % tileWidth) + (y % tileHeight) * tileWidth) * 4;
+                    // uint32_t offset = (tileID * tileWidth * tileHeight + (x % tileWidth) + (y % tileHeight) * tileWidth) * 4;
+
+                    uint32_t ytile_span = 16;
+                    uint32_t bytes_per_column = 512;
+                    uint32_t ytile_height = 32;
+
+                    uint32_t offset = (y / ytile_height) * ytile_height * image->planes[0].surface.isl.row_pitch_B;
+                    offset += (x * 4 % ytile_span) + (x * 4 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
+
                     transaction.address = address + offset;
                     transaction.size = 4;
 
