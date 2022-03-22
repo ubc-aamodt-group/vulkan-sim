@@ -1079,6 +1079,7 @@ class ptx_instruction : public warp_inst_t {
     }
   }
   const char *source_file() const { return m_source_file.c_str(); }
+  std::string source_file_str() const { return m_source_file; }
   unsigned source_line() const { return m_source_line; }
   unsigned get_num_operands() const { return m_operands.size(); }
   bool has_pred() const { return m_pred != NULL; }

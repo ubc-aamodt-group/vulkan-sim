@@ -549,18 +549,30 @@ void thread_insn_span::print_sparse_histo(FILE *fout) const {
   fprintf(fout, "\n");
 }
 
-void thread_insn_span::print_sparse_histo(gzFile fout) const {
-  int n_printed_entries = 0;
-  span_count_map::const_iterator i_sc = m_insn_span_count.begin();
-  for (; i_sc != m_insn_span_count.end(); ++i_sc) {
-    unsigned ptx_lineno = gpgpu_ctx->translate_pc_to_ptxlineno(i_sc->first);
-    gzprintf(fout, "%u %d ", ptx_lineno, i_sc->second);
-    n_printed_entries++;
+void thread_insn_span::print_sparse_histo(gzFile fout, std::string name) const {
+  // Get the number of shaders to expect
+  unsigned total_shaders = gpgpu_ctx->func_sim->g_total_shaders;
+
+  // Iterate through each shader
+  for (unsigned s=0; s<total_shaders; s++) {
+    gzprintf(fout, "%s_%d: ", name.c_str(), s);
+    int n_printed_entries = 0;
+    span_count_map::const_iterator i_sc = m_insn_span_count.begin();
+    for (; i_sc != m_insn_span_count.end(); ++i_sc) {
+      unsigned shader = 0;
+      // Get line number
+      unsigned ptx_lineno = gpgpu_ctx->translate_pc_to_ptxlineno(i_sc->first, shader);
+      // Only print PCs for the current shader
+      if (s == shader) {
+        gzprintf(fout, "%u %d ", ptx_lineno, i_sc->second);
+        n_printed_entries++;
+      }
+    }
+    if (n_printed_entries == 0) {
+      gzprintf(fout, "0 0 ");
+    }
+    gzprintf(fout, "\n");
   }
-  if (n_printed_entries == 0) {
-    gzprintf(fout, "0 0 ");
-  }
-  gzprintf(fout, "\n");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -625,10 +637,10 @@ void thread_CFlocality::print_visualizer(FILE *fout) {
 }
 
 void thread_CFlocality::print_visualizer(gzFile fout) {
-  gzprintf(fout, "%s: ", m_name.c_str());
+  // gzprintf(fout, "%s: ", m_name.c_str());
   if (m_thd_span_archive.empty()) {
     // visualizer do no require snap_shots
-    m_thd_span.print_sparse_histo(fout);
+    m_thd_span.print_sparse_histo(fout, m_name);
 
     // clean the thread span
     m_thd_span.reset(0);

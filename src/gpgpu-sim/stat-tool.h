@@ -98,7 +98,7 @@ class thread_insn_span {
   void print_span(FILE *fout) const;
   void print_histo(FILE *fout) const;
   void print_sparse_histo(FILE *fout) const;
-  void print_sparse_histo(gzFile fout) const;
+  void print_sparse_histo(gzFile fout, std::string name) const;
 
  private:
   gpgpu_context *gpgpu_ctx;

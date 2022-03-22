@@ -78,6 +78,7 @@ class gpgpu_context {
   const ptx_instruction *pc_to_instruction(unsigned pc);
   const warp_inst_t *ptx_fetch_inst(address_type pc);
   unsigned translate_pc_to_ptxlineno(unsigned pc);
+  unsigned translate_pc_to_ptxlineno(unsigned pc, unsigned &shader);
 };
 gpgpu_context *GPGPU_Context();
 CUctx_st *GPGPUSim_Context(gpgpu_context *ctx);

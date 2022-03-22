@@ -2710,11 +2710,23 @@ void functionalCoreSim::executeWarp(unsigned i, bool &allAtBarrier,
 }
 
 unsigned gpgpu_context::translate_pc_to_ptxlineno(unsigned pc) {
+  unsigned shader;
+  return translate_pc_to_ptxlineno(pc, shader);
+}
+
+unsigned gpgpu_context::translate_pc_to_ptxlineno(unsigned pc, unsigned &shader) {
   // this function assumes that the kernel fits inside a single PTX file
   // function_info *pFunc = g_func_info; // assume that the current kernel is
   // the one in query
   const ptx_instruction *pInsn = pc_to_instruction(pc);
+  std::string source_filename = pInsn->source_file_str();
   unsigned ptx_line_number = pInsn->source_line();
+
+  if (source_filename.find("MESA") != std::string::npos) {
+    std::string shader_str = source_filename.substr(source_filename.size()-5, 1);
+    int shader_id = std::stoi(shader_str);
+    shader = (unsigned)shader_id;
+  }
 
   return ptx_line_number;
 }

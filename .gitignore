@@ -62,3 +62,4 @@ accel-sim-framework/
 gpu-app-collection/
 
 .vscode/
+*.pyc

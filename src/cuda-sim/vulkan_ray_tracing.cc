@@ -1136,6 +1136,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
             break;
         }
     }
+    ctx->func_sim->g_total_shaders = shaders.size();
 
     shader_stage_info raygen_shader = shaders[index];
     function_info *entry = context->get_kernel(raygen_shader.function_name);
