@@ -63,3 +63,6 @@ gpu-app-collection/
 
 .vscode/
 *.pyc
+
+aerialvision/parser.out
+aerialvision/parsetab.py
