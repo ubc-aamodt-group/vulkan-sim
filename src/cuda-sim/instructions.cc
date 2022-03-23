@@ -6758,9 +6758,9 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   const operand_info &src1 = pI->src1();
   const operand_info &src2 = pI->src2();
   uint32_t v[4];
-  v[0] = thread->get_ntid().x * thread->get_nctaid().x;
-  v[1] = thread->get_nctaid().y;
-  v[2] = thread->get_nctaid().z;
+  v[0] = thread->get_kernel().vulkan_metadata.launch_width;
+  v[1] = thread->get_kernel().vulkan_metadata.launch_height;
+  v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
   // v[0] = 1280;
   // v[1] = 720;
