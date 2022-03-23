@@ -260,7 +260,7 @@ class formEntry:
     #Need to fill up list alphabetically
     keysAlpha = []
     for key in self.data[self.fileChosen].keys():
-        if key not in ['globalCycle','CFLOG','EXTVARS']:#exclude hacks from list
+        if key not in ['globalCycle','CFLOG','EXTVARS','trace_ray']:#exclude hacks from list
             keysAlpha.append(key)
     keysAlpha.sort(lambda x, y: cmp(x.lower(),y.lower()))
     for keys in keysAlpha:
@@ -1368,10 +1368,28 @@ class graphManager:
         self.plot.set_yticks(ylabelPos)
         self.plot.set_xticklabels(xlabelValues, rotation = plotFormat.rotation, fontsize = plotFormat.xticksFontSize)
         self.plot.set_xticks(xlabelPos)
-        
+
+        if "PTX" in yAxis:
+            # Get shader ID
+            shader_id = yAxis[yAxis.index("PTX")-1:yAxis.index("PTX")]
+            print("Processing shader {}".format(shader_id))
+            try:
+                print("trace_ray instruction is at lines {}".format(lexyacc.trace_ray_instruction[shader_id]))
+
+                for line in lexyacc.trace_ray_instruction[shader_id]:
+                    trace_ray_data = y[line]
+                    for i in range(len(x) - 1):
+                        if trace_ray_data[i] > 0:
+                            print("trace_ray ({line}) from {start} to {end}".format(line=line, start=x[i], end=x[i+1]))
+                            self.plot.fill_between([i-0.5, i+0.5], line-1, line, color="green", zorder=5)
+            except KeyError:
+                print("No trace_ray instruction found!")
+            except IndexError:
+                print("No trace_ray instruction found!")
+
         interpolation = 'nearest'
         norm = plotFormat.norm
-        im = self.plot.imshow(y, cmap = cmap, interpolation = interpolation, aspect = 'auto', norm = norm )
+        im = self.plot.imshow(y, cmap = cmap, interpolation = interpolation, aspect = 'auto', norm = norm, zorder=0 )
         # tmp = im.get_axes().get_position().get_points()
         tmp = im.get_window_extent().get_points()
 

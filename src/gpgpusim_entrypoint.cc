@@ -147,6 +147,7 @@ void *gpgpu_sim_thread_concurrent(void *ctx_ptr) {
       ctx->the_gpgpusim->g_the_gpu->print_stats();
       ctx->the_gpgpusim->g_the_gpu->update_stats();
       ctx->print_simulation_time();
+      ctx->the_gpgpusim->g_the_gpu->visualizer_print_traceray();
     }
     ctx->the_gpgpusim->g_stream_manager->register_finished_kernel();
     pthread_mutex_lock(&(ctx->the_gpgpusim->g_sim_lock));

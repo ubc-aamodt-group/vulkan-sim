@@ -163,6 +163,7 @@ class cuda_sim {
   unsigned g_tot_nodes_per_ray;
   unsigned g_max_tree_depth;
   unsigned g_total_shaders;
+  std::vector<std::pair<unsigned, unsigned> > g_traceray_instructions;
   
   char *cdp_latency_str;
   int g_ptx_kernel_count;  // used for classification stat collection purposes

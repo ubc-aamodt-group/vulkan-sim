@@ -44,6 +44,33 @@
 
 static void time_vector_print_interval2gzfile(gzFile outfile);
 
+void gpgpu_sim::visualizer_print_traceray() {
+  gzFile visualizer_file = NULL;  // gzFile is basically a pointer to a struct,
+                                // so it is fine to initialize it as NULL
+  if (!m_config.g_visualizer_enabled) return;
+
+  visualizer_file = gzopen(m_config.g_visualizer_filename, "a");
+  if (visualizer_file == NULL) {
+    printf("error - could not open visualizer trace file.\n");
+    exit(1);
+  }
+  gzsetparams(visualizer_file, m_config.g_visualizer_zlevel,
+              Z_DEFAULT_STRATEGY);
+
+  for (unsigned s=0; s<gpgpu_ctx->func_sim->g_total_shaders; s++) {
+    gzprintf(visualizer_file, "trace_ray: %d ", s);
+    for (auto it=gpgpu_ctx->func_sim->g_traceray_instructions.begin(); it!=gpgpu_ctx->func_sim->g_traceray_instructions.end(); it++) {
+      unsigned shader_id = it->first;
+      if (shader_id == s) {
+        unsigned pc = it->second;
+        gzprintf(visualizer_file, "%d ", pc);
+      }
+    }
+    gzprintf(visualizer_file, "\n");
+    printf("Shader %d trace_ray added.\n", s);
+  }
+  gzclose(visualizer_file);
+}
 void gpgpu_sim::visualizer_printstat() {
   gzFile visualizer_file = NULL;  // gzFile is basically a pointer to a struct,
                                   // so it is fine to initialize it as NULL

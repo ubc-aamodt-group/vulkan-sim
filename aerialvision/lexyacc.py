@@ -64,6 +64,10 @@ import variableclasses as vc
 
 global skipCFLOGParsing
 skipCFLOGParsing = 0
+global trace_ray_instruction
+trace_ray_instruction = {}
+global num_shader
+num_shader = 0
 
 userSettingPath = os.path.join(os.environ['HOME'], '.gpgpu_sim', 'aerialvision')
 
@@ -143,6 +147,8 @@ def parseMe(filename):
 
     # Creating holder for CFLOG
     CFLOG = {}
+
+    trace_ray = []
     
     # Declaring the properties of supported stats in a single dictionary
     # FORMAT: <stat name in GUI>:vc.variable(<Stat Name in Log>, <type>, <reset@kernelstart>, [datatype]) 
@@ -197,7 +203,8 @@ def parseMe(filename):
         'cacheMissRate_textureL1_noMgHt':vc.variable('cachemissrate_texturel1_nomght',     2, 0, 'impVec', float),
         'cacheMissRate_constL1_noMgHt'  :vc.variable('cachemissrate_constl1_nomght',       2, 0, 'impVec', float),
         'shdrctacount': vc.variable('shdrctacount', 2, 0, 'impVec'),
-        'CFLOG' : CFLOG 
+        'CFLOG' : CFLOG,
+        'trace_ray' : trace_ray
     }
 
     # import user defined stat variables from variables.txt - adds on top of the defaults
@@ -208,6 +215,8 @@ def parseMe(filename):
     for name, var in variables.iteritems():
         if (name == 'CFLOG'):
             continue;
+        elif (name == 'trace_ray'):
+            continue
         if (var.lookup_tag != ''):
             stat_lookuptable[var.lookup_tag] = var 
         else:
@@ -290,6 +299,16 @@ def parseMe(filename):
             MaxPC = max(pc)
             CFLOG[p[1]].maxPC = max(MaxPC, CFLOG[p[1]].maxPC)
         
+        elif "trace_ray" in lookup_input:
+            global trace_ray_instruction
+            global num_shader
+            if p[2].split(" ")[0] not in trace_ray_instruction:
+                num_shader += 1
+            if len(p[2].split(" ")) > 1:
+                lines = [int(l) for l in p[2].split(" ")[1:]]
+                shader = p[2].split(" ")[0]
+                trace_ray_instruction[shader] = lines
+                print("trace_ray for shader {s} are at lines {l}".format(s=shader, l=lines))
         else:
             pass
         

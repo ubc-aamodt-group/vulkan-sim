@@ -576,6 +576,8 @@ def startup(res, TEFILES):
                 continue
             if variables == 'EXTVARS':
                 continue
+            if variables == "trace_ray":
+                continue
             if checkEmpty(vars[files][variables].data) == 0:
                 markForDel[files].append(variables)
 

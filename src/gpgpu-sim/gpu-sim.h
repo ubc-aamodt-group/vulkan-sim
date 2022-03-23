@@ -673,6 +673,8 @@ class gpgpu_sim : public gpgpu_t {
   bool has_special_cache_config(std::string kernel_name);
   void change_cache_config(FuncCache cache_config);
   void set_cache_config(std::string kernel_name);
+  
+  void visualizer_print_traceray();
 
   // Jin: functional simulation for CDP
  private:

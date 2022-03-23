@@ -1078,6 +1078,14 @@ void ptx_instruction::pre_decode() {
       break;
   }
 
+  if (get_opcode() == TRACE_RAY_OP) {
+    unsigned shader_id = 0;
+    printf("trace_ray instruction found at PC %d (line %d,", pc, GPGPU_Context()->translate_pc_to_ptxlineno(pc, shader_id));
+    printf(" shader %d)!\n", shader_id);
+    unsigned line = GPGPU_Context()->translate_pc_to_ptxlineno(pc, shader_id);
+    gpgpu_ctx->func_sim->g_traceray_instructions.push_back(std::pair<unsigned, unsigned>(shader_id, line));
+  }
+
   switch (m_cache_option) {
     case CA_OPTION:
       cache_op = CACHE_ALL;
