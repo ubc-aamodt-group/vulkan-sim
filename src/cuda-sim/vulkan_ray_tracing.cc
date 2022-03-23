@@ -1375,8 +1375,8 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
 
     Pixel pixel = get_interpolated_pixel(image_view, sampler, x, y, transactions);
 
-    for(auto transaction : transactions)
-        transaction.type = ImageTransactionType::TEXTURE_LOAD;
+    for(int i = 0; i < transactions.size(); i++)
+        transactions[i].type = ImageTransactionType::TEXTURE_LOAD;
     
     c0 = pixel.c0;
     c1 = pixel.c1;
