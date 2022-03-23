@@ -1284,6 +1284,8 @@ class rt_unit : public pipelined_simd_unit {
         rt_unit(mem_fetch_interface *icnt,
                 shader_core_mem_fetch_allocator *mf_allocator,
                 shader_core_ctx *core,
+                opndcoll_rfu_t *operand_collector,
+                Scoreboard *scoreboard, 
                 const shader_core_config *config,
                 shader_core_stats *stats,
                 unsigned sid, unsigned tpc);
@@ -1293,6 +1295,7 @@ class rt_unit : public pipelined_simd_unit {
         virtual void issue(register_set &source_reg);
         virtual void cycle();
         void print(FILE *fout) const;
+        virtual bool stallable() const { return true; }
         
         void fill(mem_fetch *mf);
         // void flush();
@@ -1334,6 +1337,9 @@ class rt_unit : public pipelined_simd_unit {
       read_only_cache *m_L0_complet;
       read_only_cache *m_L0_tri;
       l1_cache *L1D;
+
+      opndcoll_rfu_t *m_operand_collector;
+      Scoreboard *m_scoreboard;
 
       std::deque<std::pair<unsigned, new_addr_type> > mem_store_q;
       

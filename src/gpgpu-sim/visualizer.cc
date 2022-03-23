@@ -220,7 +220,11 @@ class my_time_vector {
     while (iter != ld_time_map.end()) {
       last_update = 0;
       first = -1;
-      assert(iter->second[IN_SHADER_FETCHED]);
+      if (!iter->second[IN_SHADER_FETCHED]) {
+        // this request is not done yet skip it!
+        ++iter;
+        continue;
+      }
 
       // Find the first status
       while (!last_update) {

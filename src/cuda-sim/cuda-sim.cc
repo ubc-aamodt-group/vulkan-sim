@@ -1060,15 +1060,18 @@ void ptx_instruction::pre_decode() {
   }
 
   bool has_dst = false;
+  unsigned op_classification;
 
   switch (get_opcode()) {
 #define OP_DEF(OP, FUNC, STR, DST, CLASSIFICATION) \
   case OP:                                         \
     has_dst = (DST != 0);                          \
+    op_classification = CLASSIFICATION;            \
     break;
 #define OP_W_DEF(OP, FUNC, STR, DST, CLASSIFICATION) \
   case OP:                                           \
     has_dst = (DST != 0);                            \
+    op_classification = CLASSIFICATION;            \
     break;
 #include "opcodes.def"
 #undef OP_DEF
@@ -1127,63 +1130,70 @@ void ptx_instruction::pre_decode() {
 
   set_opcode_and_latency();
   set_bar_type();
-  // Get register operands
-  int n = 0, m = 0;
-  ptx_instruction::const_iterator opr = op_iter_begin();
-  for (; opr != op_iter_end(); opr++, n++) {  // process operands
-    const operand_info &o = *opr;
-    if (has_dst && n == 0) {
-      // Do not set the null register "_" as an architectural register
-      if (o.is_reg() && !o.is_non_arch_reg()) {
-        out[0] = o.reg_num();
-        arch_reg.dst[0] = o.arch_reg_num();
-      } else if (o.is_vector()) {
-        is_vectorin = 1;
-        unsigned num_elem = o.get_vect_nelem();
-        if (num_elem >= 1) out[0] = o.reg1_num();
-        if (num_elem >= 2) out[1] = o.reg2_num();
-        if (num_elem >= 3) out[2] = o.reg3_num();
-        if (num_elem >= 4) out[3] = o.reg4_num();
-        if (num_elem >= 5) out[4] = o.reg5_num();
-        if (num_elem >= 6) out[5] = o.reg6_num();
-        if (num_elem >= 7) out[6] = o.reg7_num();
-        if (num_elem >= 8) out[7] = o.reg8_num();
-        for (int i = 0; i < num_elem; i++) arch_reg.dst[i] = o.arch_reg_num(i);
-      }
-    } else {
-      if (o.is_reg() && !o.is_non_arch_reg()) {
-        int reg_num = o.reg_num();
-        arch_reg.src[m] = o.arch_reg_num();
-        switch (m) {
-          case 0:
-            in[0] = reg_num;
-            break;
-          case 1:
-            in[1] = reg_num;
-            break;
-          case 2:
-            in[2] = reg_num;
-            break;
-          default:
-            break;
+
+  // Use special function for all the ray tracing instructions
+  if (op_classification >= 11) {
+    set_input_output_registers();
+  }
+  else {
+    // Get register operands
+    int n = 0, m = 0;
+    ptx_instruction::const_iterator opr = op_iter_begin();
+    for (; opr != op_iter_end(); opr++, n++) {  // process operands
+      const operand_info &o = *opr;
+      if (has_dst && n == 0) {
+        // Do not set the null register "_" as an architectural register
+        if (o.is_reg() && !o.is_non_arch_reg()) {
+          out[0] = o.reg_num();
+          arch_reg.dst[0] = o.arch_reg_num();
+        } else if (o.is_vector()) {
+          is_vectorin = 1;
+          unsigned num_elem = o.get_vect_nelem();
+          if (num_elem >= 1) out[0] = o.reg1_num();
+          if (num_elem >= 2) out[1] = o.reg2_num();
+          if (num_elem >= 3) out[2] = o.reg3_num();
+          if (num_elem >= 4) out[3] = o.reg4_num();
+          if (num_elem >= 5) out[4] = o.reg5_num();
+          if (num_elem >= 6) out[5] = o.reg6_num();
+          if (num_elem >= 7) out[6] = o.reg7_num();
+          if (num_elem >= 8) out[7] = o.reg8_num();
+          for (int i = 0; i < num_elem; i++) arch_reg.dst[i] = o.arch_reg_num(i);
         }
-        m++;
-      } else if (o.is_vector()) {
-        // assert(m == 0); //only support 1 vector operand (for textures) right
-        // now
-        is_vectorout = 1;
-        unsigned num_elem = o.get_vect_nelem();
-        if (num_elem >= 1) in[m + 0] = o.reg1_num();
-        if (num_elem >= 2) in[m + 1] = o.reg2_num();
-        if (num_elem >= 3) in[m + 2] = o.reg3_num();
-        if (num_elem >= 4) in[m + 3] = o.reg4_num();
-        if (num_elem >= 5) in[m + 4] = o.reg5_num();
-        if (num_elem >= 6) in[m + 5] = o.reg6_num();
-        if (num_elem >= 7) in[m + 6] = o.reg7_num();
-        if (num_elem >= 8) in[m + 7] = o.reg8_num();
-        for (int i = 0; i < num_elem; i++)
-          arch_reg.src[m + i] = o.arch_reg_num(i);
-        m += num_elem;
+      } else {
+        if (o.is_reg() && !o.is_non_arch_reg()) {
+          int reg_num = o.reg_num();
+          arch_reg.src[m] = o.arch_reg_num();
+          switch (m) {
+            case 0:
+              in[0] = reg_num;
+              break;
+            case 1:
+              in[1] = reg_num;
+              break;
+            case 2:
+              in[2] = reg_num;
+              break;
+            default:
+              break;
+          }
+          m++;
+        } else if (o.is_vector()) {
+          // assert(m == 0); //only support 1 vector operand (for textures) right
+          // now
+          is_vectorout = 1;
+          unsigned num_elem = o.get_vect_nelem();
+          if (num_elem >= 1) in[m + 0] = o.reg1_num();
+          if (num_elem >= 2) in[m + 1] = o.reg2_num();
+          if (num_elem >= 3) in[m + 2] = o.reg3_num();
+          if (num_elem >= 4) in[m + 3] = o.reg4_num();
+          if (num_elem >= 5) in[m + 4] = o.reg5_num();
+          if (num_elem >= 6) in[m + 5] = o.reg6_num();
+          if (num_elem >= 7) in[m + 6] = o.reg7_num();
+          if (num_elem >= 8) in[m + 7] = o.reg8_num();
+          for (int i = 0; i < num_elem; i++)
+            arch_reg.src[m + i] = o.arch_reg_num(i);
+          m += num_elem;
+        }
       }
     }
   }
@@ -1207,7 +1217,7 @@ void ptx_instruction::pre_decode() {
   //  and maximum of two address registers for one memory operand.
   if (has_memory_read() || has_memory_write()) {
     ptx_instruction::const_iterator op = op_iter_begin();
-    for (; op != op_iter_end(); op++, n++) {  // process operands
+    for (; op != op_iter_end(); op++) {  // process operands
       const operand_info &o = *op;
 
       if (o.is_memory_operand()) {
@@ -1255,6 +1265,83 @@ void ptx_instruction::pre_decode() {
   reconvergence_pc = gpgpu_ctx->func_sim->get_converge_point(pc);
 
   m_decoded = true;
+}
+
+void ptx_instruction::set_input_output_registers() {
+  unsigned num_operands = get_num_operands();
+  std::list<unsigned> operand_classification;
+  switch(m_opcode) {
+    case TRACE_RAY_OP:
+      operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2};
+      break;
+    case LD_RAY_LAUNCH_SIZE_OP:
+      operand_classification = {1, 1, 1};
+      break;
+    case LOAD_RAY_INSTANCE_CUSTOM_INDEX_OP:
+      operand_classification = {2};
+      break;
+    case LOAD_RAY_WORLD_TO_OBJECT_OP:
+    case LOAD_RAY_OBJECT_TO_WORLD_OP:
+      operand_classification = {2, 2, 2, 1};
+      break;
+    case LOAD_RAY_WORLD_DIRECTION_OP:
+    case LOAD_RAY_WORLD_ORIGIN_OP:
+      operand_classification = {2, 2, 2};
+      break;
+    case LOAD_RAY_T_MAX_OP:
+    case LOAD_RAY_T_MIN_OP:
+      operand_classification = {2};
+      break;
+    // case LD_VK_DESC_OP:
+    case RT_ALLOC_MEM_OP:
+    case GET_ELEMENT_32_OP:
+    case SET_ELEMENT_32_OP:
+      operand_classification = {2, 1, 1};
+      break;
+    case WRAP_32_4_OP:
+      operand_classification = {2, 1, 1, 1, 1};
+      break;
+    case UNWRAP_32_4_OP:
+      operand_classification = {2, 2, 2, 2, 1};
+      break;
+    case SHADER_CLOCK_OP:
+      operand_classification = {2, 2};
+      break;
+    case COPYSIGNF_OP:
+      operand_classification = {2, 1};
+      break;
+  }
+
+  if (operand_classification.size() > 0) {
+    assert(num_operands == operand_classification.size());
+    unsigned in_index = 0;
+    unsigned out_index = 0;
+    ptx_instruction::const_iterator opr = op_iter_begin();
+    for (; opr != op_iter_end(); opr++) {  // process operands
+      const operand_info &o = *opr;
+      
+      if (!o.is_reg()) continue;
+
+      int reg_num = o.reg_num();
+      if (operand_classification.front() == 1) {
+        arch_reg.src[in_index] = reg_num;
+        in[in_index] = reg_num;
+        in_index++;
+      }
+      else if (operand_classification.front() == 2) {
+        arch_reg.dst[out_index] = reg_num;
+        out[out_index] = reg_num;
+        out_index++;
+      }
+      else {
+        assert(0);
+      }
+      operand_classification.pop_front();
+    }
+  }
+  else {
+    printf("Operand information not set.\n");
+  }
 }
 
 void function_info::add_param_name_type_size(unsigned index, std::string name,

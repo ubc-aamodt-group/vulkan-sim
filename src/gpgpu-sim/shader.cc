@@ -431,7 +431,7 @@ void shader_core_ctx::create_exec_pipeline() {
   m_dispatch_port.push_back(ID_OC_MEM);
   m_issue_port.push_back(OC_EX_MEM);
   
-  m_rt_unit = new rt_unit(m_icnt, m_mem_fetch_allocator, this, m_config, m_stats, m_sid, m_tpc);
+  m_rt_unit = new rt_unit(m_icnt, m_mem_fetch_allocator, this, &m_operand_collector, m_scoreboard, m_config, m_stats, m_sid, m_tpc);
   m_fu.push_back(m_rt_unit);
   m_dispatch_port.push_back(ID_OC_RT);
   m_issue_port.push_back(OC_EX_RT);
@@ -2720,6 +2720,8 @@ void pipelined_simd_unit::issue(register_set &source_reg) {
 rt_unit::rt_unit(mem_fetch_interface *icnt,
                      shader_core_mem_fetch_allocator *mf_allocator,
                      shader_core_ctx *core,
+                     opndcoll_rfu_t *operand_collector,
+                     Scoreboard *scoreboard, 
                      const shader_core_config *config,
                      shader_core_stats *stats,
                      unsigned sid, unsigned tpc)
@@ -2729,8 +2731,8 @@ rt_unit::rt_unit(mem_fetch_interface *icnt,
   m_icnt = icnt;
   m_mf_allocator = mf_allocator;  
   m_core = core;
-  // m_operand_collector = operand_collector;
-  // m_scoreboard = scoreboard;
+  m_operand_collector = operand_collector;
+  m_scoreboard = scoreboard;
   m_stats = stats;
   m_sid = sid;
   m_tpc = tpc;
@@ -2950,42 +2952,45 @@ void rt_unit::cycle() {
     // A completed warp has no more memory accesses and all the intersection delays are complete and has no pending writes
     if (it->second.rt_mem_accesses_empty() && it->second.rt_intersection_delay_done() && !it->second.has_pending_writes()) {
       RT_DPRINTF("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, it->second.warp_id(), it->first);
-      m_core->warp_inst_complete(it->second);
-      m_core->dec_inst_in_pipeline(it->second.warp_id());
-      
-      // Track number of warps in RT core
-      n_warps--;
-      assert(n_warps >= 0 && n_warps <= m_config->m_rt_max_warps);
-      
-      // Track completed warp uid
-      completed_warp_uid = it->first;
-      
-      // Track warp latency in RT unit
-      unsigned long long start_cycle = it->second.get_start_cycle();
-      unsigned long long total_cycles = current_cycle - start_cycle;
-      m_stats->rt_total_warp_latency += total_cycles;
-      m_stats->rt_total_warps++;
-      
-      // Track thread latency in RT unit
-      unsigned long long total_thread_cycles = 0;
-      for (unsigned i=0; i<m_config->warp_size; i++) {
-        if (it->second.thread_active(i)) {
-          unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
-          assert(end_cycle > 0);
-          int n_total_cycles = end_cycle - start_cycle;
-          assert(n_total_cycles >= 0);
-          total_thread_cycles += n_total_cycles;
-          m_stats->add_rt_latency_dist(it->second.get_latency_dist(i));
+      if (m_operand_collector->writeback(it->second)) {
+        m_scoreboard->releaseRegisters(&it->second);
+        m_core->warp_inst_complete(it->second);
+        m_core->dec_inst_in_pipeline(it->second.warp_id());
+        
+        // Track number of warps in RT core
+        n_warps--;
+        assert(n_warps >= 0 && n_warps <= m_config->m_rt_max_warps);
+        
+        // Track completed warp uid
+        completed_warp_uid = it->first;
+        
+        // Track warp latency in RT unit
+        unsigned long long start_cycle = it->second.get_start_cycle();
+        unsigned long long total_cycles = current_cycle - start_cycle;
+        m_stats->rt_total_warp_latency += total_cycles;
+        m_stats->rt_total_warps++;
+        
+        // Track thread latency in RT unit
+        unsigned long long total_thread_cycles = 0;
+        for (unsigned i=0; i<m_config->warp_size; i++) {
+          if (it->second.thread_active(i)) {
+            unsigned long long end_cycle = it->second.get_thread_end_cycle(i);
+            assert(end_cycle > 0);
+            int n_total_cycles = end_cycle - start_cycle;
+            assert(n_total_cycles >= 0);
+            total_thread_cycles += n_total_cycles;
+            m_stats->add_rt_latency_dist(it->second.get_latency_dist(i));
+          }
         }
-      }
-      float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
-      m_stats->rt_total_thread_latency += avg_thread_cycles;
+        float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
+        m_stats->rt_total_thread_latency += avg_thread_cycles;
 
-      float rt_warp_occupancy = (float)total_thread_cycles / (m_config->warp_size * total_cycles);
-      m_stats->rt_total_warp_occupancy += rt_warp_occupancy;
-      
-      // Complete max 1 warp per cycle (?)
-      break;
+        float rt_warp_occupancy = (float)total_thread_cycles / (m_config->warp_size * total_cycles);
+        m_stats->rt_total_warp_occupancy += rt_warp_occupancy;
+        
+        // Complete max 1 warp per cycle (?)
+        break;
+      }
     }
   }
   
@@ -3113,6 +3118,10 @@ void rt_unit::memory_cycle(warp_inst_t &inst) {
     // If waiting for responses, don't send new requests
     if (!m_config->m_rt_coherence_engine && inst.is_stalled()) return;
     
+    // If coherence engine is stalled, don't send new request
+    // TODO: Fix the thread intersection latencies so this doesn't happen
+    if (m_config->m_rt_coherence_engine && !m_ray_coherence_engine->active()) return;
+
     // Continue to next step
     RT_DPRINTF("Shader %d: Processing next memory access\n", m_sid);
     mf = process_memory_access_queue(inst);
@@ -3640,9 +3649,11 @@ void ldst_unit::writeback() {
       case 4:
         if (m_L1D && m_L1D->access_ready()) {
           mem_fetch *mf = m_L1D->next_access();
-          m_next_wb = mf->get_inst();
-          delete mf;
-          serviced_client = next_client;
+          if (!mf->israytrace()) {
+            m_next_wb = mf->get_inst();
+            delete mf;
+            serviced_client = next_client;
+          }
         }
         break;
       default:

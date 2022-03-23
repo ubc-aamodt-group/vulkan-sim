@@ -1312,6 +1312,7 @@ class ptx_instruction : public warp_inst_t {
   unsigned m_inst_size;   // bytes
 
   virtual void pre_decode();
+  void set_input_output_registers();
   friend class function_info;
   // backward pointer
   class gpgpu_context *gpgpu_ctx;

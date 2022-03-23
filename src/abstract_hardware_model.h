@@ -1164,9 +1164,9 @@ class inst_t {
   address_type reconvergence_pc;  // -1 => not a branch, -2 => use function
                                   // return address
 
-  unsigned out[8];
+  unsigned out[MAX_OUTPUT_VALUES];
   unsigned outcount;
-  unsigned in[24];
+  unsigned in[MAX_INPUT_VALUES];
   unsigned incount;
   unsigned char is_vectorin;
   unsigned char is_vectorout;
