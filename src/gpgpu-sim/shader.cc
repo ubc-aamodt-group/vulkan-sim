@@ -997,10 +997,32 @@ void shader_core_stats::visualizer_print(gzFile visualizer_file) {
   for (unsigned i = 0; i < m_config->num_shader(); i++)
     gzprintf(visualizer_file, "%u ", rt_nwarps[i]);
   gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "rt_nthreads:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", rt_nthreads[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "rt_naccesses:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", rt_naccesses[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "rt_max_coalesce:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", rt_max_coalesce[i]);
+  gzprintf(visualizer_file, "\n");
+  rt_mshr_size_total = 0;
+  gzprintf(visualizer_file, "rt_mshr_size:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++) {
+    gzprintf(visualizer_file, "%u ", rt_mshr_size[i]);
+    rt_mshr_size_total += rt_mshr_size[i];
+  }
+  gzprintf(visualizer_file, "\n");
   gzprintf(visualizer_file, "rt_nthreads_intersection:  ");
   for (unsigned i = 0; i < m_config->num_shader(); i++)
     gzprintf(visualizer_file, "%u ", rt_nthreads_intersection[i]);
   gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "rt_mem_requests: %u\n", rt_mem_requests);
+  gzprintf(visualizer_file, "rt_mshr_size_total: %u\n", rt_mshr_size_total);
+  rt_mem_requests = 0;
 }
 
 #define PROGRAM_MEM_START                                      \
@@ -2825,10 +2847,14 @@ void rt_unit::cycle() {
     m_stats->rt_total_cycles_sum++;
   }
   
-  // Cycle intersection tests
+  // Cycle intersection tests + get stats
   unsigned n_threads = 0;
+  unsigned active_threads = 0;
+  std::map<new_addr_type, unsigned> addr_set;
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); ++it) {
     n_threads += (it->second).dec_thread_latency(mem_store_q);
+    active_threads += (it->second).get_rt_active_threads();
+    (it->second).num_unique_mem_access(addr_set);
   }
   if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->dec_thread_latency();
   // Number of threads currently completing intersection tests are the number of intersection operations this cycle
@@ -2846,7 +2872,17 @@ void rt_unit::cycle() {
 
   // AerialVision stats
   m_stats->rt_nwarps[m_sid] = n_warps;
+  m_stats->rt_nthreads[m_sid] = active_threads;
+  m_stats->rt_naccesses[m_sid] = addr_set.size();
   m_stats->rt_nthreads_intersection[m_sid] = n_threads;
+  unsigned max = 0;
+  for (auto it=addr_set.begin(); it!=addr_set.end(); it++) {
+    if (it->second > max) {
+      max = it->second;
+    }
+  }
+  m_stats->rt_max_coalesce[m_sid] = max;
+  m_stats->rt_mshr_size[m_sid] = L1D->num_mshr_entries();
   
   // Check memory request responses
   if (!m_response_fifo.empty()) {
@@ -3336,6 +3372,8 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
   else {
     RT_DPRINTF("Shader %d: Sending cache request for 0x%x\n", m_sid, mf->get_uncoalesced_addr());
     
+    m_stats->rt_mem_requests++;
+
     // Access cache
     status = cache->access(
       mf->get_addr(), mf,

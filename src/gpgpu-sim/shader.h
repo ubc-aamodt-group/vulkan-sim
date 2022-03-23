@@ -1833,7 +1833,13 @@ struct shader_core_stats_pod {
   
   // Ray tracing aerialvision stats
   unsigned *rt_nwarps;
+  unsigned *rt_nthreads;
+  unsigned *rt_naccesses;
   unsigned *rt_nthreads_intersection;
+  unsigned *rt_max_coalesce;
+  unsigned *rt_mshr_size;
+  unsigned rt_mshr_size_total;
+  unsigned rt_mem_requests;
   
   unsigned gpgpu_n_local_load_insn;
   unsigned gpgpu_n_local_store_insn;
@@ -2018,6 +2024,10 @@ class shader_core_stats : public shader_core_stats_pod {
     rt_mem_store_q_cycles = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_total_cycles = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
     rt_nwarps = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    rt_nthreads = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    rt_naccesses = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    rt_max_coalesce = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    rt_mshr_size = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_nthreads_intersection = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_warp_dist = (unsigned *)calloc(11, sizeof(unsigned));
     empty_warp_dist = (unsigned *)calloc(11, sizeof(unsigned));

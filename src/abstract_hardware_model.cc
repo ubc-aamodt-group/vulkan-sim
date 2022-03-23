@@ -895,6 +895,15 @@ bool warp_inst_t::rt_mem_accesses_empty() {
   return empty;
 }
 
+void warp_inst_t::num_unique_mem_access(std::map<new_addr_type, unsigned> &addr_set) {
+  for (unsigned i = 0; i < m_config->warp_size; i++) {
+    if (!m_per_scalar_thread[i].RT_mem_accesses->empty()) {
+      RTMemoryTransactionRecord record = m_per_scalar_thread[i].RT_mem_accesses->front();
+      addr_set[record.address]++;
+    }
+  }
+}
+
 bool warp_inst_t::rt_intersection_delay_done() { 
   bool done = true;
   for (unsigned i = 0; i < m_config->warp_size; i++) {

@@ -1461,6 +1461,7 @@ class warp_inst_t : public inst_t {
   
   void update_next_rt_accesses();
   RTMemoryTransactionRecord get_next_rt_mem_transaction();
+  void num_unique_mem_access(std::map<new_addr_type, unsigned> &addr_set);
   unsigned process_returned_mem_access(const mem_fetch *mf);
   bool process_returned_mem_access(const mem_fetch *mf, unsigned tid);
   bool process_returned_mem_access(bool &mem_record_done, unsigned tid, new_addr_type addr, new_addr_type uncoalesced_base_addr);

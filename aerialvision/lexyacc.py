@@ -153,7 +153,13 @@ def parseMe(filename):
     # Declaring the properties of supported stats in a single dictionary
     # FORMAT: <stat name in GUI>:vc.variable(<Stat Name in Log>, <type>, <reset@kernelstart>, [datatype]) 
     variables = {
+        'rt_mem_requests':vc.variable('globalinsncount', 1, 1, 'scalar'), 
+        'rt_mshr_size_total':vc.variable('globalinsncount', 1, 1, 'scalar'), 
         'rt_nwarps' :vc.variable('', 2, 0, "impVec"),
+        'rt_nthreads' :vc.variable('', 2, 0, "impVec"),
+        'rt_naccesses' :vc.variable('', 2, 0, "impVec"),
+        'rt_max_coalesce' :vc.variable('', 2, 0, "impVec"),
+        'rt_mshr_size' :vc.variable('', 2, 0, "impVec"),
         'rt_nthreads_intersection' :vc.variable('', 2, 0, "impVec"),
         'shaderInsn':vc.variable('shaderinsncount', 2, 0, 'impVec'), 
         'globalInsn':vc.variable('globalinsncount', 1, 1, 'scalar'), 
