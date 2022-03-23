@@ -991,9 +991,14 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     // CmdTraceRaysKHRID++;
     // if(CmdTraceRaysKHRID != 6)
     //     return;
+    // launch_width = 420;
+    // launch_height = 320;
+
 
     if(writeImageBinary && !imageFile.is_open())
         imageFile.open("image.binary", std::ios::out | std::ios::binary);
+    // else
+    //     return;
     // imageFile.open("image.txt", std::ios::out);
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
@@ -1083,6 +1088,9 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     grid->vulkan_metadata.miss_sbt = miss_sbt;
     grid->vulkan_metadata.hit_sbt = hit_sbt;
     grid->vulkan_metadata.callable_sbt = callable_sbt;
+    grid->vulkan_metadata.launch_width = launch_width;
+    grid->vulkan_metadata.launch_height = launch_height;
+    grid->vulkan_metadata.launch_depth = launch_depth;
     
     struct CUstream_st *stream = 0;
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
@@ -1422,7 +1430,7 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
 
     if(writeImageBinary)
     {
-        uint32_t image_width = thread->get_ntid().x * thread->get_nctaid().x;
+        uint32_t image_width = thread->get_kernel().vulkan_metadata.launch_width;
         uint32_t offset = 0;
         offset += gl_LaunchIDEXT_Y * image_width;
         offset += gl_LaunchIDEXT_X;
