@@ -58,7 +58,6 @@ struct param_t {
 #include "memory.h"
 
 using half_float::half;
-
 union ptx_reg_t {
   ptx_reg_t() {
     bits.ms = 0;
@@ -356,6 +355,8 @@ class ptx_thread_info {
   unsigned get_icount() const { return m_icount; }
   void set_valid() { m_valid = true; }
   addr_t last_eaddr() const { return m_last_effective_address; }
+  std::vector<addr_t> last_eaddrs() const { return m_last_effective_addresses; }
+  unsigned last_size() const { return m_last_effective_size; }
   memory_space_t last_space() const { return m_last_memory_space; }
   dram_callback_t last_callback() const { return m_last_dram_callback; }
   unsigned long long get_cta_uid() { return m_cta_info->get_sm_idx(); }
@@ -477,11 +478,15 @@ class ptx_thread_info {
   kernel_info_t &get_kernel() { return m_kernel; }
   
   void set_rt_transactions(std::vector<MemoryTransactionRecord> transactions) { RT_transactions = transactions; }
+  void set_txl_transactions(std::vector<ImageMemoryTransactionRecord> transaction);
+  void set_txl_transactions(ImageMemoryTransactionRecord transactions);
   void add_ray_intersect() { m_num_ray_intersections += 1; }
   void add_ray_properties(Ray ray) { m_ray = ray; }
 
  public:
   addr_t m_last_effective_address;
+  std::vector<addr_t> m_last_effective_addresses;
+  unsigned m_last_effective_size;
   bool m_branch_taken;
   memory_space_t m_last_memory_space;
   dram_callback_t m_last_dram_callback;

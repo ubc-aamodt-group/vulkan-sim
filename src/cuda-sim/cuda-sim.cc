@@ -773,6 +773,7 @@ void ptx_instruction::set_opcode_and_latency() {
       if (has_memory_write()) op = STORE_OP;
       break;
     case LD_OP:
+    case IMG_DEREF_LD_OP:
       op = LOAD_OP;
       break;
     case MMA_LD_OP:
@@ -782,6 +783,7 @@ void ptx_instruction::set_opcode_and_latency() {
       op = LOAD_OP;
       break;
     case ST_OP:
+    case IMG_DEREF_ST_OP:
       op = STORE_OP;
       break;
     case MMA_ST_OP:
@@ -794,6 +796,7 @@ void ptx_instruction::set_opcode_and_latency() {
       op = BRANCH_OP;
       break;
     case TEX_OP:
+    case TXL_OP:
       op = LOAD_OP;
       mem_op = TEX;
       break;
@@ -1054,8 +1057,11 @@ void ptx_instruction::pre_decode() {
   memory_op = no_memory_op;
   data_size = 0;
   if (has_memory_read() || has_memory_write()) {
-    unsigned to_type = get_type();
-    data_size = datatype2size(to_type);
+    // Data size is set later during execution for ray tracing instructions
+    if (m_opcode != IMG_DEREF_LD_OP && m_opcode != IMG_DEREF_ST_OP && m_opcode != TXL_OP) {
+      unsigned to_type = get_type();
+      data_size = datatype2size(to_type);
+    }
     memory_op = has_memory_read() ? memory_load : memory_store;
   }
 
@@ -1116,10 +1122,10 @@ void ptx_instruction::pre_decode() {
       break;
     default:
       // if( m_opcode == LD_OP || m_opcode == LDU_OP )
-      if (m_opcode == MMA_LD_OP || m_opcode == LD_OP || m_opcode == LDU_OP)
+      if (m_opcode == MMA_LD_OP || m_opcode == LD_OP || m_opcode == LDU_OP || m_opcode == IMG_DEREF_LD_OP)
         cache_op = CACHE_ALL;
       // else if( m_opcode == ST_OP )
-      else if (m_opcode == MMA_ST_OP || m_opcode == ST_OP)
+      else if (m_opcode == MMA_ST_OP || m_opcode == ST_OP || m_opcode == IMG_DEREF_ST_OP)
         cache_op = CACHE_WRITE_BACK;
       else if (m_opcode == ATOM_OP)
         cache_op = CACHE_GLOBAL;
@@ -1215,7 +1221,10 @@ void ptx_instruction::pre_decode() {
   // Get address registers inside memory operands.
   // Assuming only one memory operand per instruction,
   //  and maximum of two address registers for one memory operand.
-  if (has_memory_read() || has_memory_write()) {
+  if (m_opcode == TXL_OP || m_opcode == IMG_DEREF_LD_OP || m_opcode == IMG_DEREF_ST_OP) {
+    // TODO: Figure out memory operands (if any exist)
+  }
+  else if (has_memory_read() || has_memory_write()) {
     ptx_instruction::const_iterator op = op_iter_begin();
     for (; op != op_iter_end(); op++) {  // process operands
       const operand_info &o = *op;
@@ -1309,6 +1318,16 @@ void ptx_instruction::set_input_output_registers() {
       break;
     case COPYSIGNF_OP:
       operand_classification = {2, 1};
+      break;
+    case TXL_OP:
+      operand_classification = {1, 1, 2, 2, 2, 2, 1, 1, 1};
+      break;
+    case IMG_DEREF_LD_OP:
+      operand_classification = {1, 2, 2, 2, 2, 1, 1};
+      break;
+    case IMG_DEREF_ST_OP:
+      // TODO: Operands need to be confirmed
+      operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
       break;
   }
 
@@ -1958,7 +1977,8 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
     _memory_op_t insn_memory_op = no_memory_op;
     unsigned insn_data_size = 0;
     if ((pI->has_memory_read() || pI->has_memory_write())) {
-      if (!((inst_opcode == MMA_LD_OP || inst_opcode == MMA_ST_OP))) {
+      if (!((inst_opcode == MMA_LD_OP || inst_opcode == MMA_ST_OP ||
+              inst_opcode == TXL_OP || inst_opcode == IMG_DEREF_LD_OP || inst_opcode == IMG_DEREF_ST_OP))) {
         insn_memaddr = last_eaddr();
         insn_space = last_space();
         unsigned to_type = pI->get_type();
@@ -1988,6 +2008,33 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
       insn_data_size = get_tex_datasize(
           pI,
           this);  // texture obtain its data granularity from the texture info
+    }
+
+    else if (pI->get_opcode() == TXL_OP) {
+      TXL_DPRINTF("TXL_OP reached.\n");
+      inst.set_addr(lane_id, last_eaddrs());
+      insn_space.set_type(tex_space);
+      inst.space = insn_space;
+      insn_data_size = last_size();
+      inst.data_size = insn_data_size;
+    }
+
+    else if (pI->get_opcode() == IMG_DEREF_ST_OP) {
+      TXL_DPRINTF("IMG_DEREF_ST_OP reached.\n");
+      inst.set_addr(lane_id, last_eaddr());
+      insn_space.set_type(global_space);
+      inst.space = insn_space;
+      insn_data_size = last_size();
+      inst.data_size = insn_data_size;
+    }
+
+    else if (pI->get_opcode() == IMG_DEREF_LD_OP) {
+      TXL_DPRINTF("IMG_DEREF_LD_OP reached.\n");
+      inst.set_addr(lane_id, last_eaddr());
+      insn_space.set_type(global_space);
+      inst.space = insn_space;
+      insn_data_size = last_size();
+      inst.data_size = insn_data_size;
     }
 
     if (pI->get_opcode() == TRACE_RAY_OP) { 
@@ -2081,7 +2128,8 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
 
     // "Return values"
     if (!skip) {
-      if (!((inst_opcode == MMA_LD_OP || inst_opcode == MMA_ST_OP || inst_opcode == TRACE_RAY_OP))) {
+      if (!((inst_opcode == MMA_LD_OP || inst_opcode == MMA_ST_OP || inst_opcode == TRACE_RAY_OP ||
+              inst_opcode == TXL_OP || inst_opcode == IMG_DEREF_LD_OP || inst_opcode == IMG_DEREF_ST_OP))) {
         inst.space = insn_space;
         inst.set_addr(lane_id, insn_memaddr);
         inst.data_size = insn_data_size;  // simpleAtomicIntrinsics

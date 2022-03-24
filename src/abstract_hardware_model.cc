@@ -448,7 +448,9 @@ void warp_inst_t::generate_mem_accesses() {
       abort();
   }
 
+  // ONLY FOR CONST & TEX ACCESSES
   if (cache_block_size) {
+    TXL_DPRINTF("Generating memory accesses...\n");
     assert(m_accessq.empty());
     mem_access_byte_mask_t byte_mask;
     std::map<new_addr_type, active_mask_t>
@@ -456,12 +458,16 @@ void warp_inst_t::generate_mem_accesses() {
     std::map<new_addr_type, active_mask_t>::iterator a;
     for (unsigned thread = 0; thread < m_config->warp_size; thread++) {
       if (!active(thread)) continue;
-      new_addr_type addr = m_per_scalar_thread[thread].memreqaddr[0];
-      unsigned block_address = line_size_based_tag_func(addr, cache_block_size);
-      accesses[block_address].set(thread);
-      unsigned idx = addr - block_address;
-      for (unsigned i = 0; i < data_size; i++) byte_mask.set(idx + i);
+      for (unsigned thread_access=0; thread_access<MAX_ACCESSES_PER_INSN_PER_THREAD; thread_access++) {
+        new_addr_type addr = m_per_scalar_thread[thread].memreqaddr[thread_access];
+        if (addr == 0) break;
+        unsigned block_address = line_size_based_tag_func(addr, cache_block_size);
+        accesses[block_address].set(thread);
+        unsigned idx = addr - block_address;
+        for (unsigned i = 0; i < data_size; i++) byte_mask.set(idx + i);
+      }
     }
+    TXL_DPRINTF("%d accesses found, pushed to m_accessq.\n", accesses.size());
     for (a = accesses.begin(); a != accesses.end(); ++a)
       m_accessq.push_back(mem_access_t(
           access_type, a->first, cache_block_size, is_write, a->second,

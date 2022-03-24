@@ -1218,7 +1218,7 @@ class ptx_instruction : public warp_inst_t {
 
   bool has_memory_read() const {
     if (m_opcode == LD_OP || m_opcode == LDU_OP || m_opcode == TEX_OP ||
-        m_opcode == MMA_LD_OP)
+        m_opcode == MMA_LD_OP || m_opcode == TXL_OP || m_opcode == IMG_DEREF_LD_OP)
       return true;
     // Check PTXPlus operand type below
     // Source operands are memory operands
@@ -1230,7 +1230,7 @@ class ptx_instruction : public warp_inst_t {
     return false;
   }
   bool has_memory_write() const {
-    if (m_opcode == ST_OP || m_opcode == MMA_ST_OP) return true;
+    if (m_opcode == ST_OP || m_opcode == MMA_ST_OP || m_opcode == IMG_DEREF_ST_OP) return true;
     // Check PTXPlus operand type below
     // Destination operand is a memory operand
     ptx_instruction::const_iterator op = op_iter_begin();

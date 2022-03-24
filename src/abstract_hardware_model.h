@@ -235,6 +235,21 @@ struct dim3comp {
   }
 };
 
+enum class ImageTransactionType {
+    TEXTURE_LOAD,
+    IMAGE_LOAD,
+    IMAGE_STORE,
+};
+
+typedef struct ImageMemoryTransactionRecord {
+    ImageMemoryTransactionRecord(void* address, uint32_t size, ImageTransactionType type)
+    : address(address), size(size), type(type) {}
+    ImageMemoryTransactionRecord() {}
+    void* address;
+    uint32_t size;
+    ImageTransactionType type;
+} ImageMemoryTransactionRecord;
+
 typedef struct MemoryTransactionRecord {
     MemoryTransactionRecord(void* address, uint32_t size, TransactionType type)
     : address(address), size(size), type(type) {}
@@ -301,6 +316,14 @@ address_type line_size_based_tag_func(new_addr_type address, new_addr_type line_
 #define AWARE_DEBUG_PRINT 0
 #define AWARE_DPRINTF(...) \
    if(AWARE_DEBUG_PRINT) { \
+      printf(__VA_ARGS__); \
+      fflush(stdout); \
+   }
+
+#define TEX_CACHE_DEBUG_PRINT 0
+#define TXL_DPRINTF(...) \
+   if(TEX_CACHE_DEBUG_PRINT) { \
+      printf("TXL: "); \
       printf(__VA_ARGS__); \
       fflush(stdout); \
    }
@@ -1290,6 +1313,18 @@ class warp_inst_t : public inst_t {
     assert(num_addrs <= MAX_ACCESSES_PER_INSN_PER_THREAD);
     for (unsigned i = 0; i < num_addrs; i++)
       m_per_scalar_thread[n].memreqaddr[i] = addr[i];
+  }
+
+  void set_addr(unsigned n, const std::vector<addr_t> &addr) {
+    if (!m_per_scalar_thread_valid) {
+      m_per_scalar_thread.resize(m_config->warp_size);
+      m_per_scalar_thread_valid = true;
+    }
+    assert(addr.size() <= MAX_ACCESSES_PER_INSN_PER_THREAD);
+    for (unsigned i = 0; i < addr.size(); i++)
+      m_per_scalar_thread[n].memreqaddr[i] = (new_addr_type)addr[i];
+
+    TXL_DPRINTF("%d addresses added to memreqaddr\n", addr.size());
   }
 
   void print_m_accessq() {

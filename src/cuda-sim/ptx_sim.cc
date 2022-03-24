@@ -628,6 +628,31 @@ void ptx_thread_info::set_npc(const function_info *f) {
   m_symbol_table = m_func_info->get_symtab();
 }
 
+void ptx_thread_info::set_txl_transactions(std::vector<ImageMemoryTransactionRecord> transactions) {
+  // Anything beyond bilinear is not implemented
+  assert(transactions.size() <= 4);
+
+  std::set<addr_t> addr_set;
+  unsigned size = transactions[0].size;
+  // Merge transactions
+  for (auto it=transactions.begin(); it!=transactions.end(); it++) {
+    ImageMemoryTransactionRecord &record = *it;
+    assert(record.size == size);
+    addr_set.insert(addr_t(record.address));
+  }
+
+  TXL_DPRINTF("txl accesses merged into %d\n", addr_set.size());
+
+  m_last_effective_addresses.assign(addr_set.begin(), addr_set.end());
+  m_last_effective_size = size;
+}
+
+void ptx_thread_info::set_txl_transactions(ImageMemoryTransactionRecord transaction) {
+  // This should only be for IMG_DEREF_LD
+  m_last_effective_address = transaction.address;
+  m_last_effective_size = transaction.size;
+}
+
 void feature_not_implemented(const char *f) {
   printf("GPGPU-Sim: feature '%s' not supported\n", f);
   abort();

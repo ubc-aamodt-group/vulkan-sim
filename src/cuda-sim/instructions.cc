@@ -6876,7 +6876,7 @@ void load_vulkan_descriptor_impl(const ptx_instruction *pI, ptx_thread_info *thr
 }
 
 void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // printf("calling txl\n");
+  TXL_DPRINTF("Functional simulation of txl instruction.\n");
   
   ptx_reg_t src0_data, src1_data, src6_data, src7_data, src8_data, data;
   
@@ -6910,7 +6910,8 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
     desc = desc - offset_reg.u64;
   }
 
-  VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3);
+  std::vector<ImageMemoryTransactionRecord> transactions;
+  VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3, transactions);
 
   const operand_info &dst2 = pI->operand_lookup(2);
   const operand_info &dst3 = pI->operand_lookup(3);
@@ -6928,6 +6929,10 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   data.f32 = c3;
   thread->set_operand_value(dst5, data, F32_TYPE, thread, pI);
+
+  TXL_DPRINTF("Setting %d transactions in thread as tex_space\n", transactions.size());
+  thread->set_txl_transactions(transactions);
+  thread->m_last_memory_space = tex_space;
 }
 
 void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7250,7 +7255,8 @@ void image_deref_load_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   float c0, c1, c2, c3;
 
-  VulkanRayTracing::getTexture(desc, x, y, 0, c0, c1, c2, c3); // MRS_TODO: x and y are uint
+  std::vector<ImageMemoryTransactionRecord> transactions;
+  VulkanRayTracing::getTexture(desc, x, y, 0, c0, c1, c2, c3, transactions); // MRS_TODO: x and y are uint
 
   const operand_info &dst1 = pI->operand_lookup(1);
   const operand_info &dst2 = pI->operand_lookup(2);

@@ -1480,9 +1480,12 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     }
 }
 
-void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3, uint64_t launcher_offset)
+void VulkanRayTracing::getTexture(struct anv_descriptor *desc, 
+                                    float x, float y, float lod, 
+                                    float &c0, float &c1, float &c2, float &c3, 
+                                    std::vector<ImageMemoryTransactionRecord>& transactions,
+                                    uint64_t launcher_offset)
 {
-    std::vector<ImageMemoryTransactionRecord> transactions;
     Pixel pixel;
 
     if (use_external_launcher)
@@ -1504,7 +1507,7 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
         pixel = get_interpolated_pixel(image_view, sampler, x, y, transactions);
     }
 
-
+    TXL_DPRINTF("Setting transaction type to TEXTURE_LOAD\n");
     for(int i = 0; i < transactions.size(); i++)
         transactions[i].type = ImageTransactionType::TEXTURE_LOAD;
     
@@ -1587,6 +1590,8 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
         // imageFile << hitValue_X << ", " << hitValue_Y << ", " << hitValue_Z << ", " << hitValue_W << ")\n";
     }
 
+    TXL_DPRINTF("Setting transaction for image_store\n");
+    thread->set_txl_transactions(transaction);
 
     // // if(std::abs(hitValue_X - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.x) > 0.0001 || 
     // //     std::abs(hitValue_Y - rayDebugGPUData[gl_LaunchIDEXT_X][gl_LaunchIDEXT_Y].hitValue.y) > 0.0001 ||

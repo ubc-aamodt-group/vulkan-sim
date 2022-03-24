@@ -1548,6 +1548,7 @@ ptx_instruction::ptx_instruction(
                                 // ptxplus (g8x) inst
   }
   if (opcode == TEX_OP) m_space_spec = tex_space;
+  else if (opcode == TXL_OP) m_space_spec = tex_space;
 
   m_source_file = file ? file : "<unknown>";
   m_source_line = line;

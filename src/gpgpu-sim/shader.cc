@@ -2430,6 +2430,7 @@ bool ldst_unit::texture_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail,
                               mem_stage_access_type &fail_type) {
   if (inst.empty() || inst.space.get_type() != tex_space) return true;
   if (inst.active_count() == 0) return true;
+  TXL_DPRINTF("process_memory_access_queue for texture cache; warp %d uid: %d\n", inst.get_warp_id(), inst.get_uid());
   mem_stage_stall_type fail = process_memory_access_queue(m_L1T, inst);
   if (fail != NO_RC_FAIL) {
     rc_fail = fail;  // keep other fails if this didn't fail.

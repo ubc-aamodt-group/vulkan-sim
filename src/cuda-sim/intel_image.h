@@ -6,6 +6,7 @@
 #include <iostream>
 #include <assert.h>
 #include "astc_decomp.h"
+#include "../abstract_hardware_model.h"
 
 #include "anv_include.h"
 
@@ -38,21 +39,6 @@ typedef struct Pixel{
         float c3;
     };
 } Pixel;
-
-enum class ImageTransactionType {
-    TEXTURE_LOAD,
-    IMAGE_LOAD,
-    IMAGE_STORE,
-};
-
-typedef struct ImageMemoryTransactionRecord {
-    ImageMemoryTransactionRecord(void* address, uint32_t size, ImageTransactionType type)
-    : address(address), size(size), type(type) {}
-    ImageMemoryTransactionRecord() {}
-    void* address;
-    uint32_t size;
-    ImageTransactionType type;
-} ImageMemoryTransactionRecord;
 
 float SRGB_to_linearRGB(float s)
 {
@@ -252,6 +238,7 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
             ImageMemoryTransactionRecord transaction;
             Pixel pixel = load_image_pixel(image, x_int, y_int, 0, transaction);
             transactions.push_back(transaction);
+            TXL_DPRINTF("Adding (nearest) txl transaction: 0x%x\n", transaction.address);
             return pixel;
         }
         case VK_FILTER_LINEAR:
@@ -282,6 +269,7 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
                     
                     pixel[i][j] = load_image_pixel(image, xc, yc, 0, transaction, launcher_offset);
                     transactions.push_back(transaction);
+                    TXL_DPRINTF("Adding (linear) txl transaction: 0x%x\n", transaction.address);
                 }
             
             Pixel final_pixel(0, 0, 0, 0);

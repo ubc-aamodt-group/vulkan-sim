@@ -1701,6 +1701,7 @@ enum cache_request_status l2_cache::access(new_addr_type addr, mem_fetch *mf,
 enum cache_request_status tex_cache::access(new_addr_type addr, mem_fetch *mf,
                                             unsigned time,
                                             std::list<cache_event> &events) {
+  TXL_DPRINTF("Accessing texture cache for 0x%x\n", mf->get_addr())
   if (m_fragment_fifo.full() || m_request_fifo.full() || m_rob.full())
     return RESERVATION_FAIL;
 
