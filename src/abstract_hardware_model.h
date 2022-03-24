@@ -319,6 +319,9 @@ typedef struct vulkan_kernel_metadata {
   void *miss_sbt;
   void *hit_sbt;
   void *callable_sbt;
+  uint32_t launch_width;
+  uint32_t launch_height;
+  uint32_t launch_depth;
 } vulkan_kernel_metadata;
 
 class kernel_info_t {

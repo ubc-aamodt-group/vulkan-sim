@@ -124,9 +124,10 @@ extern void gpgpusim_setTextureFromLauncher_cpp(void *address,
                                                 uint32_t n_samples,
                                                 VkImageTiling tiling,
                                                 uint32_t isl_tiling_mode,
-                                                uint32_t row_pitch_B)
+                                                uint32_t row_pitch_B,
+                                                uint32_t filter)
 {
-    VulkanRayTracing::setTextureFromLauncher(address, setID, descID, size,width, height, format, VkDescriptorTypeNum, n_planes, n_samples, tiling, isl_tiling_mode, row_pitch_B);
+    VulkanRayTracing::setTextureFromLauncher(address, setID, descID, size,width, height, format, VkDescriptorTypeNum, n_planes, n_samples, tiling, isl_tiling_mode, row_pitch_B, filter);
 }
 
 extern "C" void gpgpusim_pass_child_addr(void *address)

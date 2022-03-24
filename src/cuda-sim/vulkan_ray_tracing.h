@@ -5,23 +5,14 @@
 #include "vulkan/vulkan_intel.h"
 
 #include "vulkan/anv_acceleration_structure.h"
-#include "vulkan/anv_public.h"
 #include "compiler/spirv/spirv.h"
 
-#include <cmath>
-// #define GLuint MESA_GLuint
-// #include "vulkan/anv_private.h"
-// #undef GLuint
-// #include "util/u_endian.h"
-// #include "vulkan/anv_private.h"
-// #include "vk_object.h"
-
 #include "ptx_ir.h"
-//#include "vector-math.h"
 #include "../../libcuda/gpgpu_context.h"
 #include "../abstract_hardware_model.h"
 #include "compiler/shader_enums.h"
 #include <fstream>
+#include <cmath>
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -47,6 +38,9 @@
 // typedef struct float4 {
 //     float x, y, z, w;
 // } float4;
+
+
+extern bool use_external_launcher;
 
 typedef struct float4x4 {
   float m[4][4];
@@ -232,6 +226,7 @@ typedef struct texture_metadata
     VkImageTiling tiling;
     uint32_t isl_tiling_mode;
     uint32_t row_pitch_B;
+    VkFilter filter;
 } texture_metadata;
 
 
@@ -343,7 +338,8 @@ public:
                                        uint32_t n_samples,
                                        VkImageTiling tiling,
                                        uint32_t isl_tiling_mode,
-                                       uint32_t row_pitch_B);
+                                       uint32_t row_pitch_B,
+                                       uint32_t filter);
     static void pass_child_addr(void *address);
     static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards);
 };
