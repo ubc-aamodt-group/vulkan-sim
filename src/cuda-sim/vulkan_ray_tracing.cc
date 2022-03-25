@@ -1543,8 +1543,9 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
 
 void VulkanRayTracing::dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
 {
-    struct anv_image_view *image_view =  desc->image_view;
-    struct anv_sampler *sampler = desc->sampler;
+    anv_descriptor *desc_offset = ((anv_descriptor*)((void*)desc +256)); // offset for raytracing_extended
+    struct anv_image_view *image_view =  desc_offset->image_view;
+    struct anv_sampler *sampler = desc_offset->sampler;
 
     const struct anv_image *image = image_view->image;
     assert(image->n_planes == 1);
