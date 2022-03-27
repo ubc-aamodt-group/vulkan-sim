@@ -185,13 +185,21 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
         }
         case VK_FILTER_LINEAR:
         {
+            // uint32_t xs[2];
+            // xs[0] = std::floor(x * image->extent.width);
+            // xs[1] = std::ceil(x * image->extent.width);
+            
+            // uint32_t ys[2];
+            // ys[0] = std::floor(y * image->extent.height);
+            // ys[1] = std::ceil(y * image->extent.height);
+
             uint32_t xs[2];
-            xs[0] = std::floor(x * image->extent.width);
-            xs[1] = std::ceil(x * image->extent.width);
+            xs[0] = std::floor(x * image->extent.width - 0.5);
+            xs[1] = std::ceil(x * image->extent.width - 0.5);
             
             uint32_t ys[2];
-            ys[0] = std::floor(y * image->extent.height);
-            ys[1] = std::ceil(y * image->extent.height);
+            ys[0] = std::floor(y * image->extent.height - 0.5);
+            ys[1] = std::ceil(y * image->extent.height - 0.5);
             
             Pixel pixel[2][2];
             float weight[2][2];
@@ -199,7 +207,8 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
             for(int i = 0; i < 2; i++)
                 for(int j = 0; j < 2; j++)
                 {
-                    weight[i][j] = std::abs(x * image->extent.width - xs[(i + 1) % 2]) * std::abs(y * image->extent.height - ys[(j + 1) % 2]);
+                    // weight[i][j] = std::abs(x * image->extent.width - xs[(i + 1) % 2]) * std::abs(y * image->extent.height - ys[(j + 1) % 2]);
+                    weight[i][j] = std::abs(x * image->extent.width - (xs[(i + 1) % 2] + 0.5)) * std::abs(y * image->extent.height - (ys[(j + 1) % 2] + 0.5));
 
                     ImageMemoryTransactionRecord transaction;
                     uint32_t xc = xs[i];
