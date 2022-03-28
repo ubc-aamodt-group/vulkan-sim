@@ -66,6 +66,8 @@ global skipCFLOGParsing
 skipCFLOGParsing = 0
 global trace_ray_instruction
 trace_ray_instruction = {}
+global txl_instruction
+txl_instruction = {}
 global num_shader
 num_shader = 0
 
@@ -315,6 +317,14 @@ def parseMe(filename):
                 shader = p[2].split(" ")[0]
                 trace_ray_instruction[shader] = lines
                 print("trace_ray for shader {s} are at lines {l}".format(s=shader, l=lines))
+        elif "txl_inst" in lookup_input:
+            global txl_instruction
+            global num_shader
+            if len(p[2].split(" ")) > 1:
+                lines = [int(l) for l in p[2].split(" ")[1:]]
+                shader = p[2].split(" ")[0]
+                txl_instruction[shader] = lines
+                print("txl for shader {s} are at lines {l}".format(s=shader, l=lines))
         else:
             pass
         

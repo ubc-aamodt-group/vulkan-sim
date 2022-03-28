@@ -109,7 +109,7 @@ def organizedata(fileVars):
 
     # Organize other stat data into internal format
     for statName, statData in fileVars.iteritems():
-        if (statName != 'CFLOG' and statName != 'globalCycle' and statName != "trace_ray" and statData.organize != 'custom'):
+        if (statName != 'CFLOG' and statName != 'globalCycle' and statName != "trace_ray" and statName != "txl_inst" and statData.organize != 'custom'):
             fileVars[statName].data = organizeFunction[statData.organize](statData.data, data_type_char[statData.datatype])
   
     # Custom routines to organize stat data into internal format

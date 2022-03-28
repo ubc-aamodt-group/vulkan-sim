@@ -1386,6 +1386,19 @@ class graphManager:
                 print("No trace_ray instruction found!")
             except IndexError:
                 print("No trace_ray instruction found!")
+            try:
+                print("txl instruction is at lines {}".format(lexyacc.txl_instruction[shader_id]))
+
+                for line in lexyacc.txl_instruction[shader_id]:
+                    txl_data = y[line]
+                    for i in range(len(x) - 1):
+                        if txl_data[i] > 0:
+                            print("txl ({line}) from {start} to {end}".format(line=line, start=x[i], end=x[i+1]))
+                            self.plot.fill_between([i-0.5, i+0.5], line-1, line, color="blue", zorder=5)
+            except KeyError:
+                print("No txl instruction found!")
+            except IndexError:
+                print("No txl instruction found!")
 
         interpolation = 'nearest'
         norm = plotFormat.norm
