@@ -1317,7 +1317,7 @@ class rt_unit : public pipelined_simd_unit {
       virtual void process_cache_access(
             baseline_cache *cache, warp_inst_t &inst, mem_fetch *mf);
             
-      mem_access_t* create_mem_access(new_addr_type addr);
+      mem_access_t create_mem_access(new_addr_type addr);
       
       const memory_config *m_memory_config;
       class mem_fetch_interface *m_icnt;

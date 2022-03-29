@@ -975,34 +975,16 @@ enum cache_operator_type {
 
 class mem_access_t {
  public:
-  mem_access_t() {}
-  mem_access_t(gpgpu_context *ctx) { init(ctx); }
+  mem_access_t();
+  mem_access_t(gpgpu_context *ctx);
   mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
-               bool wr, gpgpu_context *ctx) {
-    init(ctx);
-    m_type = type;
-    m_addr = address;
-    m_req_size = size;
-    m_write = wr;
-    m_uncoalesced_addr = 0;
-    m_uncoalesced_base_addr = 0;
-  }
+               bool wr, gpgpu_context *ctx);
   mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
                bool wr, const active_mask_t &active_mask,
                const mem_access_byte_mask_t &byte_mask,
-               const mem_access_sector_mask_t &sector_mask, gpgpu_context *ctx)
-      : m_warp_mask(active_mask),
-        m_byte_mask(byte_mask),
-        m_sector_mask(sector_mask) {
-    init(ctx);
-    m_type = type;
-    m_addr = address;
-    m_req_size = size;
-    m_write = wr;
-    m_uncoalesced_addr = 0;
-    m_uncoalesced_base_addr = 0;
-  }
-
+               const mem_access_sector_mask_t &sector_mask, gpgpu_context *ctx);
+  ~mem_access_t();
+  
   new_addr_type get_addr() const { return m_addr; }
   void set_addr(new_addr_type addr) { m_addr = addr; }
   new_addr_type get_uncoalesced_addr() const { return m_uncoalesced_addr; }
@@ -1059,6 +1041,7 @@ class mem_access_t {
   void init(gpgpu_context *ctx);
 
   unsigned m_uid;
+  // unsigned m_special_uid;
   new_addr_type m_addr;  // request address
   bool m_write;
   unsigned m_req_size;  // bytes
@@ -1282,13 +1265,19 @@ class warp_inst_t : public inst_t {
     should_do_atomic = true;
     m_has_pred = false;
   }
-  virtual ~warp_inst_t() {}
+  virtual ~warp_inst_t() {
+    m_per_scalar_thread.clear();
+  }
 
   // modifiers
   void broadcast_barrier_reduction(const active_mask_t &access_mask);
   void do_atomic(bool forceDo = false);
   void do_atomic(const active_mask_t &access_mask, bool forceDo = false);
-  void clear() { m_empty = true; }
+  void clear() { 
+    m_empty = true;
+    m_per_scalar_thread.clear();
+    m_per_scalar_thread_valid = false;
+  }
   void clear_pending_mem_requests() { m_accessq.clear(); }
 
   void issue(const active_mask_t &mask, unsigned warp_id,
@@ -1450,14 +1439,8 @@ class warp_inst_t : public inst_t {
   }
 
   struct per_thread_info {
-    per_thread_info() {
-      for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
-        memreqaddr[i] = 0;
-        
-        intersection_delay = 0;
-        end_cycle = 0;
-        RT_mem_accesses = new std::deque<RTMemoryTransactionRecord>;
-    }
+    per_thread_info();
+    ~per_thread_info();
     dram_callback_t callback;
     new_addr_type
         memreqaddr[MAX_ACCESSES_PER_INSN_PER_THREAD];  // effective address,
@@ -1467,15 +1450,15 @@ class warp_inst_t : public inst_t {
                                                        // of 4B each)
                                                    
     // RT variables    
-    std::deque<RTMemoryTransactionRecord> *RT_mem_accesses;
+    std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
     bool ray_intersect = false;
     Ray ray_properties;
     unsigned intersection_delay;
     unsigned long long end_cycle;
     unsigned status_num_cycles[warp_statuses][ray_statuses] = {};
-    
+    unsigned m_uid;
     void clear_mem_accesses() {
-      RT_mem_accesses->clear();
+      RT_mem_accesses.clear();
     }
   };
   
@@ -1487,7 +1470,7 @@ class warp_inst_t : public inst_t {
   bool rt_mem_accesses_empty();
   bool rt_intersection_delay_done();
   bool has_pending_writes() { return !m_pending_writes.empty(); }
-  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses->empty(); };
+  bool rt_mem_accesses_empty(unsigned int tid) { return m_per_scalar_thread[tid].RT_mem_accesses.empty(); };
   bool is_stalled();
   void undo_rt_access(new_addr_type addr);
   void print_rt_accesses();
@@ -1511,7 +1494,7 @@ class warp_inst_t : public inst_t {
   unsigned dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue);
   void track_rt_cycles(bool active);
   bool check_pending_writes(new_addr_type addr);
-  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses->size(); }
+  unsigned mem_list_length(unsigned tid) const { return m_per_scalar_thread[tid].RT_mem_accesses.size(); }
   unsigned * get_latency_dist(unsigned i);
   
   void set_start_cycle(unsigned long long cycle) { m_start_cycle = cycle; }

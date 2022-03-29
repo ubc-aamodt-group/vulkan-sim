@@ -52,6 +52,12 @@ class gpgpu_context {
   cuda_sim *func_sim;
   cuda_device_runtime *device_runtime;
   ptx_stats *stats;
+
+  // std::set<unsigned> allocate_perthread;
+  // std::set<unsigned> allocate_memaccess;
+  // unsigned perthread_uid = 0;
+  // unsigned memaccess_uid = 0;
+
   // member function list
   void synchronize();
   void exit_simulation();

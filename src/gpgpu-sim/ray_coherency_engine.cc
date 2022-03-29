@@ -34,7 +34,7 @@ void ray_coherence_engine::insert(warp_inst_t inst) {
     ray.origin_thread_id = i;
     ray.origin_warp_uid = inst.get_uid();
     ray.ray_properties = inst.get_thread_info(i).ray_properties;
-    ray.RT_mem_accesses = *(inst.get_thread_info(i).RT_mem_accesses);
+    ray.RT_mem_accesses = inst.get_thread_info(i).RT_mem_accesses;
     ray.latency_delay = inst.get_thread_latency(i);
 
     // Get ray hash

@@ -2819,13 +2819,13 @@ void rt_unit::cycle() {
   if (!pipe_reg.empty()) {
     n_warps++;
     RT_DPRINTF("Shader %d: A new warp has arrived! uid: %d, warp id: %d\n", m_sid, pipe_reg.get_uid(), pipe_reg.warp_id());
-    for (unsigned i=0; i<m_config->warp_size; i++) {
-      RT_DPRINTF("\tThread %d (%d mem): ", i, pipe_reg.mem_list_length(i));
-      for (auto it=pipe_reg.get_thread_info(i).RT_mem_accesses->begin(); it!=pipe_reg.get_thread_info(i).RT_mem_accesses->end(); it++) {
-        RT_DPRINTF("0x%x\t", it->address);
-      }
-      RT_DPRINTF("\n");
-    }
+    // for (unsigned i=0; i<m_config->warp_size; i++) {
+    //   RT_DPRINTF("\tThread %d (%d mem): ", i, pipe_reg.mem_list_length(i));
+    //   for (auto it=pipe_reg.get_thread_info(i).RT_mem_accesses.begin(); it!=pipe_reg.get_thread_info(i).RT_mem_accesses.end(); it++) {
+    //     RT_DPRINTF("0x%x\t", it->address);
+    //   }
+    //   RT_DPRINTF("\n");
+    // }
     
     pipe_reg.set_start_cycle(current_cycle);
     pipe_reg.set_thread_end_cycle(current_cycle);
@@ -2916,6 +2916,7 @@ void rt_unit::cycle() {
         }
       }
       assert(found);
+      delete mf;
     }
 
     else {      
@@ -3174,10 +3175,19 @@ void rt_unit::writeback() {
     delete mf;
     // serviced_client = next_client;
   }
+  if (L1D->access_ready()) {
+    // Check if it's for the RT unit or the LDST unit
+    if (L1D->next_access_rt()) {
+      mem_fetch *mf = L1D->next_access();
+      // m_next_wb = mf->get_inst();
+      delete mf;
+      // serviced_client = next_client;
+    }
+  }
 }
 
 
-mem_access_t* rt_unit::create_mem_access(new_addr_type addr) {
+mem_access_t rt_unit::create_mem_access(new_addr_type addr) {
   // RT-CORE NOTE Temporary hard coded values
   unsigned segment_size = 32;
   unsigned data_size = 32;
@@ -3198,10 +3208,10 @@ mem_access_t* rt_unit::create_mem_access(new_addr_type addr) {
   
   assert((block_address & (segment_size - 1)) == 0);
   
-  mem_access_t *access = new mem_access_t(  GLOBAL_ACC_R, block_address, segment_size, is_wr,
+  mem_access_t access(  GLOBAL_ACC_R, block_address, segment_size, is_wr,
                         info.active, info.bytes, info.chunks,
                         m_config->gpgpu_ctx);
-  access->set_uncoalesced_addr(addr);
+  access.set_uncoalesced_addr(addr);
   return access;
 }
 
@@ -3230,17 +3240,17 @@ mem_fetch* rt_unit::process_memory_stores() {
   
   assert((block_address & (segment_size - 1)) == 0);
   
-  mem_access_t *access = new mem_access_t(  GLOBAL_ACC_W, block_address, segment_size, is_wr,
+  mem_access_t access(  GLOBAL_ACC_W, block_address, segment_size, is_wr,
                         info.active, info.bytes, info.chunks,
                         m_config->gpgpu_ctx);
-  access->set_uncoalesced_addr(next_addr);
-  access->set_uncoalesced_base_addr(next_addr);
+  access.set_uncoalesced_addr(next_addr);
+  access.set_uncoalesced_base_addr(next_addr);
 
-  RT_DPRINTF("Shader %d: store mem_access_t created for 0x%x\n", m_sid, access->get_addr());
+  RT_DPRINTF("Shader %d: store mem_access_t created for 0x%x\n", m_sid, access.get_addr());
   
   // Create mf
   mem_fetch *mf = m_mf_allocator->alloc(
-    m_current_warps[warp_uid], *access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
+    m_current_warps[warp_uid], access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
   ); 
   mf->set_raytrace();
 
@@ -3256,13 +3266,13 @@ mem_fetch* rt_unit::process_memory_chunks(warp_inst_t &inst) {
   mem_access_q.pop_front();
 
   // Create the mem_access_t
-  mem_access_t *access = create_mem_access(next_addr);
-  access->set_uncoalesced_base_addr(base_addr);
-  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x, base address 0x%x)\n", m_sid, next_addr, access->get_addr(), base_addr);
+  mem_access_t access = create_mem_access(next_addr);
+  access.set_uncoalesced_base_addr(base_addr);
+  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x, base address 0x%x)\n", m_sid, next_addr, access.get_addr(), base_addr);
   
   // Create mf
   mem_fetch *mf = m_mf_allocator->alloc(
-    inst, *access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
+    inst, access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
   ); 
   mf->set_raytrace();
   m_stats->gpgpu_n_rt_mem[mem_access_q_type]++;
@@ -3302,13 +3312,13 @@ mem_fetch* rt_unit::process_memory_access_queue(warp_inst_t &inst) {
   }
 
   // Create the mem_access_t
-  mem_access_t *access = create_mem_access(next_addr);
-  access->set_uncoalesced_base_addr(base_addr);
-  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x, base address 0x%x)\n", m_sid, next_addr, access->get_addr(), base_addr);
+  mem_access_t access = create_mem_access(next_addr);
+  access.set_uncoalesced_base_addr(base_addr);
+  RT_DPRINTF("Shader %d: mem_access_t created for 0x%x (block address 0x%x, base address 0x%x)\n", m_sid, next_addr, access.get_addr(), base_addr);
   
   // Create mf
   mem_fetch *mf = m_mf_allocator->alloc(
-    inst, *access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
+    inst, access, m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle
   ); 
   mf->set_raytrace();
   m_stats->gpgpu_n_rt_mem[mem_access_q_type]++;
@@ -3687,11 +3697,14 @@ void ldst_unit::writeback() {
         break;
       case 4:
         if (m_L1D && m_L1D->access_ready()) {
-          mem_fetch *mf = m_L1D->next_access();
-          if (!mf->israytrace()) {
-            m_next_wb = mf->get_inst();
-            delete mf;
-            serviced_client = next_client;
+          // Check if it's for RT unit or for LDST unit
+          if (!m_L1D->next_access_rt()) {
+            mem_fetch *mf = m_L1D->next_access();
+            if (!mf->israytrace()) {
+              m_next_wb = mf->get_inst();
+              delete mf;
+              serviced_client = next_client;
+            }
           }
         }
         break;

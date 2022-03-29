@@ -46,6 +46,61 @@ void mem_access_t::init(gpgpu_context *ctx) {
   m_addr = 0;
   m_req_size = 0;
 }
+
+warp_inst_t::per_thread_info::per_thread_info() {
+  m_uid = ++(GPGPU_Context()->perthread_uid);
+  // GPGPU_Context()->allocate_perthread.insert(m_uid);
+  for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
+    memreqaddr[i] = 0;
+    
+    intersection_delay = 0;
+    end_cycle = 0;
+}
+warp_inst_t::per_thread_info::~per_thread_info() {
+  // GPGPU_Context()->allocate_perthread.erase(m_uid);
+}
+
+mem_access_t::mem_access_t() {
+  // m_special_uid = ++(GPGPU_Context()->memaccess_uid);
+  // GPGPU_Context()->allocate_memaccess.insert(m_uid);
+}
+mem_access_t::mem_access_t(gpgpu_context *ctx) { 
+  init(ctx); 
+  // m_special_uid = ++(GPGPU_Context()->memaccess_uid);
+  // GPGPU_Context()->allocate_memaccess.insert(m_uid);
+}
+mem_access_t::mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
+              bool wr, gpgpu_context *ctx) {
+  init(ctx);
+  m_type = type;
+  m_addr = address;
+  m_req_size = size;
+  m_write = wr;
+  m_uncoalesced_addr = 0;
+  m_uncoalesced_base_addr = 0;
+  // m_special_uid = ++(GPGPU_Context()->memaccess_uid);
+  // GPGPU_Context()->allocate_memaccess.insert(m_special_uid);
+}
+mem_access_t::mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
+              bool wr, const active_mask_t &active_mask,
+              const mem_access_byte_mask_t &byte_mask,
+              const mem_access_sector_mask_t &sector_mask, gpgpu_context *ctx)
+    : m_warp_mask(active_mask),
+      m_byte_mask(byte_mask),
+      m_sector_mask(sector_mask) {
+  init(ctx);
+  m_type = type;
+  m_addr = address;
+  m_req_size = size;
+  m_write = wr;
+  m_uncoalesced_addr = 0;
+  m_uncoalesced_base_addr = 0;
+  // m_special_uid = ++(GPGPU_Context()->memaccess_uid);
+  // GPGPU_Context()->allocate_memaccess.insert(m_special_uid);
+}
+mem_access_t::~mem_access_t() {
+  // GPGPU_Context()->allocate_memaccess.erase(m_special_uid);
+}
 void warp_inst_t::issue(const active_mask_t &mask, unsigned warp_id,
                         unsigned long long cycle, int dynamic_warp_id,
                         int sch_id) {
@@ -767,7 +822,7 @@ void warp_inst_t::completed(unsigned long long cycle) const {
 void warp_inst_t::print_rt_accesses() {
   for (unsigned i=0; i<m_config->warp_size; i++) {
     RT_DPRINTF("Thread %d: ", i);
-    for (auto it=m_per_scalar_thread[i].RT_mem_accesses->begin(); it!=m_per_scalar_thread[i].RT_mem_accesses->end(); it++) {
+    for (auto it=m_per_scalar_thread[i].RT_mem_accesses.begin(); it!=m_per_scalar_thread[i].RT_mem_accesses.end(); it++) {
       RT_DPRINTF("0x%x\t", it->address);
     }
     RT_DPRINTF("\n");
@@ -828,9 +883,9 @@ void warp_inst_t::track_rt_cycles(bool active) {
         m_per_scalar_thread[i].status_num_cycles[warp_status][executing_op]++;
       }
       // Check that the thread is not done and not performing intersection tests. 
-      else if (!m_per_scalar_thread[i].RT_mem_accesses->empty()) {
+      else if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
         // This is the next address that the thread wants
-        RTMemoryTransactionRecord mem_record = m_per_scalar_thread[i].RT_mem_accesses->front();
+        RTMemoryTransactionRecord mem_record = m_per_scalar_thread[i].RT_mem_accesses.front();
         if (mem_record.status == RT_MEM_UNMARKED) {
           m_per_scalar_thread[i].status_num_cycles[warp_status][awaiting_scheduling]++;
         }
@@ -859,12 +914,12 @@ void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTr
   
   for (auto it=transactions.begin(); it!=transactions.end(); it++) {
     // Convert transaction type and add to thread
-    RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
+    RTMemoryTransactionRecord mem_record(
       (new_addr_type)it->address,
       it->size,
       it->type
     );
-    m_per_scalar_thread[tid].RT_mem_accesses->push_back(*mem_record);
+    m_per_scalar_thread[tid].RT_mem_accesses.push_back(mem_record);
   }
 }
 
@@ -875,8 +930,8 @@ bool warp_inst_t::is_stalled() {
   }
   // Otherwise check every thread
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].RT_mem_accesses->empty()) {
-      RTMemoryTransactionRecord mem_record = m_per_scalar_thread[i].RT_mem_accesses->front();
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+      RTMemoryTransactionRecord mem_record = m_per_scalar_thread[i].RT_mem_accesses.front();
       
       // If there is an unprocessed record, not stalled
       if (mem_record.status == RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) return false;
@@ -895,7 +950,7 @@ void warp_inst_t::set_rt_ray_properties(unsigned int tid, Ray ray) {
 bool warp_inst_t::rt_mem_accesses_empty() { 
   bool empty = true;
   for (unsigned i = 0; i < m_config->warp_size; i++) {
-    empty &= m_per_scalar_thread[i].RT_mem_accesses->empty();
+    empty &= m_per_scalar_thread[i].RT_mem_accesses.empty();
   }
   empty &= m_next_rt_accesses_set.empty();
   return empty;
@@ -903,8 +958,8 @@ bool warp_inst_t::rt_mem_accesses_empty() {
 
 void warp_inst_t::num_unique_mem_access(std::map<new_addr_type, unsigned> &addr_set) {
   for (unsigned i = 0; i < m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].RT_mem_accesses->empty()) {
-      RTMemoryTransactionRecord record = m_per_scalar_thread[i].RT_mem_accesses->front();
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+      RTMemoryTransactionRecord record = m_per_scalar_thread[i].RT_mem_accesses.front();
       addr_set[record.address]++;
     }
   }
@@ -922,7 +977,7 @@ unsigned warp_inst_t::get_rt_active_threads() {
   assert(m_per_scalar_thread_valid);
   unsigned active_threads = 0;
   for (auto it=m_per_scalar_thread.begin(); it!=m_per_scalar_thread.end(); it++) {
-    if (!it->RT_mem_accesses->empty()) {
+    if (!it->RT_mem_accesses.empty()) {
       active_threads++;
     }
   }
@@ -933,7 +988,7 @@ std::deque<unsigned> warp_inst_t::get_rt_active_thread_list() {
   assert(m_per_scalar_thread_valid);
   std::deque<unsigned> active_threads;
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].RT_mem_accesses->empty()) {
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
       active_threads.push_back(i);
     }
   }
@@ -950,8 +1005,8 @@ void warp_inst_t::update_next_rt_accesses() {
   
   // Iterate through every thread
   for (unsigned i=0; i<m_config->warp_size; i++) {
-    if (!m_per_scalar_thread[i].RT_mem_accesses->empty()) {
-      RTMemoryTransactionRecord next_access = m_per_scalar_thread[i].RT_mem_accesses->front();
+    if (!m_per_scalar_thread[i].RT_mem_accesses.empty()) {
+      RTMemoryTransactionRecord next_access = m_per_scalar_thread[i].RT_mem_accesses.front();
       
       // If "unmarked", this has not been added to queue yet (also make sure intersection is complete)
       if (next_access.status == RTMemStatus::RT_MEM_UNMARKED && m_per_scalar_thread[i].intersection_delay == 0) {
@@ -962,7 +1017,7 @@ void warp_inst_t::update_next_rt_accesses() {
           m_next_rt_accesses_set.insert(address_size_pair);
         }
         // Update status
-        m_per_scalar_thread[i].RT_mem_accesses->front().status = RTMemStatus::RT_MEM_AWAITING;
+        m_per_scalar_thread[i].RT_mem_accesses.front().status = RTMemStatus::RT_MEM_AWAITING;
       }
     }
   }
@@ -996,14 +1051,14 @@ void warp_inst_t::undo_rt_access(new_addr_type addr){
   assert (m_next_rt_accesses_set.find(address_size_pair) == m_next_rt_accesses_set.end());
   
   // Repackage address into a transaction record
-  RTMemoryTransactionRecord *mem_record = new RTMemoryTransactionRecord(
+  RTMemoryTransactionRecord mem_record(
     addr, 32, TransactionType::UNDEFINED
   );
   
   // Already in queue
-  mem_record->status = RT_MEM_AWAITING;
+  mem_record.status = RT_MEM_AWAITING;
 
-  m_next_rt_accesses.push_front(*mem_record);
+  m_next_rt_accesses.push_front(mem_record);
   m_next_rt_accesses_set.insert(address_size_pair);
   RT_DPRINTF("UNDO: 0x%x added back to queue\n", addr);
 }
@@ -1045,8 +1100,8 @@ bool warp_inst_t::process_returned_mem_access(const mem_fetch *mf, unsigned tid)
 
 bool warp_inst_t::process_returned_mem_access(bool &mem_record_done, unsigned tid, new_addr_type addr, new_addr_type uncoalesced_base_addr) {
   bool thread_found = false;
-  if (!m_per_scalar_thread[tid].RT_mem_accesses->empty()) {
-    RTMemoryTransactionRecord &mem_record = m_per_scalar_thread[tid].RT_mem_accesses->front();
+  if (!m_per_scalar_thread[tid].RT_mem_accesses.empty()) {
+    RTMemoryTransactionRecord &mem_record = m_per_scalar_thread[tid].RT_mem_accesses.front();
     new_addr_type thread_addr = mem_record.address;
     
     if (thread_addr == uncoalesced_base_addr) {
@@ -1064,7 +1119,7 @@ bool warp_inst_t::process_returned_mem_access(bool &mem_record_done, unsigned ti
         
         RT_DPRINTF("Thread %d collected all chunks for address 0x%x (size %d)\n", tid, mem_record.address, mem_record.size);
         RT_DPRINTF("Processing data of transaction type %d for %d cycles.\n", mem_record.type, n_delay_cycles);
-        m_per_scalar_thread[tid].RT_mem_accesses->pop_front();
+        m_per_scalar_thread[tid].RT_mem_accesses.pop_front();
         mem_record_done = true;
 
         // Mark triangle hit to store to memory
@@ -1077,7 +1132,7 @@ bool warp_inst_t::process_returned_mem_access(bool &mem_record_done, unsigned ti
     }
     
     // If the RT_mem_accesses is now empty, then the last memory request has returned and the thread is almost done
-    if (m_per_scalar_thread[tid].RT_mem_accesses->empty()) {
+    if (m_per_scalar_thread[tid].RT_mem_accesses.empty()) {
       unsigned long long current_cycle =  GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle +
                                           GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
       m_per_scalar_thread[tid].end_cycle = current_cycle + m_per_scalar_thread[tid].intersection_delay;

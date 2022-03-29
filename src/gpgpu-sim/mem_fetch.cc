@@ -32,6 +32,9 @@
 #include "shader.h"
 #include "visualizer.h"
 
+// Memory leak debugging
+// std::set<unsigned> allocated_mf_set;
+
 unsigned mem_fetch::sm_next_mf_request_uid = 1;
 
 mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
@@ -43,6 +46,7 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
 
 {
   m_request_uid = sm_next_mf_request_uid++;
+  // allocated_mf_set.insert(m_request_uid);
   m_access = access;
   if (inst) {
     m_inst = *inst;
@@ -72,7 +76,10 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
   m_israytrace = false;
 }
 
-mem_fetch::~mem_fetch() { m_status = MEM_FETCH_DELETED; }
+mem_fetch::~mem_fetch() { 
+  m_status = MEM_FETCH_DELETED; 
+  // allocated_mf_set.erase(m_request_uid);
+}
 
 #define MF_TUP_BEGIN(X) static const char *Status_str[] = {
 #define MF_TUP(X) #X

@@ -1064,7 +1064,7 @@ class ptx_instruction : public warp_inst_t {
                   const std::list<int> &scalar_type, memory_space_t space_spec,
                   const char *file, unsigned line, const char *source,
                   const core_config *config, gpgpu_context *ctx);
-
+                  
   void print_insn() const;
   virtual void print_insn(FILE *fp) const;
   std::string to_string() const;
