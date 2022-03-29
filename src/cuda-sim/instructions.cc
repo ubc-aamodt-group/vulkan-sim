@@ -6902,16 +6902,17 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   float c0, c1, c2, c3;
 
+  ptx_reg_t offset_reg;
   char *workload = getenv("VULKAN_SIM_LAUNCHER_WORKLOAD");
   if(workload && !strcmp(workload, "raytracing_extended"))
   {
     std::string reg_name("%ssa_317_array_index_64");
-    ptx_reg_t offset_reg = thread->get_reg(reg_name);
+    offset_reg = thread->get_reg(reg_name);
     desc = desc - offset_reg.u64;
   }
 
   std::vector<ImageMemoryTransactionRecord> transactions;
-  VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3, transactions);
+  VulkanRayTracing::getTexture(desc, x, y, lod, c0, c1, c2, c3, transactions, offset_reg.u64);
 
   const operand_info &dst2 = pI->operand_lookup(2);
   const operand_info &dst3 = pI->operand_lookup(3);

@@ -55,7 +55,7 @@ class gpgpu_context {
 
   // std::set<unsigned> allocate_perthread;
   // std::set<unsigned> allocate_memaccess;
-  // unsigned perthread_uid = 0;
+  unsigned perthread_uid = 0;
   // unsigned memaccess_uid = 0;
 
   // member function list

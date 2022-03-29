@@ -89,7 +89,7 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
         tiling = texture->tiling;
         isl_tiling_mode = texture->isl_tiling_mode;
         row_pitch_B = texture->row_pitch_B;
-        address = (uint8_t*) texture->address + launcher_offset;
+        address = (uint8_t*) texture->address;
     }
     else
     {
@@ -236,7 +236,7 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
             assert(0 <= y_int && y_int < height);
 
             ImageMemoryTransactionRecord transaction;
-            Pixel pixel = load_image_pixel(image, x_int, y_int, 0, transaction);
+            Pixel pixel = load_image_pixel(image, x_int, y_int, 0, transaction, launcher_offset);
             transactions.push_back(transaction);
             TXL_DPRINTF("Adding (nearest) txl transaction: 0x%x\n", transaction.address);
             return pixel;
