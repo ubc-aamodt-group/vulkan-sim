@@ -607,6 +607,44 @@ float shader_core_ctx::get_current_occupancy(unsigned long long &active,
   }
 }
 
+void shader_core_stats::print_roofline(FILE *fout) const {
+  std::vector<float> op_int, perf;
+  std::string op_int_str, perf_str, cacheline_str, int_str, cycle_str;
+  float op_int_sum = 0, perf_sum = 0;
+  for (unsigned i=0; i<m_config->num_shader(); i++) {
+    float o = (float)rt_total_intersection_stages[i] / (float)rt_total_cacheline_fetched[i];
+    float p = (float)rt_total_intersection_stages[i] / (float)rt_total_cycles[i];
+
+    assert(rt_total_cacheline_fetched[i] <= rt_total_cycles[i]);
+
+    op_int.push_back(o);
+    perf.push_back(p);
+
+    op_int_sum += o;
+    perf_sum += p;
+
+    op_int_str.append(std::to_string(o));
+    op_int_str.append("\t");
+    perf_str.append(std::to_string(p));
+    perf_str.append("\t");
+    cacheline_str.append(std::to_string(rt_total_cacheline_fetched[i]));
+    cacheline_str.append("\t");
+    cycle_str.append(std::to_string(rt_total_cycles[i]));
+    cycle_str.append("\t");
+    int_str.append(std::to_string(rt_total_intersection_stages[i]));
+    int_str.append("\t");
+  }
+
+  fprintf(fout, "rt_total_cacheline_fetched = %s\n", cacheline_str.c_str());
+  fprintf(fout, "rt_total_cycles = %s\n", cycle_str.c_str());
+  fprintf(fout, "rt_total_intersection_stages = %s\n", int_str.c_str());
+  fprintf(fout, "rt_op_intensity = %s\n", op_int_str.c_str());
+  fprintf(fout, "rt_perf = %s\n", perf_str.c_str());
+  
+  fprintf(fout, "rt_avg_op_intensity = %f\n", op_int_sum / m_config->num_shader());
+  fprintf(fout, "rt_avg_performance = %f\n", perf_sum / m_config->num_shader());
+}
+
 void shader_core_stats::print(FILE *fout) const {
   unsigned long long thread_icount_uarch = 0;
   unsigned long long warp_icount_uarch = 0;
@@ -738,9 +776,7 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
   fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
   fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_occupancy / rt_total_warps);
-  fprintf(fout, "rt_avg_op_intensity = %f\n", (float)rt_total_intersection_stages / rt_total_cacheline_fetched);
-  fprintf(fout, "rt_avg_performance = %f\n", (float)rt_total_intersection_stages / average_rt_total_cycles);
-  fprintf(fout, "rt_avg_ops = %f\n", (float)rt_total_intersection_stages / gpgpusim_total_cycles);
+  print_roofline(fout);
   fprintf(fout, "rt_writes = %d\n", rt_writes);
   fprintf(fout, "rt_max_mem_store_q = %d\n", rt_max_store_q);
   fprintf(fout, "rt_avg_mem_store_cycles = %f\n", average_mem_store_cycles);
@@ -2806,6 +2842,8 @@ unsigned rt_unit::active_warps() {
 }
 
 void rt_unit::cycle() {
+  // Debugging roofline plot
+  cacheline_count = 0;
   
   // Copy ldst unit injection mechanism
   warp_inst_t &pipe_reg = *m_dispatch_reg;
@@ -2859,7 +2897,8 @@ void rt_unit::cycle() {
   }
   if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->dec_thread_latency();
   // Number of threads currently completing intersection tests are the number of intersection operations this cycle
-  m_stats->rt_total_intersection_stages += n_threads;
+  assert(n_threads <= (m_config->warp_size * m_config->m_rt_max_warps));
+  m_stats->rt_total_intersection_stages[m_sid] += n_threads;
   
   if (mem_store_q.size() > m_stats->rt_max_store_q) {
     m_stats->rt_max_store_q = mem_store_q.size();
@@ -2921,7 +2960,8 @@ void rt_unit::cycle() {
 
     else {      
       // Every returned mf is a fetched cacheline
-      m_stats->rt_total_cacheline_fetched++;
+      m_stats->rt_total_cacheline_fetched[m_sid]++;
+      cacheline_count++;
                             
       // Update cache
       if (!m_config->bypassL0Complet) {
@@ -3038,6 +3078,7 @@ void rt_unit::cycle() {
   }
   
   assert(n_warps == m_current_warps.size());
+  assert(cacheline_count <= 2);
 }
 
 void rt_unit::process_memory_response(mem_fetch* mf, warp_inst_t &pipe_reg) {
@@ -3175,14 +3216,12 @@ void rt_unit::writeback() {
     delete mf;
     // serviced_client = next_client;
   }
-  if (L1D->access_ready()) {
-    // Check if it's for the RT unit or the LDST unit
-    if (L1D->next_access_rt()) {
-      mem_fetch *mf = L1D->next_access();
-      // m_next_wb = mf->get_inst();
-      delete mf;
-      // serviced_client = next_client;
-    }
+  // Check if it's for the RT unit or the LDST unit
+  while (L1D->access_ready() && L1D->next_access_rt()) {
+    mem_fetch *mf = L1D->next_access();
+    // m_next_wb = mf->get_inst();
+    delete mf;
+    // serviced_client = next_client;
   }
 }
 
@@ -3348,7 +3387,8 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
     new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
 
     // Every access is considered a cache hit
-    m_stats->rt_total_cacheline_fetched++;
+    m_stats->rt_total_cacheline_fetched[m_sid]++;
+    cacheline_count++;
 
     // Handle write ACKs
     if (mf->get_is_write()) {
@@ -3445,7 +3485,8 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
     RT_DPRINTF("Shader %d: Cache hit for 0x%x (base 0x%x)\n", m_sid, mf->get_uncoalesced_addr(), mf->get_uncoalesced_base_addr());
     
     // Every cache hit is a returned cacheline
-    m_stats->rt_total_cacheline_fetched++;
+    m_stats->rt_total_cacheline_fetched[m_sid]++;
+    cacheline_count++;
 
     if (m_config->m_rt_coherence_engine) {
       m_ray_coherence_engine->process_response(mf, m_current_warps, inst);

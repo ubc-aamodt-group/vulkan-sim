@@ -1357,7 +1357,8 @@ class rt_unit : public pipelined_simd_unit {
       // {warp id, warp instruction}
       std::map<unsigned, warp_inst_t> m_current_warps;
       unsigned n_warps;
-      
+
+      unsigned cacheline_count;
 };
 
 class ldst_unit : public pipelined_simd_unit {
@@ -1894,8 +1895,8 @@ struct shader_core_stats_pod {
   unsigned long long rt_total_thread_latency;
   double rt_total_warp_occupancy;
   unsigned rt_total_warps;
-  unsigned long long rt_total_cacheline_fetched;
-  unsigned long long rt_total_intersection_stages;
+  unsigned long long *rt_total_cacheline_fetched;
+  unsigned long long *rt_total_intersection_stages;
   unsigned long long *rt_total_cycles;
   unsigned long long rt_total_cycles_sum = 0;
   unsigned long long rt_writes;
@@ -2023,6 +2024,8 @@ class shader_core_stats : public shader_core_stats_pod {
     
     rt_mem_store_q_cycles = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_total_cycles = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
+    rt_total_cacheline_fetched = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
+    rt_total_intersection_stages = (unsigned long long *)calloc(config->num_shader(), sizeof(unsigned long long));
     rt_nwarps = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_nthreads = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_naccesses = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
@@ -2087,6 +2090,7 @@ class shader_core_stats : public shader_core_stats_pod {
   void visualizer_print(gzFile visualizer_file);
 
   void print(FILE *fout) const;
+  void print_roofline(FILE *fout) const;
 
   const std::vector<std::vector<unsigned>> &get_dynamic_warp_issue() const {
     return m_shader_dynamic_warp_issue_distro;

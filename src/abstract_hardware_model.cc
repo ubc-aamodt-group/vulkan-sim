@@ -78,6 +78,8 @@ mem_access_t::mem_access_t(mem_access_type type, new_addr_type address, unsigned
   m_write = wr;
   m_uncoalesced_addr = 0;
   m_uncoalesced_base_addr = 0;
+  unsigned chunk = (m_addr & 127) / 32;
+  m_sector_mask.set(chunk);
   // m_special_uid = ++(GPGPU_Context()->memaccess_uid);
   // GPGPU_Context()->allocate_memaccess.insert(m_special_uid);
 }

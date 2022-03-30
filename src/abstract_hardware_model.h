@@ -1266,7 +1266,8 @@ class warp_inst_t : public inst_t {
     m_has_pred = false;
   }
   virtual ~warp_inst_t() {
-    m_per_scalar_thread.clear();
+    if (m_per_scalar_thread_valid)
+      m_per_scalar_thread.clear();
   }
 
   // modifiers
@@ -1275,8 +1276,10 @@ class warp_inst_t : public inst_t {
   void do_atomic(const active_mask_t &access_mask, bool forceDo = false);
   void clear() { 
     m_empty = true;
-    m_per_scalar_thread.clear();
-    m_per_scalar_thread_valid = false;
+    if (m_per_scalar_thread_valid) {
+      m_per_scalar_thread.clear();
+      m_per_scalar_thread_valid = false;
+    }
   }
   void clear_pending_mem_requests() { m_accessq.clear(); }
 
