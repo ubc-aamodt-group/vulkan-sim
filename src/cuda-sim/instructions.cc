@@ -6905,7 +6905,13 @@ void load_vulkan_descriptor_impl(const ptx_instruction *pI, ptx_thread_info *thr
 }
 
 void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  // printf("calling txl\n");
+  // if(print_debug_insts)
+  // {
+  //   printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+  //                                     thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+  //                                     thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+  //   fflush(stdout);
+  // }
   
   ptx_reg_t src0_data, src1_data, src6_data, src7_data, src8_data, data;
   

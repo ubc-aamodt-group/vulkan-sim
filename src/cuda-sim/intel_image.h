@@ -77,6 +77,9 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
     assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
     assert(level == 0);
 
+    assert(0 <= x && x < image->extent.width);
+    assert(0 <= y && y < image->extent.height);
+
     uint8_t* address = anv_address_map(image->planes[0].address);
 
     switch(image->vk_format)
@@ -160,7 +163,7 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
 
     VkFilter filter;
     if(sampler->conversion == NULL)
-        filter = VK_FILTER_NEAREST;
+        filter = VK_FILTER_LINEAR;
     
     switch (filter)
     {
@@ -193,11 +196,11 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
             // ys[0] = std::floor(y * image->extent.height);
             // ys[1] = std::ceil(y * image->extent.height);
 
-            uint32_t xs[2];
+            int32_t xs[2];
             xs[0] = std::floor(x * image->extent.width - 0.5);
             xs[1] = std::ceil(x * image->extent.width - 0.5);
             
-            uint32_t ys[2];
+            int32_t ys[2];
             ys[0] = std::floor(y * image->extent.height - 0.5);
             ys[1] = std::ceil(y * image->extent.height - 0.5);
             
@@ -210,15 +213,23 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
                     // weight[i][j] = std::abs(x * image->extent.width - xs[(i + 1) % 2]) * std::abs(y * image->extent.height - ys[(j + 1) % 2]);
                     weight[i][j] = std::abs(x * image->extent.width - (xs[(i + 1) % 2] + 0.5)) * std::abs(y * image->extent.height - (ys[(j + 1) % 2] + 0.5));
 
-                    ImageMemoryTransactionRecord transaction;
-                    uint32_t xc = xs[i];
-                    uint32_t yc = ys[i];
-                    if(xc >= image->extent.width)
+                    int32_t xc = xs[i];
+                    int32_t yc = ys[j];
+                    if(xc >= (int)image->extent.width)
                         xc -= image->extent.width;
-                    if(yc >= image->extent.height)
+                    if(xc < 0)
+                        xc += image->extent.width;
+                    if(yc >= (int)image->extent.height)
                         yc -= image->extent.height;
+                    if(yc < 0)
+                        yc += image->extent.height;
                     
+                    ImageMemoryTransactionRecord transaction;
                     pixel[i][j] = load_image_pixel(image, xc, yc, 0, transaction);
+
+                    for(int i = 0; i < transactions.size(); i++)
+                        if(transactions[i].address == transaction.address && transactions[i].size == transaction.size)
+                            continue;
                     transactions.push_back(transaction);
                 }
             
