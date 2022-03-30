@@ -6764,7 +6764,7 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
 
   // v[0] = 1280;
   // v[1] = 720;
-  // v[2] = 0;
+  // v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];

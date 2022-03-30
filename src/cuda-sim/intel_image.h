@@ -378,10 +378,47 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             }
             break;
         }
+
+        case VK_FORMAT_R32G32B32A32_SFLOAT:
+        {
+            float colors[] = {pixel.r, pixel.g, pixel.b, pixel.a};
+
+            switch (image->planes[0].surface.isl.tiling)
+            {
+                case ISL_TILING_Y0:
+                {
+                    //MRS_TODO: check if transaction.address is calculated correctly
+                    uint32_t ytile_span = 16;
+                    uint32_t bytes_per_column = 512;
+                    uint32_t ytile_height = 32;
+
+                    uint32_t offset = (y / ytile_height) * ytile_height * image->planes[0].surface.isl.row_pitch_B;
+                    offset += (x * 16 % ytile_span) + (x * 16 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
+
+                    transaction.address = address + offset;
+                    transaction.size = 4;
+
+                    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+                    intel_linear_to_tiled(x * 16, x * 16 + 16, y, y + 1,
+                        (char *)address, (char*)colors, image->planes[0].surface.isl.row_pitch_B, image->extent.width * 4, false,
+                        ISL_TILING_Y0, ISL_MEMCPY);
+                    break;
+                }
+            
+                default:
+                {
+                    assert(0);
+                    break;
+                }
+            }
+            break;
+        }
         
         default:
+        {
             assert(0);
             break;
+        }
     }
 }
 
