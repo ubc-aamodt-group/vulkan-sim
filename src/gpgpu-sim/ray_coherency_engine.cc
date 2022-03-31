@@ -298,7 +298,6 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
               ray.latency_delay = (!pipe_reg->empty() && pipe_reg->get_uid() == warp_uid) ?
                  pipe_reg->get_thread_latency(thread_id):
                  m_current_warps[warp_uid]->get_thread_latency(thread_id);
-              if (ray.empty()) m_total_rays--;
             }
           }
         }
@@ -314,8 +313,23 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
 void ray_coherence_engine::dec_thread_latency() {
   for (auto it=m_ray_pool.cbegin(); it!=m_ray_pool.cend(); it++) {
     ray_hash hash = it->first;
+    unsigned index = 0;
+    std::deque<unsigned> index_list;
     for (coherence_ray &ray : m_ray_pool[hash]) {
       if (ray.latency_delay > 0) ray.latency_delay--;
+      else if (ray.empty()) {
+        index_list.push_back(index);
+      }
+      index++;
+    }
+
+    // Delete completed rays
+    index = 0;
+    for (auto iter=index_list.begin(); iter!=index_list.end(); iter++) {
+      unsigned delete_index = *iter;
+      unsigned adjusted_index = delete_index - index;
+      m_ray_pool[hash].erase(m_ray_pool[hash].begin() + adjusted_index);
+      index++;
     }
   }
 }
