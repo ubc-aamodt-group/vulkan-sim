@@ -7,6 +7,7 @@
 #include "vulkan/anv_acceleration_structure.h"
 #include "compiler/spirv/spirv.h"
 
+// #include "ptx_ir.h"
 #include "ptx_ir.h"
 #include "../../libcuda/gpgpu_context.h"
 #include "compiler/shader_enums.h"
@@ -104,6 +105,7 @@ typedef struct Hit_data{
     float3 intersection_point;
     float3 barycentric_coordinates;
     float world_min_thit;
+    VkGeometryTypeKHR geometryType;
 
     uint32_t instance_index;
     float4x4 worldToObjectMatrix;
@@ -189,6 +191,62 @@ typedef struct Vulkan_RT_thread_data {
         address[2] = barycentric.z;
     }
 } Vulkan_RT_thread_data;
+
+// An entry in function coalascing buffer or the baseline table
+typedef struct shader_warp_entry {
+  uint32_t GeometryIndex;
+  bool thread_mask[32];
+
+  struct {
+    uint32_t primitiveID;
+    uint32_t instanceID;
+  } shader_data[32];
+} shader_warp_entry;
+
+class shader_table {
+    std::vector<shader_warp_entry> table;
+
+public:
+    void add_to_baseline_table(uint32_t geometry_id, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
+        assert(tid < 32);
+        if (table.size() > 0 && table.back().GeometryIndex == geometry_id)
+        if (!function_coalescing_buffer.back().thread_mask[tid])
+        {
+            table.back().thread_mask[tid] = true;
+            table.back().shader_data[tid].primitiveID = primitiveID;
+            table.back().shader_data[tid].instanceID = instanceID;
+            return;
+        }
+
+        shader_warp_entry entry;
+        entry.GeometryIndex = geometry_id;
+        entry.thread_mask[tid] = true;
+        entry.shader_data[tid].primitiveID = primitiveID;
+        entry.shader_data[tid].instanceID = instanceID;
+        table.push_back(entry);
+    }
+
+    void add_to_coalescing_table(uint32_t geometry_id, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
+        assert(tid < 32);
+        for (int i = 0; i < table.size(); i++) {
+            if (table[i].GeometryIndex == geometry_id)
+            if (!table[i].thread_mask[tid])
+            {
+                table[i].thread_mask[tid] = true;
+                table[i].shader_data[tid].primitiveID = primitiveID;
+                table[i].shader_data[tid].instanceID = instanceID;
+                return;
+            }
+        }
+
+        shader_warp_entry entry;
+        entry.GeometryIndex = geometry_id;
+        entry.thread_mask[tid] = true;
+        entry.shader_data[tid].primitiveID = primitiveID;
+        entry.shader_data[tid].instanceID = instanceID;
+        table.push_back(entry);
+    }
+};
 
 struct anv_descriptor_set;
 struct anv_descriptor;

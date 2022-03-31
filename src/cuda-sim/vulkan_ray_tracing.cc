@@ -658,6 +658,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     if (min_thit < ray.dir_tmax.w)
     {
         traversal_data.hit_geometry = true;
+        traversal_data.closest_hit.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
         traversal_data.closest_hit.geometry_index = closest_leaf.LeafDescriptor.GeometryIndex;
         traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
         traversal_data.closest_hit.instance_index = closest_instanceLeaf.InstanceID;

@@ -435,8 +435,8 @@ GEN_RT_BVH_PROCEDURAL_LEAF_unpack(struct GEN_RT_BVH_PROCEDURAL_LEAF* dst,
       uint32_t temp = *((uint32_t *)data);
       data += 4;
 
-      dst->NumPrimitives = temp & (1 << 4 - 1);
-      dst->LastPrimitive = temp >> 20;
+      dst->NumPrimitives = temp & ((1 << 4) - 1);
+      dst->LastPrimitive = temp >> 19;
    }
 
    for(int i = 0; i < 13; i++)
