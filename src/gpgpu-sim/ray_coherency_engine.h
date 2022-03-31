@@ -92,7 +92,7 @@ class ray_coherence_engine {
     unsigned schedule_next_warp();
     RTMemoryTransactionRecord get_next_access();
     void undo_access(new_addr_type addr);
-    void process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t> &m_current_warps, warp_inst_t &pipe_reg);
+    void process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t *> &m_current_warps, warp_inst_t *pipe_reg);
     void dec_thread_latency();
 
     // Backwards pointer

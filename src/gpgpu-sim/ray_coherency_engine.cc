@@ -262,7 +262,7 @@ void ray_coherence_engine::undo_access(new_addr_type addr) {
   COHERENCE_DPRINTF("Shader %d: Undoing MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, addr);
 }
 
-void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t> &m_current_warps, warp_inst_t &pipe_reg) {
+void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t *> &m_current_warps, warp_inst_t *pipe_reg) {
   new_addr_type uncoalesced_addr = mf->get_uncoalesced_addr();
   new_addr_type uncoalesced_base_addr = mf->get_uncoalesced_base_addr();
   COHERENCE_DPRINTF("Shader %d: Processing memory response for addr 0x%x\n", m_sid, uncoalesced_addr);
@@ -285,19 +285,19 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
           unsigned thread_id = ray.origin_thread_id;
           unsigned warp_uid = ray.origin_warp_uid;
 
-          assert(pipe_reg.get_uid() == warp_uid || m_current_warps.find(warp_uid) != m_current_warps.end());
+          assert(pipe_reg->get_uid() == warp_uid || m_current_warps.find(warp_uid) != m_current_warps.end());
           if (uncoalesced_base_addr == ray.next_addr()) {
             COHERENCE_DPRINTF("Shader %d: Ray coherency packet includes warp %d thread %d\n", m_sid, warp_uid, thread_id);
-            bool mem_record_done = (pipe_reg.get_uid() == warp_uid) ?
-              pipe_reg.process_returned_mem_access(mf, thread_id) :
-              m_current_warps[warp_uid].process_returned_mem_access(mf, thread_id);
+            bool mem_record_done = (!pipe_reg->empty() && pipe_reg->get_uid() == warp_uid) ?
+               pipe_reg->process_returned_mem_access(mf, thread_id) :
+               m_current_warps[warp_uid]->process_returned_mem_access(mf, thread_id);
 
             if (mem_record_done) {
               assert(ray.next_addr() == mf->get_uncoalesced_base_addr());
               ray.RT_mem_accesses.pop_front();
-              ray.latency_delay = (pipe_reg.get_uid() == warp_uid) ?
-                pipe_reg.get_thread_latency(thread_id):
-                m_current_warps[warp_uid].get_thread_latency(thread_id);
+              ray.latency_delay = (!pipe_reg->empty() && pipe_reg->get_uid() == warp_uid) ?
+                 pipe_reg->get_thread_latency(thread_id):
+                 m_current_warps[warp_uid]->get_thread_latency(thread_id);
               if (ray.empty()) m_total_rays--;
             }
           }
@@ -308,6 +308,7 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
     // Remove address from MSHR 
     m_request_mshr.erase(uncoalesced_addr);
   }
+  if (is_stalled()) m_active = false;
 }
 
 void ray_coherence_engine::dec_thread_latency() {

@@ -2975,8 +2975,16 @@ void rt_unit::cycle() {
         }
       }
       
-      if (m_config->m_rt_coherence_engine) m_ray_coherence_engine->process_response(mf, m_current_warps, pipe_reg);
-      else process_memory_response(mf, pipe_reg);
+      if (m_config->m_rt_coherence_engine) {
+        std::map<unsigned, warp_inst_t *> m_warp_pointers;
+        for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+          m_warp_pointers[it->first] = &it->second;
+        }
+        m_ray_coherence_engine->process_response(mf, m_warp_pointers, &pipe_reg);
+      }
+      else {
+        process_memory_response(mf, pipe_reg);
+      }
     }
   }
     
@@ -3396,7 +3404,11 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
       inst.check_pending_writes(uncoalesced_base_addr);
     }
     else if (m_config->m_rt_coherence_engine) {
-      m_ray_coherence_engine->process_response(mf, m_current_warps, inst);
+      std::map<unsigned, warp_inst_t *> m_warp_pointers;
+      for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+        m_warp_pointers[it->first] = &it->second;
+      }
+      m_ray_coherence_engine->process_response(mf, m_warp_pointers, &inst);
       if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
       inst.clear();
     }
@@ -3489,7 +3501,11 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
     cacheline_count++;
 
     if (m_config->m_rt_coherence_engine) {
-      m_ray_coherence_engine->process_response(mf, m_current_warps, inst);
+      std::map<unsigned, warp_inst_t *> m_warp_pointers;
+      for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
+        m_warp_pointers[it->first] = &it->second;
+      }
+      m_ray_coherence_engine->process_response(mf, m_warp_pointers, &inst);
       if (!inst.empty()) m_current_warps[inst.get_uid()] = inst;
       inst.clear();
     }
