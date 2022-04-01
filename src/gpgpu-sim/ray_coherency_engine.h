@@ -112,13 +112,17 @@ class ray_coherence_engine {
 
   private:
     unsigned m_total_rays;
+    unsigned m_num_ray_pool_rays;
+    unsigned m_num_scheduled_rays;
     unsigned long long m_last_insertion_cycle;
 
     // map [hash]->[group of rays]
     std::map<ray_hash, coherence_packet> m_ray_pool;
 
+    std::vector<coherence_packet> m_scheduled_packets;
+
     // map [addr]->[set of hashes (coherence_packets)]
-    std::map<new_addr_type, std::set<ray_hash> > m_request_mshr;
+    std::map<new_addr_type, std::set<unsigned> > m_request_mshr;
 
     float3 world_min;
     float3 world_max;
@@ -126,6 +130,7 @@ class ray_coherence_engine {
     coherence_stats* m_stats;
 
     bool m_active;
+    unsigned m_schedule_packet_id;
 
     ray_hash m_active_hash;
     unsigned m_active_warp;
@@ -134,8 +139,11 @@ class ray_coherence_engine {
 
     bool is_empty(coherence_packet packet);
     bool is_stalled();
-    bool is_stalled(ray_hash hash, coherence_packet packet);
+    bool is_stalled(coherence_packet packet);
+    bool check_scheduled();
+    bool scheduled_full();
 
+    coherence_packet * get_largest_packet(ray_hash &hash);
     unsigned long long compute_index(ray_hash hash, unsigned num_bits) const;
     ray_hash get_ray_hash(const Ray &ray);
 

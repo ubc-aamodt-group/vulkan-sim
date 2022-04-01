@@ -9,6 +9,9 @@ ray_coherence_engine::ray_coherence_engine(unsigned sid, struct ray_coherence_co
   m_initialized = false;
   m_active = false;
   m_stats = stats;
+  m_schedule_packet_id = 0;
+
+  m_scheduled_packets.resize(m_config.max_packets);
 }
 
 void ray_coherence_engine::set_world(float3 min, float3 max) {
@@ -48,13 +51,11 @@ void ray_coherence_engine::insert(warp_inst_t inst) {
       m_stats->total_packets++;
     }
 
-    if (!m_ray_pool[hash].empty() && is_stalled(hash, m_ray_pool[hash])) {
-      m_stats->stalled_addition++;
-    }
     m_ray_pool[hash].push_back(ray);
     m_total_rays++;
     m_stats->total_rays++;
     num_rays++;
+    m_num_ray_pool_rays++;
   }
   
   COHERENCE_DPRINTF("Shader %d: %d rays added (%d rays total)\n", m_sid, num_rays, m_total_rays);
@@ -75,16 +76,15 @@ bool ray_coherence_engine::is_empty(coherence_packet packet) {
 
 bool ray_coherence_engine::is_stalled() {
   // Check all the coherence packets
-  for (auto i=m_ray_pool.cbegin(); i!=m_ray_pool.cend(); i++) {
-    ray_hash hash = i->first;
-    coherence_packet packet = i->second;
-    if (!is_stalled(hash, packet)) return false;
+  for (auto i=m_scheduled_packets.cbegin(); i!=m_scheduled_packets.cend(); i++) {
+    coherence_packet packet = *i;
+    if (!is_stalled(packet)) return false;
   }
   // Stalled
   return true;
 }
 
-bool ray_coherence_engine::is_stalled(ray_hash hash, coherence_packet packet) {
+bool ray_coherence_engine::is_stalled(const coherence_packet packet) {
   // Check all the rays
   for (auto it=packet.cbegin(); it!=packet.cend(); it++) {
     coherence_ray ray = *it;
@@ -96,15 +96,35 @@ bool ray_coherence_engine::is_stalled(ray_hash hash, coherence_packet packet) {
   return true;
 }
 
+bool ray_coherence_engine::check_scheduled() {
+  for (unsigned i=0; i<m_config.max_packets; i++) {
+    if (!m_scheduled_packets[i].empty()) return true;
+  }
+  // No packets currently scheduled
+  return false;
+}
+
+bool ray_coherence_engine::scheduled_full() {
+  for (unsigned i=0; i<m_config.max_packets; i++) {
+    if (m_scheduled_packets[i].empty()) return false;
+  }
+  // All packets full
+  return true;
+}
+
 void ray_coherence_engine::cycle() {
   unsigned long long current_cycle = GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_tot_sim_cycle + GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle;
   
   // Turn engine off if there are no more rays
   if (m_total_rays == 0) m_active = false;
   // Turn engine off if stalled
-  else if (is_stalled()) {
+  else if (scheduled_full() && is_stalled()) {
     m_active = false;
     m_stats->stalled_cycles++;
+  }
+  // If not stalled and there are scheduled packets, turn on.
+  else if (check_scheduled()) {
+    m_active = true;
   }
   // Turn engine on if there are enough rays
   else if (m_total_rays > m_config.min_rays) {
@@ -126,35 +146,67 @@ void ray_coherence_engine::cycle() {
     for (auto i=m_ray_pool.cbegin(); i!=m_ray_pool.cend(); i++) {
       ray_hash hash = i->first;
       coherence_packet packet = i->second;
-      if (!is_stalled(hash, packet) && !is_empty(packet)) {
+      if (!is_stalled(packet) && !is_empty(packet)) {
         active_packets++;
       }
     }
     m_stats->average_stat(coherence_stats_type::ACTIVE_PACKETS, active_packets);
+
+    // Schedule packets
+    if (m_num_ray_pool_rays > 0) {
+      for (unsigned i=0; i<m_config.max_packets; i++) {
+        // If there is an empty packet, fill it
+        if (m_scheduled_packets[i].empty()) {
+          // Find largest packet
+          ray_hash hash;
+          coherence_packet *selected_packet = get_largest_packet(hash);
+          COHERENCE_DPRINTF("Shader %d: Scheduling new packet [%d] with 0x%x\n", m_sid, i, hash);
+
+          // Move rays (schedule)
+          for (unsigned r=0; r<m_config.warp_size; r++) {
+            if (selected_packet->empty()) break;
+            m_scheduled_packets[i].push_back(selected_packet->front());
+            selected_packet->pop_front();
+            m_num_scheduled_rays++;
+            m_num_ray_pool_rays--;
+          }
+        }
+      }
+    }
+
+    if (is_stalled()) m_active = false;
   }
+  assert(m_num_ray_pool_rays + m_num_scheduled_rays == m_total_rays);
+}
+
+coherence_packet * ray_coherence_engine::get_largest_packet(ray_hash &hash) {
+  // Find the largest coherence packet
+  unsigned largest_packet = 0;
+  for (auto it=m_ray_pool.cbegin(); it!=m_ray_pool.cend(); it++) {
+    if (it->second.size() > largest_packet) {
+      hash = it->first;
+      largest_packet = it->second.size();
+    }
+  }
+
+  return &m_ray_pool[hash];
 }
 
 unsigned ray_coherence_engine::schedule_next_warp() {
   assert(m_active);
 
-  // Find the largest coherence packet
-  unsigned largest_packet = 0;
-  ray_hash hash;
-  for (auto it=m_ray_pool.cbegin(); it!=m_ray_pool.cend(); it++) {
-    if (it->second.size() > largest_packet && !is_stalled(it->first, it->second)) {
-      hash = it->first;
-      largest_packet = it->second.size();
-    }
+  // Iterate through packet to find non-stalled packet
+  while (is_stalled(m_scheduled_packets[m_schedule_packet_id])) {
+    m_schedule_packet_id = (m_schedule_packet_id + 1) % m_config.max_packets;
   }
-  assert(largest_packet != 0);
-  m_active_hash = hash;
-  COHERENCE_DPRINTF("Shader %d: Scheduling next access (hash 0x%x ", m_sid, m_active_hash);
+  COHERENCE_DPRINTF("Shader %d: Scheduling next access (packet %d ", m_sid, m_schedule_packet_id);
+  coherence_packet &selected_packet = m_scheduled_packets[m_schedule_packet_id];
 
   // Choose the most common request
   // map (addr, size)->occurrences
   std::map<addr_size_pair, unsigned> requests;
   // Gather all the addresses
-  for (auto it=m_ray_pool[m_active_hash].cbegin(); it!=m_ray_pool[m_active_hash].cend(); it++) {
+  for (auto it=selected_packet.cbegin(); it!=selected_packet.cend(); it++) {
     coherence_ray ray = *it;
 
     if (!ray.empty()) {
@@ -187,7 +239,7 @@ unsigned ray_coherence_engine::schedule_next_warp() {
 
 
   // Find thread
-  for (auto it=m_ray_pool[m_active_hash].cbegin(); it!=m_ray_pool[m_active_hash].cend(); it++) {
+  for (auto it=selected_packet.cbegin(); it!=selected_packet.cend(); it++) {
     coherence_ray ray = *it;
     if (!ray.empty() && ray.latency_delay == 0) {
       if (ray.next_access().address == next_request.first && ray.next_access().size == next_request.second) {
@@ -204,37 +256,38 @@ unsigned ray_coherence_engine::schedule_next_warp() {
 }
 
 RTMemoryTransactionRecord ray_coherence_engine::get_next_access() {
+  coherence_packet &selected_packet = m_scheduled_packets[m_schedule_packet_id];
   // Mark memory record status
-  for (coherence_ray &ray : m_ray_pool[m_active_hash]) {
+  for (coherence_ray &ray : selected_packet) {
     if (!ray.empty()) {
       if (ray.next_addr() == m_active_record.address &&
           ray.next_access().size == m_active_record.size &&
           ray.latency_delay == 0) {
         ray.RT_mem_accesses.front().status = RT_MEM_AWAITING;
-        COHERENCE_DPRINTF("Shader %d: Mark mem awaiting for warp &d thread %d\n", m_sid, ray.origin_warp_uid, ray.origin_thread_id);
+        COHERENCE_DPRINTF("Shader %d: Mark mem awaiting for warp %d thread %d\n", m_sid, ray.origin_warp_uid, ray.origin_thread_id);
       }
     }
   }
 
   // Mark request as sent
   if (m_request_mshr.find(m_active_record.address) == m_request_mshr.end()) {
-    std::set<ray_hash> outstanding_hashes;
-    m_request_mshr[m_active_record.address] = outstanding_hashes;
+    std::set<unsigned> outstanding_packets;
+    m_request_mshr[m_active_record.address] = outstanding_packets;
   }
-  COHERENCE_DPRINTF("Shader %d: Inserting MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, m_active_record.address);
-  m_request_mshr[m_active_record.address].insert(m_active_hash);
+  COHERENCE_DPRINTF("Shader %d: Inserting MSHR entry for packet %d at addr 0x%x\n", m_sid, m_schedule_packet_id, m_active_record.address);
+  m_request_mshr[m_active_record.address].insert(m_schedule_packet_id);
 
   // Create MSHR for chunks
   if (m_active_record.size > 32) {
     COHERENCE_DPRINTF("Shader %d: Memory request > 32B. Inserting MSHR entries\n", m_sid);
-      // Create the memory chunks and push to mem_access_q
+    // Create the memory chunks and push to mem_access_q
     for (unsigned i=1; i<((m_active_record.size+31)/32); i++) {
       if (m_request_mshr.find(m_active_record.address + (i * 32)) == m_request_mshr.end()) {
-        std::set<ray_hash> outstanding_hashes;
-        m_request_mshr[m_active_record.address + (i * 32)] = outstanding_hashes;
+        std::set<unsigned> outstanding_packets;
+        m_request_mshr[m_active_record.address + (i * 32)] = outstanding_packets;
       }
-      COHERENCE_DPRINTF("Shader %d: Inserting MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, m_active_record.address + (i * 32));
-      m_request_mshr[m_active_record.address + (i * 32)].insert(m_active_hash);
+      COHERENCE_DPRINTF("Shader %d: Inserting MSHR entry for packet %d at addr 0x%x\n", m_sid, m_schedule_packet_id, m_active_record.address + (i * 32));
+      m_request_mshr[m_active_record.address + (i * 32)].insert(m_schedule_packet_id);
     }
   }
 
@@ -242,10 +295,11 @@ RTMemoryTransactionRecord ray_coherence_engine::get_next_access() {
 }
 
 void ray_coherence_engine::undo_access(new_addr_type addr) {
+  coherence_packet &selected_packet = m_scheduled_packets[m_schedule_packet_id];
   // Assume that this was the most recent request
   assert(m_active_record.address == addr);
   
-  for (coherence_ray &ray : m_ray_pool[m_active_hash]) {
+  for (coherence_ray &ray : selected_packet) {
     if (!ray.empty()) {
       if (ray.next_addr() == m_active_record.address &&
           ray.next_access().size == m_active_record.size &&
@@ -258,8 +312,8 @@ void ray_coherence_engine::undo_access(new_addr_type addr) {
 
   // Remove the most recent hash from the MSHR
   assert(m_request_mshr.find(addr) != m_request_mshr.end());
-  assert(m_request_mshr[addr].erase(m_active_hash) > 0);
-  COHERENCE_DPRINTF("Shader %d: Undoing MSHR entry for 0x%x at addr 0x%x\n", m_sid, m_active_hash, addr);
+  assert(m_request_mshr[addr].erase(m_schedule_packet_id) > 0);
+  COHERENCE_DPRINTF("Shader %d: Undoing MSHR entry for packet %d at addr 0x%x\n", m_sid, m_schedule_packet_id, addr);
 }
 
 void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, warp_inst_t *> &m_current_warps, warp_inst_t *pipe_reg) {
@@ -270,14 +324,13 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
   unsigned found = 0;
   
   if (m_request_mshr.find(uncoalesced_addr) != m_request_mshr.end()) {
-    std::set<ray_hash> hashes = m_request_mshr[uncoalesced_addr];
-    COHERENCE_DPRINTF("Shader %d: Found %d MSHR ray coherency packets for addr 0x%x\n", m_sid, hashes.size(), uncoalesced_addr);
+    std::set<unsigned> packets = m_request_mshr[uncoalesced_addr];
+    COHERENCE_DPRINTF("Shader %d: Found %d MSHR ray coherency packets for addr 0x%x\n", m_sid, packets.size(), uncoalesced_addr);
 
     // Mark memory response for all hashes
-    for (ray_hash hash : hashes) {
+    for (unsigned p : packets) {
       // Find the appropriate threads
-      assert(m_ray_pool.find(hash) != m_ray_pool.end());
-      coherence_packet &packet = m_ray_pool[hash];
+      coherence_packet &packet = m_scheduled_packets[p];
       
       // Go through each ray in the packet
       for (coherence_ray &ray : packet) {
@@ -311,13 +364,14 @@ void ray_coherence_engine::process_response(mem_fetch *mf, std::map<unsigned, wa
 }
 
 void ray_coherence_engine::dec_thread_latency() {
-  for (auto it=m_ray_pool.cbegin(); it!=m_ray_pool.cend(); it++) {
-    ray_hash hash = it->first;
+  for (unsigned i=0; i<m_config.max_packets; i++) {
     unsigned index = 0;
     std::deque<unsigned> index_list;
-    for (coherence_ray &ray : m_ray_pool[hash]) {
+    coherence_packet &packet = m_scheduled_packets[i];
+    for (coherence_ray &ray : packet) {
       if (ray.latency_delay > 0) ray.latency_delay--;
       else if (ray.empty()) {
+        COHERENCE_DPRINTF("Shader %d: Ray (w%d:t%d) complete!\n", m_sid, ray.origin_warp_uid, ray.origin_thread_id);
         index_list.push_back(index);
       }
       index++;
@@ -328,8 +382,10 @@ void ray_coherence_engine::dec_thread_latency() {
     for (auto iter=index_list.begin(); iter!=index_list.end(); iter++) {
       unsigned delete_index = *iter;
       unsigned adjusted_index = delete_index - index;
-      m_ray_pool[hash].erase(m_ray_pool[hash].begin() + adjusted_index);
+      packet.erase(packet.begin() + adjusted_index);
       index++;
+      m_num_scheduled_rays--;
+      m_total_rays--;
     }
   }
 }
@@ -457,11 +513,22 @@ ray_hash ray_coherence_engine::get_ray_hash(const Ray &ray) {
 void ray_coherence_engine::print(FILE *fout) {
   fprintf(fout, "\nRAY_COHERENCE_ENGINE: (%sactive)\n", m_active ? "" : "in");
 
-  fprintf(fout, "Rays (%d):\n", m_total_rays);
+  fprintf(fout, "Rays (%d/%d):\n", m_total_rays, m_num_ray_pool_rays);
   for (auto it=m_ray_pool.begin(); it!=m_ray_pool.end(); it++) {
     ray_hash hash = it->first;
-    fprintf(fout, "[0x%x] (%d)\t", hash, is_stalled(hash, it->second));
+    fprintf(fout, "[0x%x] (%d)\t", hash, is_stalled(it->second));
     for (coherence_ray ray : it->second) {
+      if (!ray.empty())
+        fprintf(fout, "w%d:t%d\t", ray.origin_warp_uid, ray.origin_thread_id);
+    }
+    fprintf(fout, "\n");
+  }
+
+  fprintf(fout, "Scheduled Packets (%d):\n", m_num_scheduled_rays);
+  for (unsigned i=0; i<m_config.max_packets; i++) {
+    if (i == m_schedule_packet_id) fprintf(fout, "*");
+    fprintf(fout, "[%d] (%d)\t", i, is_stalled(m_scheduled_packets[i]));
+    for (coherence_ray ray : m_scheduled_packets[i]) {
       if (!ray.empty())
         fprintf(fout, "w%d:t%d\t", ray.origin_warp_uid, ray.origin_thread_id);
     }
@@ -471,8 +538,8 @@ void ray_coherence_engine::print(FILE *fout) {
   fprintf(fout, "Outstanding requests:\n");
   for (auto it=m_request_mshr.begin(); it!=m_request_mshr.end(); it++) {
     fprintf(fout, "[0x%x]\t", it->first);
-    for (ray_hash hash : it->second) {
-      fprintf(fout, "0x%x\t", hash);
+    for (unsigned i : it->second) {
+      fprintf(fout, "%d\t", i);
     }
     fprintf(fout, "\n");
   }
@@ -499,15 +566,22 @@ void ray_coherence_engine::print_full(FILE *fout) {
   fprintf(fout, "Rays (%d):\n", m_total_rays);
   for (auto it=m_ray_pool.begin(); it!=m_ray_pool.end(); it++) {
     ray_hash hash = it->first;
-    fprintf(fout, "Hash [0x%x] (%s)\n", hash, is_stalled(hash, it->second) ? "s" : " ");
+    fprintf(fout, "Hash [0x%x] (%s)\n", hash, is_stalled(it->second) ? "s" : " ");
     print(it->second, fout);
+  }
+
+  fprintf(fout, "Scheduled Packets:\n");
+  for (unsigned i=0; i<m_config.max_packets; i++) {
+    if (i == m_schedule_packet_id) fprintf(fout, "*");
+    fprintf(fout, "[%d] (%s)\n", i, is_stalled(m_scheduled_packets[i]) ? "s" : " ");
+    print(m_scheduled_packets[i], fout);
   }
 
   fprintf(fout, "Outstanding requests:\n");
   for (auto it=m_request_mshr.begin(); it!=m_request_mshr.end(); it++) {
     fprintf(fout, "[0x%x]\t", it->first);
-    for (ray_hash hash : it->second) {
-      fprintf(fout, "0x%x\t", hash);
+    for (unsigned i : it->second) {
+      fprintf(fout, "%d\t", i);
     }
     fprintf(fout, "\n");
   }

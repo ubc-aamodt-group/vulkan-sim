@@ -187,6 +187,7 @@ struct ray_coherence_config {
   unsigned hash_sphere_bits;
   float hash_two_point_est_length_ratio;
   unsigned warp_size;
+  unsigned max_packets;
 };
 
 enum rt_warp_status {

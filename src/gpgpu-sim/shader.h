@@ -1610,9 +1610,10 @@ class shader_core_config : public core_config {
       &m_rt_intersection_latency[TransactionType::BVH_QUAD_LEAF_HIT],
       &m_rt_intersection_latency[TransactionType::BVH_PROCEDURAL_LEAF]);
     
-    sscanf(m_rt_coherence_engine_config_str, "%u,%u,%c,%u,%u,%u,%f", 
+    sscanf(m_rt_coherence_engine_config_str, "%u,%u,%u,%c,%u,%u,%u,%f", 
       &m_rt_coherence_engine_config.max_cycles,
       &m_rt_coherence_engine_config.min_rays,
+      &m_rt_coherence_engine_config.max_packets,
       &m_rt_coherence_engine_config.hash,
       &m_rt_coherence_engine_config.hash_francois_bits,
       &m_rt_coherence_engine_config.hash_grid_bits,
@@ -1623,6 +1624,7 @@ class shader_core_config : public core_config {
     printf("GPGPU-Sim: Ray Coherence Engine Settings:\n");
     printf("\tEnabled: %s\n", m_rt_coherence_engine ? "Yes" : "No");
     printf("\tMax cycles: %d\n", m_rt_coherence_engine_config.max_cycles);
+    printf("\tMax packets: %d\n", m_rt_coherence_engine_config.max_packets);
     printf("\tSorting hash: ");
     switch (m_rt_coherence_engine_config.hash) {
       case 'd': 
