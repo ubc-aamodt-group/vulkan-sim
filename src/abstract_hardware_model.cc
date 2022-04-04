@@ -818,7 +818,7 @@ void warp_inst_t::completed(unsigned long long cycle) const {
       pc, latency * active_count());
   
   unsigned inst_type = (mem_op == TEX) ? 27 : (unsigned)op;
-  m_config->gpgpu_ctx->func_sim->g_inst_type_latency[inst_type]++;
+  m_config->gpgpu_ctx->func_sim->g_inst_type_latency[inst_type] += latency;
 }
 
 
