@@ -5,6 +5,7 @@
 #include "vulkan/vulkan_intel.h"
 
 #include "vulkan/anv_acceleration_structure.h"
+#include "intersection_table.h"
 #include "compiler/spirv/spirv.h"
 
 // #include "ptx_ir.h"
@@ -99,12 +100,19 @@ typedef struct variable_decleration_entry{
   uint32_t size;
 } variable_decleration_entry;
 
+
+enum class Hit_type{
+    Procedural,
+    Triangle,
+};
+
 typedef struct Hit_data{
+    Hit_type hit_type;
+    float world_min_thit;
     uint32_t geometry_index;
     uint32_t primitive_index;
     float3 intersection_point;
     float3 barycentric_coordinates;
-    float world_min_thit;
     VkGeometryTypeKHR geometryType;
 
     uint32_t instance_index;
@@ -123,6 +131,9 @@ typedef struct Traversal_data {
     Hit_data closest_hit;
     float3 ray_world_direction;
     float3 ray_world_origin;
+    float Tmin;
+    float Tmax;
+    int32_t shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
 
     uint32_t rayFlags;
     uint32_t cullMask;
@@ -192,62 +203,6 @@ typedef struct Vulkan_RT_thread_data {
     }
 } Vulkan_RT_thread_data;
 
-// An entry in function coalascing buffer or the baseline table
-typedef struct shader_warp_entry {
-  uint32_t GeometryIndex;
-  bool thread_mask[32];
-
-  struct {
-    uint32_t primitiveID;
-    uint32_t instanceID;
-  } shader_data[32];
-} shader_warp_entry;
-
-class shader_table {
-    std::vector<shader_warp_entry> table;
-
-public:
-    void add_to_baseline_table(uint32_t geometry_id, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
-        assert(tid < 32);
-        if (table.size() > 0 && table.back().GeometryIndex == geometry_id)
-        if (!function_coalescing_buffer.back().thread_mask[tid])
-        {
-            table.back().thread_mask[tid] = true;
-            table.back().shader_data[tid].primitiveID = primitiveID;
-            table.back().shader_data[tid].instanceID = instanceID;
-            return;
-        }
-
-        shader_warp_entry entry;
-        entry.GeometryIndex = geometry_id;
-        entry.thread_mask[tid] = true;
-        entry.shader_data[tid].primitiveID = primitiveID;
-        entry.shader_data[tid].instanceID = instanceID;
-        table.push_back(entry);
-    }
-
-    void add_to_coalescing_table(uint32_t geometry_id, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
-        assert(tid < 32);
-        for (int i = 0; i < table.size(); i++) {
-            if (table[i].GeometryIndex == geometry_id)
-            if (!table[i].thread_mask[tid])
-            {
-                table[i].thread_mask[tid] = true;
-                table[i].shader_data[tid].primitiveID = primitiveID;
-                table[i].shader_data[tid].instanceID = instanceID;
-                return;
-            }
-        }
-
-        shader_warp_entry entry;
-        entry.GeometryIndex = geometry_id;
-        entry.thread_mask[tid] = true;
-        entry.shader_data[tid].primitiveID = primitiveID;
-        entry.shader_data[tid].instanceID = instanceID;
-        table.push_back(entry);
-    }
-};
-
 struct anv_descriptor_set;
 struct anv_descriptor;
 
@@ -263,7 +218,8 @@ private:
     static bool firstTime;
     static struct anv_descriptor_set *descriptorSet;
 public:
-    static RayDebugGPUData rayDebugGPUData[2000][2000];
+    // static RayDebugGPUData rayDebugGPUData[2000][2000];
+    static warp_intersection_table intersection_table[120][2160];
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
@@ -284,8 +240,6 @@ public:
                        float3 direction,
                        float Tmax,
                        int payload,
-                       bool &run_closest_hit,
-                       bool &run_miss,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
     static void endTraceRay(const ptx_instruction *pI, ptx_thread_info *thread);
@@ -311,7 +265,7 @@ public:
     static void callShader(const ptx_instruction *pI, ptx_thread_info *thread, function_info *target_func);
     static void callMissShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
-    static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter);
     static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t binding);

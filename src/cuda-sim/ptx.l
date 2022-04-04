@@ -199,6 +199,10 @@ txl TC; yylval->int_value = TXL_OP; return OPCODE;
 shader_clock TC; yylval->int_value = SHADER_CLOCK_OP; return OPCODE;
 copysignf TC; yylval->int_value = COPYSIGNF_OP; return OPCODE;
 report_ray_intersection TC; yylval->int_value = REPORT_RAY_INTERSECTION_OP; return OPCODE;
+run_intersection TC; yylval->int_value = RUN_INTERSECTION_OP; return OPCODE;
+get_intersection_index TC; yylval->int_value = GET_INTERSECTION_INDEX_OP; return OPCODE;
+intersection_exit TC; yylval->int_value = INTERSECTION_EXIT_OP; return OPCODE;
+hit_geometry TC; yylval->int_value = HIT_GEOMETRY_OP; return OPCODE;
 
 
 "CPTX_END"	printf("ENDING CUSTOM PTX.\n"); BEGIN(IN_COMMENT);

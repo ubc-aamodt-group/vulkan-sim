@@ -983,7 +983,7 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, data, i_type, thread, pI, overflow, carry);
 }
 
-bool print_debug_insts = false;
+bool print_debug_insts = true;
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
@@ -6737,9 +6737,13 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 512 + thread->get_tid().x;
-  // v[1] = 360;
-  // v[2] = 0;
+  // v[0] = thread->get_vulkan_RT_launch_id().x;
+  // v[1] = thread->get_vulkan_RT_launch_id().y;
+  // v[2] = thread->get_vulkan_RT_launch_id().z;
+
+  v[0] = 320 + thread->get_tid().x;
+  v[1] = 220;
+  v[2] = 0;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6762,9 +6766,9 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
-  // v[0] = 1280;
-  // v[1] = 720;
-  // v[2] = 1;
+  v[0] = 1280;
+  v[1] = 720;
+  v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6778,20 +6782,39 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
 }
 
 void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  uint32_t instance_index;
+  uint32_t shader_counter = thread->RT_thread_data->traversal_data.back().shader_counter;
+  if(shader_counter == -1) // not in intersection shader
+    instance_index = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
+  else {
+    warp_intersection_table* table = &VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+    instance_index = table->get_instanceID(shader_counter, thread->get_tid().x);
+  }
+
   assert(pI->get_num_operands() == 1);
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
+  data.u32 = instance_index;
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  uint32_t primitive_index;
+  uint32_t shader_counter = thread->RT_thread_data->traversal_data.back().shader_counter;
+  if(shader_counter == -1) // not in intersection shader
+    primitive_index = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
+  else {
+    warp_intersection_table* table = &VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+    primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x);
+  }
+
+
   assert(pI->get_num_operands() == 1);
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.primitive_index;
+  data.u32 = primitive_index;
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
@@ -6872,8 +6895,14 @@ void load_ray_world_origin_impl(const ptx_instruction *pI, ptx_thread_info *thre
 void load_ray_t_max_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst0 = pI->dst();
 
+  float t_max;
+  if(thread->RT_thread_data->traversal_data.back().hit_geometry)
+    t_max = thread->RT_thread_data->traversal_data.back().closest_hit.world_min_thit;
+  else
+    t_max = thread->RT_thread_data->traversal_data.back().Tmax;
+
   ptx_reg_t data;
-  data.f32 = thread->RT_thread_data->traversal_data.back().closest_hit.world_min_thit;
+  data.f32 = t_max;
   thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
 }
 
@@ -6881,7 +6910,7 @@ void load_ray_t_min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst0 = pI->dst();
 
   ptx_reg_t data;
-  data.f32 = thread->RT_thread_data->traversal_data.back().closest_hit.world_min_thit;
+  data.f32 = thread->RT_thread_data->traversal_data.back().Tmin;
   thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
 }
 
@@ -6958,7 +6987,34 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(0);
+  ptx_reg_t src1_data, src2_data, data;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src1 = pI->src1();
+  const operand_info &src2 = pI->src2();
+
+  src1_data = thread->get_operand_value(src1, dst, F32_TYPE, thread, 1);
+  float t_hit = src1_data.f32;
+
+  src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 1);
+  uint32_t hit_kind = src2_data.u32;
+
+  Traversal_data *traversal_data = &thread->RT_thread_data->traversal_data.back();
+
+  bool return_value = false;
+
+  if((traversal_data->Tmin <= t_hit))
+    if((traversal_data->hit_geometry && t_hit < traversal_data->closest_hit.world_min_thit) || (!traversal_data->hit_geometry && t_hit <= traversal_data->Tmax)) {
+      return_value = true;
+      traversal_data->hit_geometry = true;
+      traversal_data->closest_hit.hit_type = Hit_type::Procedural;
+      traversal_data->closest_hit.world_min_thit = t_hit;
+    }
+
+  data.pred =
+      (return_value ==
+       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 }
 
 
@@ -7079,14 +7135,6 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // ptx_reg_t op15_data = thread->get_operand_value(op15, op15, U64_TYPE, thread, 1);
   // uint32_t payload = op15_data.u64;
 
-  arg++;
-  const operand_info &op16 = pI->operand_lookup(arg);
-  bool run_closest_hit;
-
-  arg++;
-  const operand_info &op17 = pI->operand_lookup(arg);
-  bool run_miss;
-
   // thread->dump_regs(stdout);
 
   VulkanRayTracing::traceRay(_topLevelAS, rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex,
@@ -7095,18 +7143,8 @@ void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
                    {directionX, directionY, directionZ},
                    Tmax,
                    NULL,
-                   run_closest_hit,
-                   run_miss,
                    pI,
                    thread);
-  
-  ptx_reg_t data;
-
-  data.u32 = run_closest_hit;
-  thread->set_operand_value(op16, data, PRED_TYPE, thread, pI);
-
-  data.u32 = run_miss;
-  thread->set_operand_value(op17, data, PRED_TYPE, thread, pI);
 }
 
 void end_trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7194,7 +7232,11 @@ void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *th
 }
 
 void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  VulkanRayTracing::callIntersectionShader(pI, thread);
+  const operand_info &src = pI->operand_lookup(0);
+  ptx_reg_t src_data = thread->get_operand_value(src, src, U32_TYPE, thread, 1);
+  uint32_t shader_counter = src_data.u32;
+
+  VulkanRayTracing::callIntersectionShader(pI, thread, shader_counter);
 }
 
 void call_any_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7353,6 +7395,61 @@ void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.u64 = address;
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
+
+void run_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = &VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  bool intersection_exists = table->shader_exists(thread->get_tid().x, shader_counter);
+
+  data.pred =
+      (intersection_exists ==
+       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  
+  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
+}
+
+void intersection_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = &VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  bool exit_intersection = table->exit_shaders(shader_counter);
+
+  data.pred =
+      (exit_intersection ==
+       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  
+  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
+}
+
+void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst = pI->dst();
+  ptx_reg_t data;
+
+  bool hit_geometry = thread->RT_thread_data->traversal_data.back().hit_geometry;
+
+  data.pred =
+      (hit_geometry ==
+       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  
+  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
+}
+
+
+void get_intersection_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(0);
+}
+
 
 // wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3
 void wrap_32_4_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
