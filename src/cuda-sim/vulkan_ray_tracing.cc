@@ -1070,8 +1070,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    launch_width = 1;
-    launch_height = 1;
+    // launch_width = 1;
+    // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
@@ -1425,6 +1425,30 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc, float x, float y,
     // }
 }
 
+void VulkanRayTracing::image_load(struct anv_descriptor *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3)
+{
+    ImageMemoryTransactionRecord transaction;
+
+    struct anv_image_view *image_view =  desc->image_view;
+    struct anv_sampler *sampler = desc->sampler;
+
+    const struct anv_image *image = image_view->image;
+    assert(image->n_planes == 1);
+    assert(image->samples == 1);
+    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+    assert(image->planes[0].surface.isl.tiling == ISL_TILING_Y0);
+    assert(sampler->conversion == NULL);
+
+    Pixel pixel = load_image_pixel(image, x, y, 0, transaction);
+
+    transaction.type = ImageTransactionType::IMAGE_LOAD;
+    
+    c0 = pixel.c0;
+    c1 = pixel.c1;
+    c2 = pixel.c2;
+    c3 = pixel.c3;
+}
+
 void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
@@ -1440,7 +1464,7 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     store_image_pixel(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, 0, pixel, transaction);
     transaction.type = ImageTransactionType::IMAGE_STORE;
 
-    if(writeImageBinary)
+    if(writeImageBinary && image->vk_format != VK_FORMAT_R32G32B32A32_SFLOAT)
     {
         uint32_t image_width = thread->get_kernel().vulkan_metadata.launch_width;
         uint32_t offset = 0;

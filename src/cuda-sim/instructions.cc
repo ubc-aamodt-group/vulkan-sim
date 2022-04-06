@@ -983,7 +983,7 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, data, i_type, thread, pI, overflow, carry);
 }
 
-bool print_debug_insts = true;
+bool print_debug_insts = false;
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
@@ -6741,9 +6741,9 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   // v[1] = thread->get_vulkan_RT_launch_id().y;
   // v[2] = thread->get_vulkan_RT_launch_id().z;
 
-  v[0] = 320 + thread->get_tid().x;
-  v[1] = 220;
-  v[2] = 0;
+  // v[0] = 475 + thread->get_tid().x;
+  // v[1] = 220;
+  // v[2] = 0;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6766,9 +6766,9 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
-  v[0] = 1280;
-  v[1] = 720;
-  v[2] = 1;
+  // v[0] = 1280;
+  // v[1] = 720;
+  // v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -7005,10 +7005,16 @@ void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *th
 
   if((traversal_data->Tmin <= t_hit))
     if((traversal_data->hit_geometry && t_hit < traversal_data->closest_hit.world_min_thit) || (!traversal_data->hit_geometry && t_hit <= traversal_data->Tmax)) {
+      int32_t shader_counter = traversal_data->shader_counter;
+      assert(shader_counter != -1);
+      warp_intersection_table* table = &VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+
       return_value = true;
       traversal_data->hit_geometry = true;
       traversal_data->closest_hit.hit_type = Hit_type::Procedural;
       traversal_data->closest_hit.world_min_thit = t_hit;
+      traversal_data->closest_hit.primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x);
+      traversal_data->closest_hit.instance_index = table->get_instanceID(shader_counter, thread->get_tid().x);
     }
 
   data.pred =
