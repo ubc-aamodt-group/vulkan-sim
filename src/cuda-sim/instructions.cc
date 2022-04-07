@@ -983,7 +983,7 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, data, i_type, thread, pI, overflow, carry);
 }
 
-bool print_debug_insts = false;
+bool print_debug_insts = true;
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
@@ -6741,9 +6741,9 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   // v[1] = thread->get_vulkan_RT_launch_id().y;
   // v[2] = thread->get_vulkan_RT_launch_id().z;
 
-  // v[0] = 640 + thread->get_tid().x;
-  // v[1] = 50;
-  // v[2] = 0;
+  v[0] = 480 + thread->get_tid().x;
+  v[1] = 400;
+  v[2] = 0;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6766,9 +6766,9 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
-  // v[0] = 1280;
-  // v[1] = 720;
-  // v[2] = 1;
+  v[0] = 1280;
+  v[1] = 720;
+  v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -7440,16 +7440,7 @@ void intersection_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
 }
 
 void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  const operand_info &dst = pI->dst();
-  ptx_reg_t data;
-
-  bool hit_geometry = thread->RT_thread_data->traversal_data.back().hit_geometry;
-
-  data.pred =
-      (hit_geometry ==
-       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
-  
-  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
+  assert(0);
 }
 
 
@@ -7457,6 +7448,18 @@ void get_intersection_index_impl(const ptx_instruction *pI, ptx_thread_info *thr
   assert(0);
 }
 
+void get_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst = pI->dst();
+  ptx_reg_t data;
+
+  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.hitGroupIndex;
+  
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+void get_warp_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(0);
+}
 
 // wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3
 void wrap_32_4_impl(const ptx_instruction *pI, ptx_thread_info *thread) {

@@ -190,7 +190,7 @@ typedef struct StackEntry {
     StackEntry(uint8_t* addr, bool topLevel, bool leaf): addr(addr), topLevel(topLevel), leaf(leaf) {}
 } StackEntry;
 
-bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& path, bool isTopLevel = true, bool isLeaf = false, bool isRoot = true)
+bool find_primitive(uint8_t* address, int primitiveID, int instanceID, std::list<uint8_t *>& path, bool isTopLevel = true, bool isLeaf = false, bool isRoot = true)
 {
     path.push_back(address);
 
@@ -201,7 +201,7 @@ bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& pat
 
         uint8_t* topRootAddr = (uint8_t*)address + topBVH.RootNodeOffset;
 
-        if(find_primitive(topRootAddr, primitiveID, path, isTopLevel, false, false))
+        if(find_primitive(topRootAddr, primitiveID, instanceID, path, isTopLevel, false, false))
             return true;
     }
     
@@ -220,7 +220,7 @@ bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& pat
                 else
                     isLeaf = false;
 
-                if(find_primitive(child_addr, primitiveID, path, isTopLevel, isLeaf, false))
+                if(find_primitive(child_addr, primitiveID, instanceID, path, isTopLevel, isLeaf, false))
                     return true;
             }
 
@@ -239,7 +239,9 @@ bool find_primitive(uint8_t* address, int primitiveID, std::list<uint8_t *>& pat
             float4x4 objectToWorldMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.ObjectToWorldm00);
 
             assert(instanceLeaf.BVHAddress != NULL);
-            if(find_primitive(instanceLeaf.BVHAddress, primitiveID, path, false, false, true))
+            if(instanceLeaf.InstanceID != instanceID)
+                return false;
+            if(find_primitive(instanceLeaf.BVHAddress, primitiveID, instanceID, path, false, false, true))
                 return true;
         }
         else
@@ -298,7 +300,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
     // std::list<uint8_t *> path;
-    // find_primitive((uint8_t*)_topLevelAS, 9920, path);
+    // find_primitive((uint8_t*)_topLevelAS, 6, 2, path);
 
     Traversal_data traversal_data;
 
@@ -470,7 +472,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             if (debugTraversal)
             {
-                traversalFile << "traversing top level leaf node " << (void *)leaf_addr << ", child bot root " << (void *)botLevelRootAddr << std::endl;
+                traversalFile << "traversing top level leaf node " << (void *)leaf_addr << " with instanceID = " << instanceLeaf.InstanceID << ", child bot root " << (void *)botLevelRootAddr << std::endl;
                 traversalFile << "warped ray to object coordinates ";
                 traversalFile << "origin = (" << objectRay.get_origin().x << ", " << objectRay.get_origin().y << ", " << objectRay.get_origin().z << "), ";
                 traversalFile << "direction = (" << objectRay.get_direction().x << ", " << objectRay.get_direction().y << ", " << objectRay.get_direction().z << "), ";
@@ -607,7 +609,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                                 traversalFile << "hit quad node " << (void *)leaf_addr << " with thit " << thit << " ";
                             else
                                 traversalFile << "miss quad node " << leaf_addr << " ";
-                            traversalFile << "primitiveID = " << leaf.PrimitiveIndex0 << "\n";
+                            traversalFile << "primitiveID = " << leaf.PrimitiveIndex0 << ", InstanceID = " << instanceLeaf.InstanceID << "\n";
 
                             traversalFile << "p[0] = (" << p[0].x << ", " << p[0].y << ", " << p[0].z << ") ";
                             traversalFile << "p[1] = (" << p[1].x << ", " << p[1].y << ", " << p[1].z << ") ";
@@ -1069,8 +1071,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 1;
-    // launch_height = 1;
+    launch_width = 32;
+    launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
@@ -1189,9 +1191,13 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    thread->RT_thread_data->traversal_data.back().current_shader_counter = (int32_t)shader_counter;
+    Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
+    traversal_data->current_shader_counter = (int32_t)shader_counter;
 
-    shader_stage_info intersection_shader = shaders[4];
+    warp_intersection_table* table = &VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+    uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter);
+
+    shader_stage_info intersection_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1)];
     function_info *entry = context->get_kernel(intersection_shader.function_name);
     callShader(pI, thread, entry);
 }

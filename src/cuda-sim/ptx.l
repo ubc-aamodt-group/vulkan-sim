@@ -203,6 +203,8 @@ run_intersection TC; yylval->int_value = RUN_INTERSECTION_OP; return OPCODE;
 get_intersection_index TC; yylval->int_value = GET_INTERSECTION_INDEX_OP; return OPCODE;
 intersection_exit TC; yylval->int_value = INTERSECTION_EXIT_OP; return OPCODE;
 hit_geometry TC; yylval->int_value = HIT_GEOMETRY_OP; return OPCODE;
+get_hitgroup TC; yylval->int_value = GET_HITGROUP_OP; return OPCODE;
+get_warp_hitgroup TC; yylval->int_value = GET_WARP_HITGROUP_OP; return OPCODE;
 
 
 "CPTX_END"	printf("ENDING CUSTOM PTX.\n"); BEGIN(IN_COMMENT);
