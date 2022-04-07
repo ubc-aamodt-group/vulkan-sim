@@ -12,7 +12,7 @@ typedef struct warp_intersection_entry {
         }
     }
 
-    uint32_t GeometryIndex;
+    uint32_t hitGroupIndex;
     bool thread_mask[32];
 
     struct {
@@ -25,9 +25,9 @@ class warp_intersection_table {
     std::vector<warp_intersection_entry> table;
 
 public:
-    void add_to_baseline_table(uint32_t geometry_id, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
+    void add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
         assert(tid < 32);
-        if (table.size() > 0 && table.back().GeometryIndex == geometry_id)
+        if (table.size() > 0 && table.back().hitGroupIndex == hit_group_index)
             if (!table.back().thread_mask[tid])
             {
                 table.back().thread_mask[tid] = true;
@@ -37,17 +37,17 @@ public:
             }
 
         warp_intersection_entry entry;
-        entry.GeometryIndex = geometry_id;
+        entry.hitGroupIndex = hit_group_index;
         entry.thread_mask[tid] = true;
         entry.shader_data[tid].primitiveID = primitiveID;
         entry.shader_data[tid].instanceID = instanceID;
         table.push_back(entry);
     }
 
-    void add_to_coalescing_table(uint32_t geometry_id, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
+    void add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
         assert(tid < 32);
         for (int i = 0; i < table.size(); i++) {
-            if (table[i].GeometryIndex == geometry_id)
+            if (table[i].hitGroupIndex == hit_group_index)
                 if (!table[i].thread_mask[tid])
                 {
                     table[i].thread_mask[tid] = true;
@@ -58,7 +58,7 @@ public:
         }
 
         warp_intersection_entry entry;
-        entry.GeometryIndex = geometry_id;
+        entry.hitGroupIndex = hit_group_index;
         entry.thread_mask[tid] = true;
         entry.shader_data[tid].primitiveID = primitiveID;
         entry.shader_data[tid].instanceID = instanceID;
@@ -79,6 +79,10 @@ public:
 
     uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) {
         return table[shader_counter].shader_data[tid].instanceID;
+    }
+
+    uint32_t get_hitGroupIndex(uint32_t shader_counter) {
+        return table[shader_counter].hitGroupIndex;
     }
 
     void clear() {

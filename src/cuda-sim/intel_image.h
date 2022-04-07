@@ -142,6 +142,30 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             pixel.a = colors[3] / 255.0;
             return pixel;
         }
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        {
+            uint32_t tileWidth = 32;
+            uint32_t tileHeight = 32;
+            int tileX = x / tileWidth;
+            int tileY = y / tileHeight;
+            int tileID = tileX + tileY * image->extent.width / tileWidth;
+
+            transaction.address = address + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
+            transaction.size = 4;
+
+            uint8_t colors[4];
+
+            intel_tiled_to_linear(x * 4, x * 4 + 4, y, y + 1,
+                colors, address, image->extent.width * 4 ,image->planes[0].surface.isl.row_pitch_B, false,
+                ISL_TILING_Y0, ISL_MEMCPY);
+
+            Pixel pixel;
+            pixel.r = colors[0] / 255.0;
+            pixel.g = colors[1] / 255.0;
+            pixel.b = colors[2] / 255.0;
+            pixel.a = colors[3] / 255.0;
+            return pixel;
+        }
         default:
         {
             printf("%d not implemented\n", image->vk_format);

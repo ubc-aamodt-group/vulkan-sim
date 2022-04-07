@@ -651,7 +651,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PROCEDURAL_LEAF_length * 4, TransactionType::BVH_PROCEDURAL_LEAF));
 
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        table->add_to_coalescing_table(leaf.LeafDescriptor.GeometryIndex, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        table->add_to_coalescing_table(instanceLeaf.InstanceContributionToHitGroupIndex, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         // assert(0);
                     }
                 }
@@ -662,7 +662,6 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     if (min_thit < ray.dir_tmax.w)
     {
         traversal_data.hit_geometry = true;
-        traversal_data.closest_hit.hit_type = Hit_type::Triangle;
         traversal_data.closest_hit.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
         traversal_data.closest_hit.geometry_index = closest_leaf.LeafDescriptor.GeometryIndex;
         traversal_data.closest_hit.primitive_index = closest_leaf.PrimitiveIndex0;
@@ -1121,7 +1120,7 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    thread->RT_thread_data->traversal_data.back().shader_counter = -1;
+    thread->RT_thread_data->traversal_data.back().current_shader_counter = -1;
 
     uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.miss_sbt) + 8 * thread->RT_thread_data->traversal_data.back().missIndex);
     
@@ -1151,11 +1150,20 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
-
-    thread->RT_thread_data->traversal_data.back().shader_counter = -1;
+    
+    Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
+    assert(traversal_data->hit_geometry);
+    traversal_data->current_shader_counter = -1;
 
     // shader_stage_info closesthit_shader = shaders[*(uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt)];
-    shader_stage_info closesthit_shader = shaders[3];
+    // shader_stage_info closesthit_shader = shaders[3];
+
+    shader_stage_info closesthit_shader;
+    if(traversal_data->closest_hit.geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
+        closesthit_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt))];
+    else
+        closesthit_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * traversal_data->closest_hit.hitGroupIndex)];
+
     function_info *entry = context->get_kernel(closesthit_shader.function_name);
     callShader(pI, thread, entry);
 
@@ -1181,7 +1189,7 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    thread->RT_thread_data->traversal_data.back().shader_counter = (int32_t)shader_counter;
+    thread->RT_thread_data->traversal_data.back().current_shader_counter = (int32_t)shader_counter;
 
     shader_stage_info intersection_shader = shaders[4];
     function_info *entry = context->get_kernel(intersection_shader.function_name);

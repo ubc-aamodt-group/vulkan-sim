@@ -100,20 +100,14 @@ typedef struct variable_decleration_entry{
   uint32_t size;
 } variable_decleration_entry;
 
-
-enum class Hit_type{
-    Procedural,
-    Triangle,
-};
-
 typedef struct Hit_data{
-    Hit_type hit_type;
+    VkGeometryTypeKHR geometryType;
     float world_min_thit;
     uint32_t geometry_index;
     uint32_t primitive_index;
     float3 intersection_point;
     float3 barycentric_coordinates;
-    VkGeometryTypeKHR geometryType;
+    int32_t hitGroupIndex; // Shader ID of the closest hit for procedural geometries
 
     uint32_t instance_index;
     float4x4 worldToObjectMatrix;
@@ -133,7 +127,7 @@ typedef struct Traversal_data {
     float3 ray_world_origin;
     float Tmin;
     float Tmax;
-    int32_t shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
+    int32_t current_shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
 
     uint32_t rayFlags;
     uint32_t cullMask;

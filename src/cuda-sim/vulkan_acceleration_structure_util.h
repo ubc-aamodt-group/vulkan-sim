@@ -365,7 +365,7 @@ GEN_RT_BVH_PRIMITIVE_LEAF_DESCRIPTOR_unpack(struct GEN_RT_BVH_PRIMITIVE_LEAF_DES
       uint32_t temp = *((uint32_t *)data);
       data += 4;
 
-      dst->ShaderIndex = temp & 0xcfffffff;
+      dst->GeometryIndex = temp & 0x0fffffff;
       dst->LeafType = (temp >> 29) & 0x00000001;
       dst->GeometryFlags = (temp >> 30);
    }
