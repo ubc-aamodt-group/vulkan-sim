@@ -7440,7 +7440,17 @@ void intersection_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
 }
 
 void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(0);
+  const operand_info &dst = pI->dst();
+  ptx_reg_t data;
+
+  bool hit_geometry = thread->RT_thread_data->traversal_data.back().hit_geometry;
+
+  data.pred =
+      (hit_geometry ==
+      0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+
+  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
+
 }
 
 
@@ -7458,7 +7468,28 @@ void get_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void get_warp_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(0);
+  static uint32_t last_counter = 0;
+  static uint32_t last_warp_hitgroup = -1;
+  
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+
+  if(shader_counter == last_counter) {
+    data.u32 = last_warp_hitgroup;
+  }
+  else if(shader_counter == last_counter + 1) {
+    last_counter = shader_counter;
+    last_warp_hitgroup = thread->RT_thread_data->traversal_data.back().closest_hit.hitGroupIndex;
+    data.u32 = last_warp_hitgroup;
+  }
+  else
+    assert(0);
+  
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 // wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3
