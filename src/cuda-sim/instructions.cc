@@ -7511,7 +7511,11 @@ void get_closest_hit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *t
   ptx_reg_t data;
 
   Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
-  data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * traversal_data->closest_hit.hitGroupIndex);
+
+  if(traversal_data->closest_hit.geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
+      data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
+  else
+      data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * traversal_data->closest_hit.hitGroupIndex);
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
