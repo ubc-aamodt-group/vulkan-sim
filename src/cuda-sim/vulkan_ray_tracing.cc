@@ -350,7 +350,20 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     uint8_t* topRootAddr = (uint8_t*)_topLevelAS + topBVH.RootNodeOffset;
 
     std::list<StackEntry> stack;
-    stack.push_back(StackEntry(topRootAddr, true, false));
+    
+    {
+        float3 lo, hi;
+        lo.x = topBVH.BoundsMin.X;
+        lo.y = topBVH.BoundsMin.Y;
+        lo.z = topBVH.BoundsMin.Z;
+        hi.x = topBVH.BoundsMax.X;
+        hi.y = topBVH.BoundsMax.Y;
+        hi.z = topBVH.BoundsMax.Z;
+
+        float thit;
+        if(ray_box_test(lo, hi, calculate_idir(ray.get_direction()), ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit))
+            stack.push_back(StackEntry(topRootAddr, true, false));
+    }
 
     while (!stack.empty())
     {
@@ -390,7 +403,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     set_child_bounds(&node, i, &lo, &hi);
 
                     child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
-                    child_hit[i] = true;
+                    if(child_hit[i] && thit[i] >= min_thit)
+                        child_hit[i] = false;
+
                     
                     if (debugTraversal)
                     {
@@ -516,6 +531,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             set_child_bounds(&node, i, &lo, &hi);
 
                             child_hit[i] = ray_box_test(lo, hi, idir, objectRay.get_origin(), objectRay.get_tmin(), objectRay.get_tmax(), thit[i]);
+                            if(child_hit[i] && thit[i] >= min_thit * worldToObject_tMultiplier)
+                                child_hit[i] = false;
 
                             if (debugTraversal)
                             {
@@ -628,12 +645,12 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             }
 
                             min_thit = thit / worldToObject_tMultiplier;
+                            min_thit_object = thit;
                             closest_leaf = leaf;
                             closest_instanceLeaf = instanceLeaf;
                             closest_worldToObject = worldToObjectMatrix;
                             closest_objectToWorld = objectToWorldMatrix;
                             closest_objectRay = objectRay;
-                            min_thit_object = thit;
 
                             if(terminateOnFirstHit)
                             {
@@ -1001,7 +1018,14 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     if(writeImageBinary && !imageFile.is_open())
     {
-        imageFile.open("image.binary", std::ios::out | std::ios::binary);
+        char* imageFileName;
+        char defaultFileName = "image.binary";
+        if(getenv("VULKAN_IMAGE_FILE_NAME"))
+            imageFileName = getenv("VULKAN_IMAGE_FILE_NAME");
+        else
+            imageFileName = defaultFileName;
+        imageFile.open(imageFileName, std::ios::out | std::ios::binary);
+        
         // imageFile.open("image.txt", std::ios::out);
     }
     else
@@ -1071,7 +1095,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 32;
+    // launch_width = 1;
     // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
