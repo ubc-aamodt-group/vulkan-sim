@@ -983,7 +983,7 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, data, i_type, thread, pI, overflow, carry);
 }
 
-bool print_debug_insts = true;
+bool print_debug_insts = false;
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
@@ -6741,9 +6741,9 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   // v[1] = thread->get_vulkan_RT_launch_id().y;
   // v[2] = thread->get_vulkan_RT_launch_id().z;
 
-  v[0] = 480 + thread->get_tid().x;
-  v[1] = 400;
-  v[2] = 0;
+  // v[0] = 480 + thread->get_tid().x;
+  // v[1] = 400;
+  // v[2] = 0;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6766,9 +6766,9 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
-  v[0] = 1280;
-  v[1] = 720;
-  v[2] = 1;
+  // v[0] = 1280;
+  // v[1] = 720;
+  // v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];
