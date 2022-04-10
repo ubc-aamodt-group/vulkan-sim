@@ -983,7 +983,7 @@ void addp_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, data, i_type, thread, pI, overflow, carry);
 }
 
-bool print_debug_insts = false;
+bool print_debug_insts = true;
 
 void add_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
@@ -6741,9 +6741,9 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   // v[1] = thread->get_vulkan_RT_launch_id().y;
   // v[2] = thread->get_vulkan_RT_launch_id().z;
 
-  // v[0] = 480 + thread->get_tid().x;
-  // v[1] = 400;
-  // v[2] = 0;
+  v[0] = 480 + thread->get_tid().x;
+  v[1] = 400;
+  v[2] = 0;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -6766,9 +6766,9 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
-  // v[0] = 1280;
-  // v[1] = 720;
-  // v[2] = 1;
+  v[0] = 1280;
+  v[1] = 720;
+  v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];
@@ -7239,6 +7239,16 @@ void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *th
 }
 
 void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
+  //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    if(print_debug_insts)
+    {
+      printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+                                        thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+                                        thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+      fflush(stdout);
+    }
+
   const operand_info &src = pI->operand_lookup(0);
   ptx_reg_t src_data = thread->get_operand_value(src, src, U32_TYPE, thread, 1);
   uint32_t shader_counter = src_data.u32;
@@ -7468,6 +7478,7 @@ void get_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void get_warp_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(0);
   static uint32_t last_counter = 0;
   static uint32_t last_warp_hitgroup = -1;
   
@@ -7488,6 +7499,19 @@ void get_warp_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   }
   else
     assert(0);
+  
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+void get_closest_hit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  static uint32_t last_counter = 0;
+  static uint32_t last_warp_hitgroup = -1;
+  
+  const operand_info &dst = pI->dst();
+  ptx_reg_t data;
+
+  Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
+  data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * traversal_data->closest_hit.hitGroupIndex);
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
