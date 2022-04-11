@@ -33,15 +33,15 @@ public:
     void add_to_baseline_table(uint32_t index, uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
         assert(tid < 32);
         if (index < table.size()) {
-            assert(hit_group_index == table[hit_group_index].hitGroupIndex);
-            assert(!table[hit_group_index].thread_mask[tid]);
+            assert(hit_group_index == table[index].hitGroupIndex);
+            assert(!table[index].thread_mask[tid]);
 
-            table[hit_group_index].thread_mask[tid] = true;
-            table[hit_group_index].shader_data[tid].primitiveID = primitiveID;
-            table[hit_group_index].shader_data[tid].instanceID = instanceID;
+            table[index].thread_mask[tid] = true;
+            table[index].shader_data[tid].primitiveID = primitiveID;
+            table[index].shader_data[tid].instanceID = instanceID;
         }
         else {
-            assert(hit_group_index == table.size());
+            assert(index == table.size());
             warp_intersection_entry entry;
             entry.hitGroupIndex = hit_group_index;
             entry.thread_mask[tid] = true;
