@@ -757,6 +757,8 @@ class gpgpu_t {
   unsigned gpu_rt_fills_misses = 0;
   unsigned max_st_entries = 0;
   unsigned max_rec_entries = 0;
+  unsigned splits_table_update_active_entry = 0;
+  unsigned splits_table_push_back = 0;
 
   void *gpu_malloc(size_t size);
   void *gpu_mallocarray(size_t count);

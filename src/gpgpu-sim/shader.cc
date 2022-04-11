@@ -856,17 +856,17 @@ void shader_core_stats::event_warp_issued(unsigned s_id, unsigned warp_id,
   }
 }
 
-double shader_core_stats::compue_distribution_avg(std::map<unsigned/*sid*/,std::map<unsigned/*wid*/,std::map<unsigned/*# of entries*/,long long unsigned/*cycles*/>>> & dist) {
+double shader_core_stats::compue_distribution_avg(std::map<unsigned/*sid*/, std::map<unsigned/*wid*/, std::map<unsigned/*# of entries*/, long long unsigned/*cycles*/>>> & dist) {
   unsigned long long tot_cycles = 1;
   unsigned long long tot_cycles_times_entries = 0;
   for (auto it1=dist.begin(), et1=dist.end(); it1!=et1; it1++) {
     unsigned sid = it1->first;
     std::map<unsigned,std::map<unsigned,long long unsigned>> size_disto_within_core = dist[sid];
-    printf("sid=%u\n", sid);
+    printf("sid=%u", sid);
     for (auto it2=size_disto_within_core.begin(), et2=size_disto_within_core.end(); it2!=et2; it2++) {
       unsigned wid = it2->first;
       std::map<unsigned,long long unsigned> size_distro_within_warp = size_disto_within_core[wid];
-      printf("	wid=%u\n", wid);
+      printf("	wid=%u", wid);
       for (auto it3=size_distro_within_warp.begin(), et3=size_distro_within_warp.end(); it3!=et3; it3++) {
         unsigned numEntries = it3->first;
         unsigned long long duration = it3->second;
@@ -887,12 +887,12 @@ void shader_core_stats::print_reuse_distribution_avg() {
   distToReuseMap.clear();
   for (auto it1=st_reuse_distro.begin(), et1=st_reuse_distro.end(); it1!=et1; it1++) {
     unsigned sid = it1->first;
-    printf("sid=%u\n", sid);
+    printf("sid=%u", sid);
     std::map<unsigned,std::map<unsigned,long long unsigned>> st_reuse_disto_within_core = st_reuse_distro[sid];
     for (auto it2=st_reuse_disto_within_core.begin(), et2=st_reuse_disto_within_core.end(); it2!=et2; it2++) {
       unsigned wid = it2->first;
       std::map<unsigned,long long unsigned> st_reuse_distro_within_warp = st_reuse_disto_within_core[wid];
-      printf("	wid=%u\n", wid);
+      printf("	wid=%u", wid);
       for (auto it3=st_reuse_distro_within_warp.begin(), et3=st_reuse_distro_within_warp.end(); it3!=et3; it3++) {
         unsigned dist = it3->first;
         double reuse_duration = (double)it3->second;
@@ -1026,6 +1026,37 @@ void shader_core_stats::visualizer_print(gzFile visualizer_file) {
   gzprintf(visualizer_file, "shaderwarpdiv: ");
   for (unsigned i = 0; i < m_config->num_shader(); i++)
     gzprintf(visualizer_file, "%u ", m_n_diverge[i]);
+  gzprintf(visualizer_file, "\n");
+
+  // AWARE aerialvision stats
+  gzprintf(visualizer_file, "aware_st_size:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", aware_st_size[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "aware_rt_size:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", aware_rt_size[i]);
+  gzprintf(visualizer_file, "\n");
+
+  gzprintf(visualizer_file, "cacheMissRate_globalL1_all:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", l1d_missrate[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "L1DMiss:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", l1d_miss[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "L1DAccess:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", l1d_access[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "L1DResFail:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", l1d_res_fail[i]);
+  gzprintf(visualizer_file, "\n");
+  gzprintf(visualizer_file, "L1DHitRes:  ");
+  for (unsigned i = 0; i < m_config->num_shader(); i++)
+    gzprintf(visualizer_file, "%u ", l1d_hit_res[i]);
   gzprintf(visualizer_file, "\n");
   
   // Ray tracing aerialvision stats
@@ -3807,6 +3838,15 @@ inst->space.get_type() != shared_space) { unsigned warp_id = inst->warp_id();
 }
 */
 void ldst_unit::cycle() {
+  // Collect aerialvision stats
+  unsigned total_access, total_misses, total_hit_res, total_res_fail;
+  m_L1D->get_stats(total_access, total_misses, total_hit_res, total_res_fail);
+  m_stats->l1d_access[m_sid] = total_access;
+  m_stats->l1d_miss[m_sid] = total_misses;
+  m_stats->l1d_hit_res[m_sid] = total_hit_res;
+  m_stats->l1d_res_fail[m_sid] = total_res_fail;
+  m_stats->l1d_missrate[m_sid] = (float)total_misses / total_access;
+
   writeback();
   for (int i = 0; i < m_config->reg_file_port_throughput; ++i)
     m_operand_collector->step();

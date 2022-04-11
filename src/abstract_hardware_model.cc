@@ -1855,6 +1855,8 @@ void simt_splits_table::push_back() {
       bool fill_request_sent = fill_st_entry(m_active_split);
     }
   }
+  if (m_fifo_queue.size() > 1)
+    GPGPU_Context()->the_gpgpusim->g_the_gpu->splits_table_push_back++;
 }
 
 void simt_splits_table::update_active_entry() {
@@ -1866,6 +1868,7 @@ void simt_splits_table::update_active_entry() {
     assert((m_splits_table.find(m_active_split) != m_splits_table.end()));
     assert(m_splits_table[m_active_split].m_valid);
     assert(m_splits_table[m_active_split].m_active_mask.any());
+ 	  GPGPU_Context()->the_gpgpusim->g_the_gpu->splits_table_update_active_entry++;
   }
 }
 
@@ -2724,6 +2727,9 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
   //  if (warp_diverged) {
   //  	ptx_file_line_stats_add_warp_divergence(top_pc, 1);
   //  }
+
+  m_shader->update_st_size(m_simt_splits_table->num_entries());
+  m_shader->update_rt_size(m_simt_recvg_table->num_entries());
 }
 
 const simt_mask_t &simt_tables::get_active_mask() {

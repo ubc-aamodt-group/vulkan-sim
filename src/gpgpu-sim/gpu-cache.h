@@ -1185,6 +1185,9 @@ class baseline_cache : public cache_t {
   void flush() { m_tag_array->flush(); }
   void invalidate() { m_tag_array->invalidate(); }
   void print(FILE *fp, unsigned &accesses, unsigned &misses) const;
+  void get_stats(unsigned &total_access, unsigned &total_misses,
+                          unsigned &total_hit_res,
+                          unsigned &total_res_fail) const;
   void display_state(FILE *fp) const;
   
   std::list<mem_fetch*> probe_mshr(new_addr_type block_addr) { 

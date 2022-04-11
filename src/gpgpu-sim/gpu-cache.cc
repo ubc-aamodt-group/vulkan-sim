@@ -1099,6 +1099,11 @@ void baseline_cache::print(FILE *fp, unsigned &accesses,
   m_tag_array->print(fp, accesses, misses);
 }
 
+void baseline_cache::get_stats(unsigned &total_access, unsigned &total_misses,
+                          unsigned &total_hit_res,
+                          unsigned &total_res_fail) const {
+  m_tag_array->get_stats(total_access, total_misses, total_hit_res, total_res_fail);
+}
 void baseline_cache::display_state(FILE *fp) const {
   fprintf(fp, "Cache %s:\n", m_name.c_str());
   m_mshrs.display(fp);

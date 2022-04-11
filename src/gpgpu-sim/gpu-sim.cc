@@ -1331,6 +1331,8 @@ void gpgpu_sim::gpu_print_stat() {
 
 
   // AWARE Stats
+  fprintf(statfout, "splits_table_push_back = %d\n", splits_table_push_back);
+  fprintf(statfout, "splits_table_update_active_entry = %d\n", splits_table_update_active_entry);
   fprintf(statfout, "max_recvg_time = %lld\n", max_recvg_time);
   fprintf(statfout, "max_st entries = %lld\n", max_st_entries);
   fprintf(statfout, "max_rec entries = %lld\n", max_rec_entries);

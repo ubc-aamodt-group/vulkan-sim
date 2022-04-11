@@ -1834,6 +1834,16 @@ struct shader_core_stats_pod {
   unsigned *m_active_fu_mem_lanes;
   unsigned *m_n_diverge;  // number of divergence occurring in this shader
   
+  // AWARE aerialvision stats
+  unsigned *aware_st_size;
+  unsigned *aware_rt_size;
+
+  unsigned *l1d_access;
+  unsigned *l1d_miss;
+  unsigned *l1d_res_fail;
+  unsigned *l1d_hit_res;
+  float *l1d_missrate;
+  
   // Ray tracing aerialvision stats
   unsigned *rt_nwarps;
   unsigned *rt_nthreads;
@@ -2036,6 +2046,15 @@ class shader_core_stats : public shader_core_stats_pod {
     rt_nthreads_intersection = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     rt_warp_dist = (unsigned *)calloc(11, sizeof(unsigned));
     empty_warp_dist = (unsigned *)calloc(11, sizeof(unsigned));
+
+    aware_st_size = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    aware_rt_size = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+
+    l1d_access = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    l1d_miss = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    l1d_res_fail = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    l1d_hit_res = (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    l1d_missrate = (float *)calloc(config->num_shader(), sizeof(float));
 
     rt_coherence_stats = (coherence_stats **)calloc(config->num_shader(), sizeof(coherence_stats *));
     for (unsigned i=0; i<config->num_shader(); i++) {
@@ -2401,6 +2420,14 @@ class shader_core_ctx : public core_t {
   void inc_simt_to_mem(unsigned n_flits) {
     m_stats->n_simt_to_mem[m_sid] += n_flits;
   }
+
+  void update_st_size(unsigned st_size) {
+    m_stats->aware_st_size[m_sid] = st_size;
+  }
+  void update_rt_size(unsigned st_size) {
+    m_stats->aware_rt_size[m_sid] = st_size;
+  }
+
   bool check_if_non_released_reduction_barrier(warp_inst_t &inst);
 
   bool push_to_st_response_fifo(unsigned wid, unsigned entry);
