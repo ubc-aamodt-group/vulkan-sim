@@ -1050,11 +1050,6 @@ struct gpgpu_recon_t {
   class ptx_instruction *target_inst;
 };
 
-struct function_coalescing_entry {
-  uint32_t GeometryIndex;
-  bool thread_mask[16];
-};
-
 class ptx_instruction : public warp_inst_t {
  public:
   ptx_instruction(int opcode, const symbol *pred, int neg_pred, int pred_mod,
@@ -1242,22 +1237,6 @@ class ptx_instruction : public warp_inst_t {
     return false;
   }
 
-  void add_function_coalescing(uint32_t geometry_id, uint32_t tid) {
-    assert(tid < 16);
-    for (int i = 0; i < function_coalescing_buffer.size(); i++) {
-      if (function_coalescing_buffer[i].GeometryIndex == geometry_id)
-      {
-        if (!function_coalescing_buffer[i].thread_mask[tid])
-          function_coalescing_buffer[i].thread_mask[tid] = true;
-          return;
-      }
-    }
-    struct function_coalescing_entry entry;
-    entry.GeometryIndex = geometry_id;
-    entry.thread_mask[tid] = true;
-    function_coalescing_buffer.push_back(entry);
-  }
-
  private:
   void set_opcode_and_latency();
   void set_bar_type();
@@ -1316,8 +1295,6 @@ class ptx_instruction : public warp_inst_t {
   friend class function_info;
   // backward pointer
   class gpgpu_context *gpgpu_ctx;
-
-  std::vector<struct function_coalescing_entry> function_coalescing_buffer;
 };
 
 class param_info {

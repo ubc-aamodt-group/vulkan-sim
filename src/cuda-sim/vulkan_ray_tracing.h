@@ -5,8 +5,10 @@
 #include "vulkan/vulkan_intel.h"
 
 #include "vulkan/anv_acceleration_structure.h"
+#include "intersection_table.h"
 #include "compiler/spirv/spirv.h"
 
+// #include "ptx_ir.h"
 #include "ptx_ir.h"
 #include "../../libcuda/gpgpu_context.h"
 #include "../abstract_hardware_model.h"
@@ -103,11 +105,13 @@ typedef struct variable_decleration_entry{
 } variable_decleration_entry;
 
 typedef struct Hit_data{
+    VkGeometryTypeKHR geometryType;
+    float world_min_thit;
     uint32_t geometry_index;
     uint32_t primitive_index;
     float3 intersection_point;
     float3 barycentric_coordinates;
-    float world_min_thit;
+    int32_t hitGroupIndex; // Shader ID of the closest hit for procedural geometries
 
     uint32_t instance_index;
     float4x4 worldToObjectMatrix;
@@ -125,6 +129,9 @@ typedef struct Traversal_data {
     Hit_data closest_hit;
     float3 ray_world_direction;
     float3 ray_world_origin;
+    float Tmin;
+    float Tmax;
+    int32_t current_shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
 
     uint32_t rayFlags;
     uint32_t cullMask;
@@ -250,9 +257,10 @@ private:
     static std::vector<void*> child_addrs_from_driver;
     static void *child_addr_from_driver;
 public:
-    static RayDebugGPUData rayDebugGPUData[2000][2000];
-    
-    private:
+    // static RayDebugGPUData rayDebugGPUData[2000][2000];
+    static warp_intersection_table intersection_table[120][2160];
+
+private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
     static float3 Barycentric(float3 p, float3 a, float3 b, float3 c);
     static std::vector<shader_stage_info> shaders;
@@ -271,8 +279,6 @@ public:
                        float3 direction,
                        float Tmax,
                        int payload,
-                       bool &run_closest_hit,
-                       bool &run_miss,
                        const ptx_instruction *pI,
                        ptx_thread_info *thread);
     static void endTraceRay(const ptx_instruction *pI, ptx_thread_info *thread);
@@ -298,7 +304,7 @@ public:
     static void callShader(const ptx_instruction *pI, ptx_thread_info *thread, function_info *target_func);
     static void callMissShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
-    static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter);
     static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t binding);
@@ -306,6 +312,7 @@ public:
     static void image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchsIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread);
     static void getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3, std::vector<ImageMemoryTransactionRecord>& transactions, uint64_t launcher_offset = 0);
+    static void image_load(struct anv_descriptor *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3);
 
     static void dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files);

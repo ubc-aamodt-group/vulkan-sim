@@ -110,6 +110,9 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
     assert(isl_tiling_mode == ISL_TILING_Y0);
     assert(level == 0);
 
+    assert(0 <= x && x < width);
+    assert(0 <= y && y < height);
+
     //uint8_t* address = anv_address_map(image->planes[0].address);
 
     switch(vk_format)
@@ -172,9 +175,33 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             pixel.a = colors[3] / 255.0;
             return pixel;
         }
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        {
+            uint32_t tileWidth = 32;
+            uint32_t tileHeight = 32;
+            int tileX = x / tileWidth;
+            int tileY = y / tileHeight;
+            int tileID = tileX + tileY * width / tileWidth;
+
+            transaction.address = address + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
+            transaction.size = 4;
+
+            uint8_t colors[4];
+
+            intel_tiled_to_linear(x * 4, x * 4 + 4, y, y + 1,
+                colors, address, width * 4 ,row_pitch_B, false,
+                ISL_TILING_Y0, ISL_MEMCPY);
+
+            Pixel pixel;
+            pixel.r = colors[0] / 255.0;
+            pixel.g = colors[1] / 255.0;
+            pixel.b = colors[2] / 255.0;
+            pixel.a = colors[3] / 255.0;
+            return pixel;
+        }
         default:
         {
-            printf("%d not implemented\n", image->vk_format);
+            printf("%d not implemented\n", vk_format);
             assert(0);
             break;
         }
@@ -243,13 +270,21 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
         }
         case VK_FILTER_LINEAR:
         {
-            uint32_t xs[2];
-            xs[0] = std::floor(x * width);
-            xs[1] = std::ceil(x * width);
+            // uint32_t xs[2];
+            // xs[0] = std::floor(x * image->extent.width);
+            // xs[1] = std::ceil(x * image->extent.width);
             
-            uint32_t ys[2];
-            ys[0] = std::floor(y * height);
-            ys[1] = std::ceil(y * height);
+            // uint32_t ys[2];
+            // ys[0] = std::floor(y * image->extent.height);
+            // ys[1] = std::ceil(y * image->extent.height);
+
+            int32_t xs[2];
+            xs[0] = std::floor(x * width - 0.5);
+            xs[1] = std::ceil(x * width - 0.5);
+            
+            int32_t ys[2];
+            ys[0] = std::floor(y * height - 0.5);
+            ys[1] = std::ceil(y * height - 0.5);
             
             Pixel pixel[2][2];
             float weight[2][2];
@@ -257,17 +292,26 @@ Pixel get_interpolated_pixel(struct anv_image_view *image_view, struct anv_sampl
             for(int i = 0; i < 2; i++)
                 for(int j = 0; j < 2; j++)
                 {
-                    weight[i][j] = std::abs(x * width - xs[(i + 1) % 2]) * std::abs(y * height - ys[(j + 1) % 2]);
+                    // weight[i][j] = std::abs(x * image->extent.width - xs[(i + 1) % 2]) * std::abs(y * image->extent.height - ys[(j + 1) % 2]);
+                    weight[i][j] = std::abs(x * width - (xs[(i + 1) % 2] + 0.5)) * std::abs(y * height - (ys[(j + 1) % 2] + 0.5));
 
-                    ImageMemoryTransactionRecord transaction;
-                    uint32_t xc = xs[i];
-                    uint32_t yc = ys[i];
-                    if(xc >= width)
+                    int32_t xc = xs[i];
+                    int32_t yc = ys[j];
+                    if(xc >= (int)width)
                         xc -= width;
-                    if(yc >= height)
+                    if(xc < 0)
+                        xc += width;
+                    if(yc >= (int)height)
                         yc -= height;
+                    if(yc < 0)
+                        yc += height;
                     
-                    pixel[i][j] = load_image_pixel(image, xc, yc, 0, transaction, launcher_offset);
+                    ImageMemoryTransactionRecord transaction;
+                    pixel[i][j] = load_image_pixel(image, xc, yc, 0, transaction);
+
+                    for(int i = 0; i < transactions.size(); i++)
+                        if(transactions[i].address == transaction.address && transactions[i].size == transaction.size)
+                            continue;
                     transactions.push_back(transaction);
                     TXL_DPRINTF("Adding (linear) txl transaction: 0x%x\n", transaction.address);
                 }
@@ -442,7 +486,7 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
                     transaction.address = address + offset;
                     transaction.size = 4;
 
-                    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+                    assert(tiling == VK_IMAGE_TILING_OPTIMAL);
                     intel_linear_to_tiled(x * 4, x * 4 + 4, y, y + 1,
                         (char *)address, colors, row_pitch_B, width * 4, false,
                         ISL_TILING_Y0, ISL_MEMCPY_BGRA8);
@@ -470,10 +514,47 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             }
             break;
         }
+
+        case VK_FORMAT_R32G32B32A32_SFLOAT:
+        {
+            float colors[] = {pixel.r, pixel.g, pixel.b, pixel.a};
+
+            switch (isl_tiling_mode)
+            {
+                case ISL_TILING_Y0:
+                {
+                    //MRS_TODO: check if transaction.address is calculated correctly
+                    uint32_t ytile_span = 16;
+                    uint32_t bytes_per_column = 512;
+                    uint32_t ytile_height = 32;
+
+                    uint32_t offset = (y / ytile_height) * ytile_height * row_pitch_B;
+                    offset += (x * 16 % ytile_span) + (x * 16 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
+
+                    transaction.address = address + offset;
+                    transaction.size = 4;
+
+                    assert(tiling == VK_IMAGE_TILING_OPTIMAL);
+                    intel_linear_to_tiled(x * 16, x * 16 + 16, y, y + 1,
+                        (char *)address, (char*)colors, row_pitch_B, width * 4, false,
+                        ISL_TILING_Y0, ISL_MEMCPY);
+                    break;
+                }
+            
+                default:
+                {
+                    assert(0);
+                    break;
+                }
+            }
+            break;
+        }
         
         default:
+        {
             assert(0);
             break;
+        }
     }
 }
 
