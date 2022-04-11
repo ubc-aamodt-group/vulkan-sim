@@ -6741,8 +6741,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   // v[1] = thread->get_vulkan_RT_launch_id().y;
   // v[2] = thread->get_vulkan_RT_launch_id().z;
 
-  // v[0] = 480 + thread->get_tid().x;
-  // v[1] = 400;
+  // v[0] = 801 + thread->get_tid().x;
+  // v[1] = 227;
   // v[2] = 0;
 
   ptx_reg_t data;
