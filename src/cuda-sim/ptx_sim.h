@@ -343,6 +343,14 @@ class ptx_thread_info {
   dim3 get_nctaid() const { return m_nctaid; }
   dim3 get_tid() const { return m_tid; }
   dim3 get_ntid() const { return m_ntid; }
+  // dim3 get_vulkan_RT_launch_id() const {
+  //   dim3 launch_id;
+  //   launch_id.x = thread->get_tid().x + thread->get_ctaid().x * 32;
+  //   launch_id.y = thread->get_ctaid().y;
+  //   launch_id.z = thread->get_ctaid().z;
+  //   return launch_id;
+  // }
+
   class gpgpu_sim *get_gpu() {
     return (gpgpu_sim *)m_gpu;
   }
