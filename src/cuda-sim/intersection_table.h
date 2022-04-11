@@ -5,6 +5,11 @@
 #include <assert.h>
 #include <vector>
 
+enum class IntersectionTableType {
+    Baseline,
+    Function_Call_Coalescing,
+};
+
 typedef struct warp_intersection_entry {
     warp_intersection_entry() {
         for(int i = 0; i < 32; i++) {
@@ -25,23 +30,25 @@ class warp_intersection_table {
     std::vector<warp_intersection_entry> table;
 
 public:
-    void add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
+    void add_to_baseline_table(uint32_t index, uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
         assert(tid < 32);
-        if (table.size() > 0 && table.back().hitGroupIndex == hit_group_index)
-            if (!table.back().thread_mask[tid])
-            {
-                table.back().thread_mask[tid] = true;
-                table.back().shader_data[tid].primitiveID = primitiveID;
-                table.back().shader_data[tid].instanceID = instanceID;
-                return;
-            }
+        if (index < table.size()) {
+            assert(hit_group_index == table[hit_group_index].hitGroupIndex);
+            assert(!table[hit_group_index].thread_mask[tid]);
 
-        warp_intersection_entry entry;
-        entry.hitGroupIndex = hit_group_index;
-        entry.thread_mask[tid] = true;
-        entry.shader_data[tid].primitiveID = primitiveID;
-        entry.shader_data[tid].instanceID = instanceID;
-        table.push_back(entry);
+            table[hit_group_index].thread_mask[tid] = true;
+            table[hit_group_index].shader_data[tid].primitiveID = primitiveID;
+            table[hit_group_index].shader_data[tid].instanceID = instanceID;
+        }
+        else {
+            assert(hit_group_index == table.size());
+            warp_intersection_entry entry;
+            entry.hitGroupIndex = hit_group_index;
+            entry.thread_mask[tid] = true;
+            entry.shader_data[tid].primitiveID = primitiveID;
+            entry.shader_data[tid].instanceID = instanceID;
+            table.push_back(entry);
+        }
     }
 
     void add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
@@ -83,6 +90,10 @@ public:
 
     uint32_t get_hitGroupIndex(uint32_t shader_counter) {
         return table[shader_counter].hitGroupIndex;
+    }
+
+    uint32_t size() {
+        return table.size();
     }
 
     void clear() {

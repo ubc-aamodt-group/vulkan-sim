@@ -1291,7 +1291,7 @@ void ptx_instruction::set_input_output_registers() {
   std::list<unsigned> operand_classification;
   switch(m_opcode) {
     case TRACE_RAY_OP:
-      operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2};
+      operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2};
       break;
     case LD_RAY_LAUNCH_SIZE_OP:
       operand_classification = {1, 1, 1};
@@ -1333,11 +1333,18 @@ void ptx_instruction::set_input_output_registers() {
       operand_classification = {1, 1, 2, 2, 2, 2, 1, 1, 1};
       break;
     case IMG_DEREF_LD_OP:
-      operand_classification = {1, 2, 2, 2, 2, 1, 1};
+      operand_classification = {1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1};
       break;
     case IMG_DEREF_ST_OP:
       // TODO: Operands need to be confirmed
       operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+      break;
+    case HIT_GEOMETRY_OP:
+      operand_classification = {2, 1};
+      break;
+    case INTERSECTION_EXIT_OP:
+    case RUN_INTERSECTION_OP:
+      operand_classification = {2, 1, 1};
       break;
   }
 
@@ -1369,7 +1376,7 @@ void ptx_instruction::set_input_output_registers() {
     }
   }
   else {
-    printf("Operand information not set.\n");
+    printf("Operand information not set. %s\n", m_source.c_str());
   }
 }
 

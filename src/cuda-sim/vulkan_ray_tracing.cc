@@ -354,6 +354,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     float4x4 closest_worldToObject, closest_objectToWorld;
     Ray closest_objectRay;
     float min_thit_object;
+    int intersection_table_index = 0;
 
 	// Get bottom-level AS
     //uint8_t* topLevelASAddr = get_anv_accel_address((VkAccelerationStructureKHR)_topLevelAS);
@@ -381,8 +382,21 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
 
     std::list<StackEntry> stack;
-    stack.push_back(StackEntry(topRootAddr, true, false));
     tree_level_map[topRootAddr] = 1;
+    
+    {
+        float3 lo, hi;
+        lo.x = topBVH.BoundsMin.X;
+        lo.y = topBVH.BoundsMin.Y;
+        lo.z = topBVH.BoundsMin.Z;
+        hi.x = topBVH.BoundsMax.X;
+        hi.y = topBVH.BoundsMax.Y;
+        hi.z = topBVH.BoundsMax.Z;
+
+        float thit;
+        if(ray_box_test(lo, hi, calculate_idir(ray.get_direction()), ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit))
+            stack.push_back(StackEntry(topRootAddr, true, false));
+    }
 
     while (!stack.empty())
     {
@@ -424,7 +438,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     set_child_bounds(&node, i, &lo, &hi);
 
                     child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
-                    child_hit[i] = true;
+                    if(child_hit[i] && thit[i] >= min_thit)
+                        child_hit[i] = false;
+
                     
                     if (debugTraversal)
                     {
@@ -573,6 +589,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             set_child_bounds(&node, i, &lo, &hi);
 
                             child_hit[i] = ray_box_test(lo, hi, idir, objectRay.get_origin(), objectRay.get_tmin(), objectRay.get_tmax(), thit[i]);
+                            if(child_hit[i] && thit[i] >= min_thit * worldToObject_tMultiplier)
+                                child_hit[i] = false;
 
                             if (debugTraversal)
                             {
@@ -693,6 +711,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             }
 
                             min_thit = thit / worldToObject_tMultiplier;
+                            min_thit_object = thit;
                             closest_leaf = leaf;
                             closest_instanceLeaf = instanceLeaf;
                             closest_worldToObject = worldToObjectMatrix;
@@ -727,8 +746,27 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_PROCEDURAL_LEAF)]++;
                         total_nodes_accessed++;
 
+                        uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
+
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        table->add_to_coalescing_table(instanceLeaf.InstanceContributionToHitGroupIndex, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        if(intersectionTableType == IntersectionTableType::Baseline)
+                        {
+                            bool new_entry_needed = true;
+                            while(intersection_table_index < table->size())
+                            {
+                                if(table->get_hitGroupIndex(intersection_table_index) == hit_group_index)
+                                {
+                                    table->add_to_baseline_table(intersection_table_index++, hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                                    new_entry_needed = false;
+                                    break;
+                                }
+                                intersection_table_index++;
+                            }
+                            if(new_entry_needed)
+                                table->add_to_baseline_table(intersection_table_index++, hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        }
+                        else
+                            table->add_to_coalescing_table(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         // assert(0);
                     }
                 }
@@ -1114,7 +1152,14 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     if(writeImageBinary && !imageFile.is_open())
     {
-        imageFile.open("image.binary", std::ios::out | std::ios::binary);
+        char* imageFileName;
+        char defaultFileName = "image.binary";
+        if(getenv("VULKAN_IMAGE_FILE_NAME"))
+            imageFileName = getenv("VULKAN_IMAGE_FILE_NAME");
+        else
+            imageFileName = defaultFileName;
+        imageFile.open(imageFileName, std::ios::out | std::ios::binary);
+        
         // imageFile.open("image.txt", std::ios::out);
     }
     else
@@ -1194,7 +1239,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 32;
+    // launch_width = 1;
     // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
