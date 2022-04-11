@@ -340,6 +340,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     float4x4 closest_worldToObject, closest_objectToWorld;
     Ray closest_objectRay;
     float min_thit_object;
+    int intersection_table_index = 0;
 
 	// Get bottom-level AS
     //uint8_t* topLevelASAddr = get_anv_accel_address((VkAccelerationStructureKHR)_topLevelAS);
@@ -669,8 +670,27 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, leaf_addr);
                         transactions.push_back(MemoryTransactionRecord(leaf_addr, GEN_RT_BVH_PROCEDURAL_LEAF_length * 4, TransactionType::BVH_PROCEDURAL_LEAF));
 
+                        uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
+
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        table->add_to_coalescing_table(instanceLeaf.InstanceContributionToHitGroupIndex, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        if(intersectionTableType == IntersectionTableType::Baseline)
+                        {
+                            bool new_entry_needed = true;
+                            while(intersection_table_index < table->size())
+                            {
+                                if(table->get_hitGroupIndex(intersection_table_index) == hit_group_index)
+                                {
+                                    table->add_to_baseline_table(intersection_table_index++, hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                                    new_entry_needed = false;
+                                    break;
+                                }
+                                intersection_table_index++;
+                            }
+                            if(new_entry_needed)
+                                table->add_to_baseline_table(intersection_table_index++, hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        }
+                        else
+                            table->add_to_coalescing_table(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         // assert(0);
                     }
                 }

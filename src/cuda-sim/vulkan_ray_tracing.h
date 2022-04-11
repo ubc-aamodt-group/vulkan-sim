@@ -203,6 +203,8 @@ struct anv_descriptor;
 class VulkanRayTracing
 {
 private:
+    static const IntersectionTableType intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
+
     static VkRayTracingPipelineCreateInfoKHR* pCreateInfos;
     static VkAccelerationStructureGeometryKHR* pGeometries;
     static uint32_t geometryCount;
