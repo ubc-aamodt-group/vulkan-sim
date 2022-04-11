@@ -395,7 +395,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     set_child_bounds(&node, i, &lo, &hi);
 
                     child_hit[i] = ray_box_test(lo, hi, idir, ray.get_origin(), ray.get_tmin(), ray.get_tmax(), thit[i]);
-                    child_hit[i] = true;
+                    //child_hit[i] = true;
                     
                     if (debugTraversal)
                     {
