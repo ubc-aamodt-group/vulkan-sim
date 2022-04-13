@@ -18,16 +18,18 @@ warp_intersection_table::~warp_intersection_table()
 
 // static int maxTableSize = 0;
 
-std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
+std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> > 
+warp_intersection_table::add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
 {
     assert(tid < 32);
-    std::vector<MemoryTransactionRecord> transactions;
+    std::vector<MemoryTransactionRecord> loads;
+    std::vector<MemoryStoreTransactionRecord> stores;
 
     uint32_t &index = this->index[tid];
     bool new_entry_needed = true;
     while(index < tableSize)
     {
-        transactions.push_back(MemoryTransactionRecord(&table[index].hitGroupIndex, 4, TransactionType::Intersection_Table_Load));
+        loads.push_back(MemoryTransactionRecord(&table[index].hitGroupIndex, 4, TransactionType::Intersection_Table));
         if(table[index].hitGroupIndex == hit_group_index)
         {
             assert(!table[index].thread_mask[tid]);
@@ -35,8 +37,8 @@ std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_baseline_ta
             table[index].shader_data[tid].primitiveID = primitiveID;
             table[index].shader_data[tid].instanceID = instanceID;
 
-            transactions.push_back(MemoryTransactionRecord(&table[index].thread_mask[tid], 1, TransactionType::Intersection_Table_Write));
-            transactions.push_back(MemoryTransactionRecord(&table[index].shader_data[tid], 8, TransactionType::Intersection_Table_Write));
+            stores.push_back(MemoryStoreTransactionRecord(&table[index].thread_mask[tid], 1, StoreTransactionType::Intersection_Table_Store));
+            stores.push_back(MemoryStoreTransactionRecord(&table[index].shader_data[tid], 8, StoreTransactionType::Intersection_Table_Store));
 
             new_entry_needed = false;
             index++;
@@ -54,9 +56,9 @@ std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_baseline_ta
         table[tableSize].shader_data[tid].primitiveID = primitiveID;
         table[tableSize].shader_data[tid].instanceID = instanceID;
 
-        transactions.push_back(MemoryTransactionRecord(&table[tableSize].hitGroupIndex, 4, TransactionType::Intersection_Table_Write));
-        transactions.push_back(MemoryTransactionRecord(&table[tableSize].thread_mask[tid], 1, TransactionType::Intersection_Table_Write));
-        transactions.push_back(MemoryTransactionRecord(&table[tableSize].shader_data[tid], 8, TransactionType::Intersection_Table_Write));
+        stores.push_back(MemoryStoreTransactionRecord(&table[tableSize].hitGroupIndex, 4, StoreTransactionType::Intersection_Table_Store));
+        stores.push_back(MemoryStoreTransactionRecord(&table[tableSize].thread_mask[tid], 1, StoreTransactionType::Intersection_Table_Store));
+        stores.push_back(MemoryStoreTransactionRecord(&table[tableSize].shader_data[tid], 8, StoreTransactionType::Intersection_Table_Store));
         
         index++;
         tableSize++;
@@ -68,29 +70,31 @@ std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_baseline_ta
         // }
     }
 
-    return transactions;
+    return std::make_pair(loads, stores);
 }
 
 
-std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
+std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
+warp_intersection_table::add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
 {
     assert(tid < 32);
-    std::vector<MemoryTransactionRecord> transactions;
+    std::vector<MemoryTransactionRecord> loads;
+    std::vector<MemoryStoreTransactionRecord> stores;
 
     for (int i = 0; i < tableSize; i++) {
-        transactions.push_back(MemoryTransactionRecord(&table[i].hitGroupIndex, 4, TransactionType::Intersection_Table_Load));
+        loads.push_back(MemoryTransactionRecord(&table[i].hitGroupIndex, 4, TransactionType::Intersection_Table));
         if (table[i].hitGroupIndex == hit_group_index)
         {
-            transactions.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table_Load));
+            loads.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table));
             if (!table[i].thread_mask[tid])
             {
                 table[i].thread_mask[tid] = true;
                 table[i].shader_data[tid].primitiveID = primitiveID;
                 table[i].shader_data[tid].instanceID = instanceID;
 
-                transactions.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table_Write));
-                transactions.push_back(MemoryTransactionRecord(&table[i].shader_data[tid], 8, TransactionType::Intersection_Table_Write));
-                return transactions;
+                stores.push_back(MemoryStoreTransactionRecord(&table[i].thread_mask[tid], 1, StoreTransactionType::Intersection_Table_Store));
+                stores.push_back(MemoryStoreTransactionRecord(&table[i].shader_data[tid], 8, StoreTransactionType::Intersection_Table_Store));
+                return std::make_pair(loads, stores);
             }
         }
     }
@@ -100,9 +104,9 @@ std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_coalescing_
     table[tableSize].shader_data[tid].primitiveID = primitiveID;
     table[tableSize].shader_data[tid].instanceID = instanceID;
 
-    transactions.push_back(MemoryTransactionRecord(&table[tableSize].hitGroupIndex, 4, TransactionType::Intersection_Table_Write));
-    transactions.push_back(MemoryTransactionRecord(&table[tableSize].thread_mask[tid], 1, TransactionType::Intersection_Table_Write));
-    transactions.push_back(MemoryTransactionRecord(&table[tableSize].shader_data[tid], 8, TransactionType::Intersection_Table_Write));
+    stores.push_back(MemoryStoreTransactionRecord(&table[tableSize].hitGroupIndex, 4, StoreTransactionType::Intersection_Table_Store));
+    stores.push_back(MemoryStoreTransactionRecord(&table[tableSize].thread_mask[tid], 1, StoreTransactionType::Intersection_Table_Store));
+    stores.push_back(MemoryStoreTransactionRecord(&table[tableSize].shader_data[tid], 8, StoreTransactionType::Intersection_Table_Store));
 
 
     tableSize++;
@@ -113,10 +117,11 @@ std::vector<MemoryTransactionRecord> warp_intersection_table::add_to_coalescing_
     //     printf("max table size = %d\n", maxTableSize);
     // }
 
-    return transactions;
+    return std::make_pair(loads, stores);
 }
 
-std::vector<MemoryTransactionRecord> warp_intersection_table::add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
+std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
+warp_intersection_table::add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
 {
     if(warp_intersection_table::intersectionTableType == IntersectionTableType::Baseline)
         return add_to_baseline_table(hit_group_index, tid, primitiveID, instanceID);

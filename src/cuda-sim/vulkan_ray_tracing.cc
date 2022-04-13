@@ -334,6 +334,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     bool skipClosestHitShader = rayFlags & SpvRayFlagsSkipClosestHitShaderKHRMask;
 
     std::vector<MemoryTransactionRecord> transactions;
+    std::vector<MemoryStoreTransactionRecord> store_transactions;
+
     gpgpu_context *ctx = GPGPU_Context();
 
     if (terminateOnFirstHit) ctx->func_sim->g_n_anyhit_rays++;
@@ -749,10 +751,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
 
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        std::vector<MemoryTransactionRecord> intersectionTransactions = 
-                                table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         
-                        transactions.insert(transactions.end(), intersectionTransactions.begin(), intersectionTransactions.end());
+                        transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
                     }
                 }
             }
