@@ -37,14 +37,14 @@ class warp_intersection_table {
 
     static const IntersectionTableType intersectionTableType = IntersectionTableType::Baseline;
 
-    void add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
-    void add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
+    std::vector<MemoryTransactionRecord> add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
+    std::vector<MemoryTransactionRecord> add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
 
 public:
     warp_intersection_table();
     ~warp_intersection_table();
 
-    void add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
+    std::vector<MemoryTransactionRecord> add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
 
     bool shader_exists(uint32_t tid, uint32_t shader_counter) {
         return shader_counter < tableSize && table[shader_counter].thread_mask[tid];

@@ -673,8 +673,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
 
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
-                        // assert(0);
+                        std::vector<MemoryTransactionRecord> intersectionTransactions = 
+                                table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        
+                        transactions.insert(transactions.end(), intersectionTransactions.begin(), intersectionTransactions.end());
                     }
                 }
             }
