@@ -74,6 +74,8 @@ enum class TransactionType {
     BVH_PRIMITIVE_LEAF_DESCRIPTOR,
     BVH_QUAD_LEAF,
     BVH_PROCEDURAL_LEAF,
+    Intersection_Table_Write,
+    Intersection_Table_Load,
 };
 
 typedef struct MemoryTransactionRecord {
@@ -203,8 +205,6 @@ struct anv_descriptor;
 class VulkanRayTracing
 {
 private:
-    static const IntersectionTableType intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
-
     static VkRayTracingPipelineCreateInfoKHR* pCreateInfos;
     static VkAccelerationStructureGeometryKHR* pGeometries;
     static uint32_t geometryCount;
