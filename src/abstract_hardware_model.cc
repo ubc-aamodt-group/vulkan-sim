@@ -2679,7 +2679,7 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
       new_recvg_pc = recvg_pc;
       if (new_recvg_pc != top_recvg_pc) {
         // add a new reconvergence entry in the RT table
-        assert(top_recvg_pc > new_recvg_pc);
+        // assert(top_recvg_pc > new_recvg_pc);
         new_recvg_entry = m_simt_recvg_table->insert_new_entry(new_recvg_pc, top_recvg_pc, top_recvg_entry, top_active_mask_keep, top_type);
       }
     }
