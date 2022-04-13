@@ -754,6 +754,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         
                         transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
+                        store_transactions.insert(store_transactions.end(), intersectionTransactions.second.begin(), intersectionTransactions.second.end());
                     }
                 }
             }
