@@ -753,7 +753,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
                         auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         
-                        transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
+                        // transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
                         store_transactions.insert(store_transactions.end(), intersectionTransactions.second.begin(), intersectionTransactions.second.end());
                     }
                 }
