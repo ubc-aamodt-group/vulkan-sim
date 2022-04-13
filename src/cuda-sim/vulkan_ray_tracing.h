@@ -42,18 +42,18 @@
 //     float x, y, z, w;
 // } float4;
 
-enum class StoreTransactionType {
-    Intersection_Table_Store,
-    Traversal_Results,
-};
+// enum class StoreTransactionType {
+//     Intersection_Table_Store,
+//     Traversal_Results,
+// };
 
-typedef struct MemoryStoreTransactionRecord {
-    MemoryStoreTransactionRecord(void* address, uint32_t size, StoreTransactionType type)
-    : address(address), size(size), type(type) {}
-    void* address;
-    uint32_t size;
-    StoreTransactionType type;
-} MemoryStoreTransactionRecord;
+// typedef struct MemoryStoreTransactionRecord {
+//     MemoryStoreTransactionRecord(void* address, uint32_t size, StoreTransactionType type)
+//     : address(address), size(size), type(type) {}
+//     void* address;
+//     uint32_t size;
+//     StoreTransactionType type;
+// } MemoryStoreTransactionRecord;
 
 
 

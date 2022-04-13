@@ -486,6 +486,7 @@ class ptx_thread_info {
   kernel_info_t &get_kernel() { return m_kernel; }
   
   void set_rt_transactions(std::vector<MemoryTransactionRecord> transactions) { RT_transactions = transactions; }
+  void set_rt_store_transactions(std::vector<MemoryStoreTransactionRecord> store_transactions) { RT_store_transactions = store_transactions; }
   void set_txl_transactions(std::vector<ImageMemoryTransactionRecord> transaction);
   void set_txl_transactions(ImageMemoryTransactionRecord transactions);
   void add_ray_intersect() { m_num_ray_intersections += 1; }
@@ -506,6 +507,7 @@ class ptx_thread_info {
   ptx_reg_t m_last_set_operand_value;
   Vulkan_RT_thread_data* RT_thread_data;
   std::vector<MemoryTransactionRecord> RT_transactions;
+  std::vector<MemoryStoreTransactionRecord> RT_store_transactions;
 
  private:
   bool m_functionalSimulationMode;

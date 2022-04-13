@@ -179,6 +179,11 @@ enum class TransactionType {
     UNDEFINED,
 };
 
+enum class StoreTransactionType {
+    Intersection_Table_Store,
+    Traversal_Results,
+};
+
 struct ray_coherence_config {
   unsigned max_cycles;
   unsigned min_rays;
@@ -259,6 +264,14 @@ typedef struct MemoryTransactionRecord {
     uint32_t size;
     TransactionType type;
 } MemoryTransactionRecord;
+
+typedef struct MemoryStoreTransactionRecord {
+    MemoryStoreTransactionRecord(void* address, uint32_t size, StoreTransactionType type)
+    : address(address), size(size), type(type) {}
+    void* address;
+    uint32_t size;
+    StoreTransactionType type;
+} MemoryStoreTransactionRecord;
 
 struct Ray
 {
@@ -1458,6 +1471,7 @@ class warp_inst_t : public inst_t {
                                                    
     // RT variables    
     std::deque<RTMemoryTransactionRecord> RT_mem_accesses;
+    std::vector<MemoryStoreTransactionRecord> RT_store_transactions;
     bool ray_intersect = false;
     Ray ray_properties;
     unsigned intersection_delay;
@@ -1471,6 +1485,7 @@ class warp_inst_t : public inst_t {
   
   // RT functions
   void set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTransactionRecord> transactions);
+  void set_rt_mem_store_transactions(unsigned int tid, std::vector<MemoryStoreTransactionRecord>& transactions);
   void set_rt_ray_properties(unsigned int tid, Ray ray);
   bool get_rt_ray_intersect(unsigned int tid) const { return m_per_scalar_thread[tid].ray_intersect; }
   Ray get_rt_ray_properties(unsigned int tid) const { return m_per_scalar_thread[tid].ray_properties; }

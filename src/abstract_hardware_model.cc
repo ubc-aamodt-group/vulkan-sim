@@ -869,6 +869,13 @@ unsigned warp_inst_t::dec_thread_latency(std::deque<std::pair<unsigned, new_addr
 
         m_pending_writes.insert((new_addr_type)next_buffer_addr);
       }
+      
+      for(auto & store_transaction : m_per_scalar_thread[i].RT_store_transactions) {
+        store_queue.push_back(std::pair<unsigned, new_addr_type>(m_uid, (new_addr_type)(store_transaction.address)));
+        RT_DPRINTF("Buffer store pushed for warp %d thread %d at 0x%x\n", m_uid, i, store_transaction.address);
+
+        m_pending_writes.insert((new_addr_type)store_transaction.address);
+      }
     }
   }
   
@@ -926,6 +933,10 @@ void warp_inst_t::set_rt_mem_transactions(unsigned int tid, std::vector<MemoryTr
     );
     m_per_scalar_thread[tid].RT_mem_accesses.push_back(mem_record);
   }
+}
+
+void warp_inst_t::set_rt_mem_store_transactions(unsigned int tid, std::vector<MemoryStoreTransactionRecord>& transactions) {
+  m_per_scalar_thread[tid].RT_store_transactions = transactions;
 }
 
 bool warp_inst_t::is_stalled() {
