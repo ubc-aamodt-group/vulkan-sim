@@ -1791,8 +1791,8 @@ void tex_cache::cycle() {
 }
 
 /// Place returning cache block into reorder buffer
-void tex_cache::fill(mem_fetch *mf, unsigned time) {
-  if (m_config.m_mshr_type == SECTOR_TEX_FIFO) {
+void tex_cache::fill(mem_fetch *mf, unsigned time, bool perfect_mem) {
+  if (m_config.m_mshr_type == SECTOR_TEX_FIFO && !perfect_mem) {
     assert(mf->get_original_mf());
     extra_mf_fields_lookup::iterator e =
         m_extra_mf_fields.find(mf->get_original_mf());

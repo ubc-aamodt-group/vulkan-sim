@@ -3565,7 +3565,7 @@ void rt_unit::process_cache_access(baseline_cache *cache, warp_inst_t &inst, mem
       }
     }
     
-    delete mf;
+    if (!mf->is_write()) delete mf;
     
   } else {
     assert(status == MISS);
@@ -3868,7 +3868,8 @@ void ldst_unit::cycle() {
     if (mf->get_access_type() == TEXTURE_ACC_R) {
       if (m_L1T->fill_port_free()) {
         m_L1T->fill(mf, m_core->get_gpu()->gpu_sim_cycle +
-                            m_core->get_gpu()->gpu_tot_sim_cycle);
+                            m_core->get_gpu()->gpu_tot_sim_cycle,
+                            m_config->gpgpu_perfect_mem);
         m_response_fifo.pop_front();
       }
     } else if (mf->get_access_type() == CONST_ACC_R) {
