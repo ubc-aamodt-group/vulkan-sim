@@ -1114,6 +1114,11 @@ void exec_shader_core_ctx::get_pdom_stack_top_info(unsigned warp_id,
   }
 }
 
+void exec_shader_core_ctx::update_splits_table(unsigned warp_id) {
+  assert(m_config->model == AWARE_RECONVERGENCE);
+  m_simt_tables[warp_id]->push_back();
+}
+
 const active_mask_t &exec_shader_core_ctx::get_active_mask(
     unsigned warp_id, const warp_inst_t *pI) {
 
@@ -1814,6 +1819,10 @@ void scheduler_unit::cycle() {
             SCHED_DPRINTF(
                 "Warp (warp_id %u, dynamic_warp_id %u) fails scoreboard\n",
                 (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
+
+            if (m_shader->get_config()->model == AWARE_RECONVERGENCE) {
+              m_shader->update_splits_table(warp_id);
+            }
           }
         }
       } else if (valid) {

@@ -2680,7 +2680,7 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
       if (new_recvg_pc != top_recvg_pc) {
         // add a new reconvergence entry in the RT table
         assert(top_recvg_pc > new_recvg_pc);
-        new_recvg_entry = m_simt_recvg_table->insert_new_entry(new_recvg_pc, top_recvg_pc, top_recvg_entry, top_active_mask_keep, SPLITS_TABLE_ENTRY_TYPE_NORMAL);
+        new_recvg_entry = m_simt_recvg_table->insert_new_entry(new_recvg_pc, top_recvg_pc, top_recvg_entry, top_active_mask_keep, top_type);
       }
     }
 
@@ -2707,7 +2707,7 @@ void simt_tables::update( simt_mask_t &thread_done, addr_vector_t &next_pc, addr
         m_simt_splits_table->invalidate();
         invalidate = true;
       }
-      m_simt_splits_table->insert_new_entry(tmp_next_pc, new_recvg_pc, new_recvg_entry, tmp_active_mask, SPLITS_TABLE_ENTRY_TYPE_NORMAL);
+      m_simt_splits_table->insert_new_entry(tmp_next_pc, new_recvg_pc, new_recvg_entry, tmp_active_mask, top_type);
     } else {
       m_simt_splits_table->update_pc(tmp_next_pc);
       if (tmp_next_pc != not_taken_pc) {
