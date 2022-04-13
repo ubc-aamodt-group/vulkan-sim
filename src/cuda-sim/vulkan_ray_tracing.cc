@@ -1153,7 +1153,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     if(writeImageBinary && !imageFile.is_open())
     {
         char* imageFileName;
-        char defaultFileName = "image.binary";
+        char defaultFileName[40] = "image.binary";
         if(getenv("VULKAN_IMAGE_FILE_NAME"))
             imageFileName = getenv("VULKAN_IMAGE_FILE_NAME");
         else
