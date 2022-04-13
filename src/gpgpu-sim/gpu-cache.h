@@ -1633,7 +1633,7 @@ class tex_cache : public cache_t {
                                    std::list<cache_event> &events);
   void cycle();
   /// Place returning cache block into reorder buffer
-  void fill(mem_fetch *mf, unsigned time);
+  void fill(mem_fetch *mf, unsigned time, bool perfect_mem);
   /// Are any (accepted) accesses that had to wait for memory now ready? (does
   /// not include accesses that "HIT")
   bool access_ready() const { return !m_result_fifo.empty(); }
