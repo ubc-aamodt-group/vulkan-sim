@@ -749,25 +749,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
 
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        if(intersectionTableType == IntersectionTableType::Baseline)
-                        {
-                            bool new_entry_needed = true;
-                            while(intersection_table_index < table->size())
-                            {
-                                if(table->get_hitGroupIndex(intersection_table_index) == hit_group_index)
-                                {
-                                    table->add_to_baseline_table(intersection_table_index++, hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
-                                    new_entry_needed = false;
-                                    break;
-                                }
-                                intersection_table_index++;
-                            }
-                            if(new_entry_needed)
-                                table->add_to_baseline_table(intersection_table_index++, hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
-                        }
-                        else
-                            table->add_to_coalescing_table(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
-                        // assert(0);
+                        std::vector<MemoryTransactionRecord> intersectionTransactions = 
+                                table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
+                        
+                        transactions.insert(transactions.end(), intersectionTransactions.begin(), intersectionTransactions.end());
                     }
                 }
             }

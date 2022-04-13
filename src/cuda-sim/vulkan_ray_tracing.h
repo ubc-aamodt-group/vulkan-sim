@@ -28,6 +28,8 @@
 //     BVH_PRIMITIVE_LEAF_DESCRIPTOR,
 //     BVH_QUAD_LEAF,
 //     BVH_PROCEDURAL_LEAF,
+//     Intersection_Table_Write,
+//     Intersection_Table_Load,
 // };
 
 // typedef struct MemoryTransactionRecord {
@@ -86,7 +88,6 @@ typedef struct RayDebugGPUData
 //             res[i] += matrix.m[j][i] * vec[j];
 //     return {res[0], res[1], res[2], res[3]};
 // }
-
 
 typedef struct Descriptor
 {
@@ -243,8 +244,6 @@ struct anv_descriptor;
 class VulkanRayTracing
 {
 private:
-    static const IntersectionTableType intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
-
     static VkRayTracingPipelineCreateInfoKHR* pCreateInfos;
     static VkAccelerationStructureGeometryKHR* pGeometries;
     static uint32_t geometryCount;
