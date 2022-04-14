@@ -7520,6 +7520,27 @@ void get_closest_hit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *t
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
+void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  static uint32_t last_counter = 0;
+  static uint32_t last_warp_hitgroup = -1;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, src, U32_TYPE, thread, 1);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x);
+
+  Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
+  data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1);
+  
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
+}
+
+
 // wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3
 void wrap_32_4_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   ptx_reg_t src1_data, src2_data, src3_data, src4_data, data;

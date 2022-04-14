@@ -229,7 +229,7 @@ private:
 public:
     // static RayDebugGPUData rayDebugGPUData[2000][2000];
     static warp_intersection_table*** intersection_table;
-    static const IntersectionTableType intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
+    static const IntersectionTableType intersectionTableType = IntersectionTableType::Baseline;
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);

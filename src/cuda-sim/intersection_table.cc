@@ -59,8 +59,6 @@ Coalescing_warp_intersection_table::add_intersection(uint32_t hit_group_index, u
 
 
 
-
-
 Baseline_warp_intersection_table::Baseline_warp_intersection_table()
 {
     table = new Baseline_Entry[INTERSECTION_TABLE_MAX_LENGTH];
@@ -74,6 +72,7 @@ std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransacti
 Baseline_warp_intersection_table::add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID)
 {
     assert(tid < 32);
+    assert(index[tid] < INTERSECTION_TABLE_MAX_LENGTH);
     std::vector<MemoryTransactionRecord> loads;
     std::vector<MemoryStoreTransactionRecord> stores;
 
@@ -83,6 +82,8 @@ Baseline_warp_intersection_table::add_intersection(uint32_t hit_group_index, uin
 
     stores.push_back(MemoryStoreTransactionRecord(&table[index[tid]].hitGroupIndex[tid], 4, StoreTransactionType::Intersection_Table_Store));
     stores.push_back(MemoryStoreTransactionRecord(&table[index[tid]].shader_data[tid], 8, StoreTransactionType::Intersection_Table_Store));
+
+    index[tid]++;
 
     return std::make_pair(loads, stores);
 }
