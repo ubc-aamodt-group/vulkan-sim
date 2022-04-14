@@ -874,8 +874,10 @@ unsigned warp_inst_t::dec_thread_latency(std::deque<std::pair<unsigned, new_addr
         store_queue.push_back(std::pair<unsigned, new_addr_type>(m_uid, (new_addr_type)(store_transaction.address)));
         RT_DPRINTF("Buffer store pushed for warp %d thread %d at 0x%x\n", m_uid, i, store_transaction.address);
 
+        assert(m_pending_writes.find((new_addr_type)store_transaction.address) == m_pending_writes.end());
         m_pending_writes.insert((new_addr_type)store_transaction.address);
       }
+      m_per_scalar_thread[i].RT_store_transactions.clear();
     }
   }
   

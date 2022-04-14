@@ -175,7 +175,7 @@ enum class TransactionType {
     BVH_QUAD_LEAF,
     BVH_QUAD_LEAF_HIT,
     BVH_PROCEDURAL_LEAF,
-    Intersection_Table,
+    Intersection_Table_Load,
     UNDEFINED,
 };
 

@@ -29,7 +29,7 @@ warp_intersection_table::add_to_baseline_table(uint32_t hit_group_index, uint32_
     bool new_entry_needed = true;
     while(index < tableSize)
     {
-        loads.push_back(MemoryTransactionRecord(&table[index].hitGroupIndex, 4, TransactionType::Intersection_Table));
+        loads.push_back(MemoryTransactionRecord(&table[index].hitGroupIndex, 4, TransactionType::Intersection_Table_Load));
         if(table[index].hitGroupIndex == hit_group_index)
         {
             assert(!table[index].thread_mask[tid]);
@@ -48,8 +48,6 @@ warp_intersection_table::add_to_baseline_table(uint32_t hit_group_index, uint32_
     }
     if(new_entry_needed)
     {
-        if(index != tableSize)
-            printf("this is where things go wrong\n");
         assert(index == tableSize);
         table[tableSize].hitGroupIndex = hit_group_index;
         table[tableSize].thread_mask[tid] = true;
@@ -82,10 +80,10 @@ warp_intersection_table::add_to_coalescing_table(uint32_t hit_group_index, uint3
     std::vector<MemoryStoreTransactionRecord> stores;
 
     for (int i = 0; i < tableSize; i++) {
-        loads.push_back(MemoryTransactionRecord(&table[i].hitGroupIndex, 4, TransactionType::Intersection_Table));
+        loads.push_back(MemoryTransactionRecord(&table[i].hitGroupIndex, 4, TransactionType::Intersection_Table_Load));
         if (table[i].hitGroupIndex == hit_group_index)
         {
-            loads.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table));
+            loads.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table_Load));
             if (!table[i].thread_mask[tid])
             {
                 table[i].thread_mask[tid] = true;

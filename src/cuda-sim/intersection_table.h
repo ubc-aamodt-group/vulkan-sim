@@ -37,7 +37,7 @@ class warp_intersection_table {
     uint32_t index[32];
     uint32_t tableSize;
 
-    static const IntersectionTableType intersectionTableType = IntersectionTableType::Baseline;
+    static const IntersectionTableType intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
 
     std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
             add_to_baseline_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);

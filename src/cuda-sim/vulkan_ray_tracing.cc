@@ -753,7 +753,14 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         warp_intersection_table* table = &intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
                         auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID);
                         
-                        // transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
+                        transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
+                        // for(auto & load_transaction : intersectionTransactions.first)
+                        // {
+                        //     for(int i = 0; i < transactions.size(); i++)
+                        //         if(transactions[i].address == load_transaction.address)
+                        //             continue;
+                        //     transactions.push_back(load_transaction);
+                        // }
                         store_transactions.insert(store_transactions.end(), intersectionTransactions.second.begin(), intersectionTransactions.second.end());
                     }
                 }
@@ -796,6 +803,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     
     thread->set_rt_transactions(transactions);
+    thread->set_rt_store_transactions(store_transactions);
     thread->RT_thread_data->traversal_data.push_back(traversal_data);
 
     if (debugTraversal)
@@ -1226,8 +1234,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 1;
-    // launch_height = 1;
+    // launch_width = 32;
+    // launch_height = 32;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
