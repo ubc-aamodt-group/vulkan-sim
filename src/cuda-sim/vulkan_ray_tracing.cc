@@ -74,7 +74,7 @@ void* VulkanRayTracing::launcher_descriptorSets[1][10] = {NULL};
 void* VulkanRayTracing::child_addr_from_driver = NULL;
 std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
 
-bool use_external_launcher = false;
+bool use_external_launcher = true;
 
 bool VulkanRayTracing::_init_ = false;
 warp_intersection_table *** VulkanRayTracing::intersection_table;
