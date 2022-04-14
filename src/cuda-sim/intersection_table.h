@@ -4,14 +4,37 @@
 #include <stdint.h>
 #include <assert.h>
 #include <vector>
+#include <utility>
+#include <limits.h>
+
+#define INTERSECTION_TABLE_MAX_LENGTH 100
 
 enum class IntersectionTableType {
     Baseline,
     Function_Call_Coalescing,
 };
 
-typedef struct warp_intersection_entry {
-    warp_intersection_entry() {
+struct MemoryTransactionRecord;
+struct MemoryStoreTransactionRecord;
+
+class warp_intersection_table {
+public:
+    // virtual warp_intersection_table() {}
+    // virtual ~warp_intersection_table() {}
+    virtual std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
+            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) = 0;
+    
+    virtual void clear() = 0;
+    virtual bool shader_exists(uint32_t tid, uint32_t shader_counter) = 0;
+    virtual bool exit_shaders(uint32_t shader_counter, uint32_t tid) = 0;
+    virtual uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) = 0;
+    virtual uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) = 0;
+    virtual uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) = 0;
+};
+
+
+typedef struct Coalescing_Entry {
+    Coalescing_Entry() {
         for(int i = 0; i < 32; i++) {
             thread_mask[i] = false;
         }
@@ -24,60 +47,28 @@ typedef struct warp_intersection_entry {
     uint32_t primitiveID;
     uint32_t instanceID;
     } shader_data[32];
-} warp_intersection_entry;
+} Coalescing_Entry;
 
-class warp_intersection_table {
-    std::vector<warp_intersection_entry> table;
+class Coalescing_warp_intersection_table : public warp_intersection_table {
+    Coalescing_Entry* table;
+    uint32_t tableSize;
 
 public:
-    void add_to_baseline_table(uint32_t index, uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
-        assert(tid < 32);
-        if (index < table.size()) {
-            assert(hit_group_index == table[index].hitGroupIndex);
-            assert(!table[index].thread_mask[tid]);
-
-            table[index].thread_mask[tid] = true;
-            table[index].shader_data[tid].primitiveID = primitiveID;
-            table[index].shader_data[tid].instanceID = instanceID;
-        }
-        else {
-            assert(index == table.size());
-            warp_intersection_entry entry;
-            entry.hitGroupIndex = hit_group_index;
-            entry.thread_mask[tid] = true;
-            entry.shader_data[tid].primitiveID = primitiveID;
-            entry.shader_data[tid].instanceID = instanceID;
-            table.push_back(entry);
-        }
+    Coalescing_warp_intersection_table();
+    ~Coalescing_warp_intersection_table() {
+        delete table;
     }
 
-    void add_to_coalescing_table(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) {
-        assert(tid < 32);
-        for (int i = 0; i < table.size(); i++) {
-            if (table[i].hitGroupIndex == hit_group_index)
-                if (!table[i].thread_mask[tid])
-                {
-                    table[i].thread_mask[tid] = true;
-                    table[i].shader_data[tid].primitiveID = primitiveID;
-                    table[i].shader_data[tid].instanceID = instanceID;
-                    return;
-                }
-        }
-
-        warp_intersection_entry entry;
-        entry.hitGroupIndex = hit_group_index;
-        entry.thread_mask[tid] = true;
-        entry.shader_data[tid].primitiveID = primitiveID;
-        entry.shader_data[tid].instanceID = instanceID;
-        table.push_back(entry);
-    }
+    std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
+            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
+    
 
     bool shader_exists(uint32_t tid, uint32_t shader_counter) {
-        return shader_counter < table.size() && table[shader_counter].thread_mask[tid];
+        return shader_counter < tableSize && table[shader_counter].thread_mask[tid];
     }
 
-    bool exit_shaders(uint32_t shader_counter) {
-        return shader_counter >= table.size();
+    bool exit_shaders(uint32_t shader_counter, uint32_t tid) {
+        return shader_counter >= tableSize;
     }
 
     uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) {
@@ -88,17 +79,69 @@ public:
         return table[shader_counter].shader_data[tid].instanceID;
     }
 
-    uint32_t get_hitGroupIndex(uint32_t shader_counter) {
+    uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) {
         return table[shader_counter].hitGroupIndex;
     }
 
-    uint32_t size() {
-        return table.size();
+    void clear() {
+        tableSize = 0;
+        delete table;
+        table = new Coalescing_Entry[INTERSECTION_TABLE_MAX_LENGTH];
+    }
+
+};
+
+
+typedef struct Baseline_Entry {
+    uint32_t hitGroupIndex[32];
+
+    struct {
+    uint32_t primitiveID;
+    uint32_t instanceID;
+    } shader_data[32];
+} Baseline_Entry;
+
+class Baseline_warp_intersection_table : public warp_intersection_table {
+    Baseline_Entry* table;
+    uint32_t index[32];
+
+public:
+    Baseline_warp_intersection_table();
+    ~Baseline_warp_intersection_table() {
+        delete table;
+    }
+
+    std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
+            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
+
+    bool shader_exists(uint32_t tid, uint32_t shader_counter) {
+        return shader_counter < index[tid];
+    }
+
+    bool exit_shaders(uint32_t shader_counter, uint32_t tid) {
+        return shader_counter >= index[tid];
+    }
+
+    uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) {
+        return table[shader_counter].shader_data[tid].primitiveID;
+    }
+
+    uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) {
+        return table[shader_counter].shader_data[tid].instanceID;
+    }
+
+    uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) {
+        return table[shader_counter].hitGroupIndex[tid];
     }
 
     void clear() {
-        table.clear();
+        for(int i = 0; i < 32; i++)
+            index[i] = 0;
+
+        delete table;
+        table = new Baseline_Entry[INTERSECTION_TABLE_MAX_LENGTH];
     }
 };
+
 
 #endif /* INTERSECTION_TABLE_H */
