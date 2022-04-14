@@ -74,7 +74,7 @@ enum class TransactionType {
     BVH_PRIMITIVE_LEAF_DESCRIPTOR,
     BVH_QUAD_LEAF,
     BVH_PROCEDURAL_LEAF,
-    Intersection_Table,
+    Intersection_Table_Load,
 };
 
 typedef struct MemoryTransactionRecord {
@@ -225,14 +225,18 @@ private:
     static std::ofstream imageFile;
     static bool firstTime;
     static struct anv_descriptor_set *descriptorSet;
+    static bool _init_;
 public:
     // static RayDebugGPUData rayDebugGPUData[2000][2000];
-    static warp_intersection_table intersection_table[120][2160];
+    static warp_intersection_table*** intersection_table;
+    static const IntersectionTableType intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
     static float3 Barycentric(float3 p, float3 a, float3 b, float3 c);
     static std::vector<shader_stage_info> shaders;
+
+    static void init(uint32_t launch_width, uint32_t launch_height);
 
 
 public:
