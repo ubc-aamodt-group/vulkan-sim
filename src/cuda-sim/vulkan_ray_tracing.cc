@@ -743,6 +743,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         float3 barycentric = Barycentric(object_intersection_point, p[0], p[1], p[2]);
         traversal_data.closest_hit.barycentric_coordinates = barycentric;
         thread->RT_thread_data->set_hitAttribute(barycentric);
+
+        store_transactions.push_back(MemoryStoreTransactionRecord(&traversal_data, sizeof(traversal_data), StoreTransactionType::Traversal_Results));
     }
     else
     {
