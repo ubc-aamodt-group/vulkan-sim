@@ -30,6 +30,7 @@ public:
     virtual uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) = 0;
     virtual uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) = 0;
     virtual uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) = 0;
+    virtual void* get_shader_data_address(uint32_t shader_counter, uint32_t tid) = 0;
 };
 
 
@@ -83,6 +84,10 @@ public:
         return table[shader_counter].hitGroupIndex;
     }
 
+    void* get_shader_data_address(uint32_t shader_counter, uint32_t tid) {
+        return (void*)&table[shader_counter].shader_data[tid];
+    }
+
     void clear() {
         tableSize = 0;
         delete table;
@@ -132,6 +137,10 @@ public:
 
     uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) {
         return table[shader_counter].hitGroupIndex[tid];
+    }
+
+    void* get_shader_data_address(uint32_t shader_counter, uint32_t tid) {
+        return (void*)&table[shader_counter].shader_data[tid];
     }
 
     void clear() {

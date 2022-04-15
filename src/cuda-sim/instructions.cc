@@ -6819,77 +6819,49 @@ void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
 }
 
 void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(pI->get_num_operands() == 4); // TODO: this is loading identity matrix
-  const operand_info &dst0 = pI->dst();
-  const operand_info &dst1 = pI->src1();
-  const operand_info &dst2 = pI->src2();
-  const operand_info &src = pI->src3();
+  assert(pI->get_num_operands() == 2);
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
 
-  ptx_reg_t data[3];
-  ptx_reg_t src_data;
+  ptx_reg_t data, src_data;
 
-  src_data = thread->get_operand_value(src, dst0, F32_TYPE, thread, 1);
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 1);
 
-  for(int i = 0; i < 3; i++)
-    data[i].f32 = thread->RT_thread_data->traversal_data.back().closest_hit.worldToObjectMatrix.m[src_data.u32][i];
+  data.u64 = (uint64_t)thread->RT_thread_data->traversal_data.back().closest_hit.worldToObjectMatrix.m[src_data.u32];
 
-  thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
-  thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
-  thread->set_operand_value(dst2, data[2], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(pI->get_num_operands() == 4); // TODO: this is loading identity matrix
-  const operand_info &dst0 = pI->dst();
-  const operand_info &dst1 = pI->src1();
-  const operand_info &dst2 = pI->src2();
-  const operand_info &src = pI->src3();
+  assert(pI->get_num_operands() == 2);
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
 
-  ptx_reg_t data[3];
-  ptx_reg_t src_data;
+  ptx_reg_t data, src_data;
 
-  src_data = thread->get_operand_value(src, dst0, U32_TYPE, thread, 1);
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 1);
 
-  for(int i = 0; i < 3; i++)
-    data[i].f32 = thread->RT_thread_data->traversal_data.back().closest_hit.objectToWorldMatrix.m[src_data.u32][i];;
+  data.u64 = (uint64_t)thread->RT_thread_data->traversal_data.back().closest_hit.objectToWorldMatrix.m[src_data.u32];
 
-  thread->set_operand_value(dst0, data[0], F32_TYPE, thread, pI);
-  thread->set_operand_value(dst1, data[1], F32_TYPE, thread, pI);
-  thread->set_operand_value(dst2, data[2], F32_TYPE, thread, pI);
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void load_ray_world_direction_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(pI->get_num_operands() == 3);
-  const operand_info &dst0 = pI->dst();
-  const operand_info &dst1 = pI->src1();
-  const operand_info &dst2 = pI->src2();
+  assert(pI->get_num_operands() == 1);
+  const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.x;
-  thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
-
-  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.y;
-  thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
-
-  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_direction.z;
-  thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
+  data.u64 = (uint64_t)(&thread->RT_thread_data->traversal_data.back().ray_world_direction.x);
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void load_ray_world_origin_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  assert(pI->get_num_operands() == 3);
-  const operand_info &dst0 = pI->dst();
-  const operand_info &dst1 = pI->src1();
-  const operand_info &dst2 = pI->src2();
+  assert(pI->get_num_operands() == 1);
+  const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_origin.x;
-  thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
-
-  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_origin.y;
-  thread->set_operand_value(dst1, data, F32_TYPE, thread, pI);
-
-  data.f32 = thread->RT_thread_data->traversal_data.back().ray_world_origin.z;
-  thread->set_operand_value(dst2, data, F32_TYPE, thread, pI);
+  data.u64 = (uint64_t)(&thread->RT_thread_data->traversal_data.back().ray_world_origin.x);
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void load_ray_t_max_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7456,6 +7428,22 @@ void intersection_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
        0);  // inverting predicate since ptxplus uses "1" for a set zero flag
   
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
+}
+
+void get_intersection_shader_data_address_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  void* address = table->get_shader_data_address(shader_counter, thread->get_tid().x);
+
+  data.u64 = (uint64_t)address;
+  
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
