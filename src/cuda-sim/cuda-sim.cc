@@ -589,7 +589,7 @@ void ptx_instruction::set_fp_or_int_archop() {
       (m_opcode == REPORT_RAY_INTERSECTION_OP) || (m_opcode == LOAD_RAY_T_MIN_OP) ||
       (m_opcode == HIT_GEOMETRY_OP) || (m_opcode == COPYSIGNF_OP) || (m_opcode == GET_HITGROUP_OP) ||
       (m_opcode == GET_WARP_HITGROUP_OP) || (m_opcode == GET_CLOSEST_HIT_SHADERID_OP) ||
-      (m_opcode == GET_INTERSECTION_SHADERID_OP)) {
+      (m_opcode == GET_INTERSECTION_SHADERID_OP) || (m_opcode == GET_INTERSECTION_SHADER_DATE_ADDRESS_OP)) {
     // do nothing
   } else if ((m_opcode == CVT_OP || m_opcode == SET_OP ||
               m_opcode == SLCT_OP)) {
@@ -629,7 +629,7 @@ void ptx_instruction::set_mul_div_or_other_archop() {
       (m_opcode != REPORT_RAY_INTERSECTION_OP) && (m_opcode != LOAD_RAY_T_MIN_OP) &&
       (m_opcode != HIT_GEOMETRY_OP) && (m_opcode != COPYSIGNF_OP) && (m_opcode != GET_HITGROUP_OP) &&
       (m_opcode != GET_WARP_HITGROUP_OP) && (m_opcode != GET_CLOSEST_HIT_SHADERID_OP) &&
-      (m_opcode != GET_INTERSECTION_SHADERID_OP)) {
+      (m_opcode != GET_INTERSECTION_SHADERID_OP) && (m_opcode != GET_INTERSECTION_SHADER_DATE_ADDRESS_OP)) {
     if (get_type() == F32_TYPE || get_type() == F64_TYPE ||
         get_type() == FF64_TYPE) {
       switch (get_opcode()) {
@@ -1303,11 +1303,11 @@ void ptx_instruction::set_input_output_registers() {
       break;
     case LOAD_RAY_WORLD_TO_OBJECT_OP:
     case LOAD_RAY_OBJECT_TO_WORLD_OP:
-      operand_classification = {2, 2, 2, 1};
+      operand_classification = {2, 1};
       break;
     case LOAD_RAY_WORLD_DIRECTION_OP:
     case LOAD_RAY_WORLD_ORIGIN_OP:
-      operand_classification = {2, 2, 2};
+      operand_classification = {2};
       break;
     case LOAD_RAY_T_MAX_OP:
     case LOAD_RAY_T_MIN_OP:
