@@ -7421,6 +7421,22 @@ void intersection_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 }
 
+void get_intersection_shader_data_address_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  void* address = table->get_shader_data_address(shader_counter, thread->get_tid().x);
+
+  data.u64 = (uint64_t)address;
+  
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
+}
+
 void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst = pI->dst();
   ptx_reg_t data;
