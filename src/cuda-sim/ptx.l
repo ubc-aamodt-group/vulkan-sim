@@ -206,6 +206,8 @@ hit_geometry TC; yylval->int_value = HIT_GEOMETRY_OP; return OPCODE;
 get_hitgroup TC; yylval->int_value = GET_HITGROUP_OP; return OPCODE;
 get_warp_hitgroup TC; yylval->int_value = GET_WARP_HITGROUP_OP; return OPCODE;
 get_closest_hit_shaderID TC; yylval->int_value = GET_CLOSEST_HIT_SHADERID_OP; return OPCODE;
+get_intersection_shaderID TC; yylval->int_value = GET_INTERSECTION_SHADERID_OP; return OPCODE;
+get_intersection_shader_data_address TC; yylval->int_value = GET_INTERSECTION_SHADER_DATE_ADDRESS_OP; return OPCODE;
 
 
 "CPTX_END"	printf("ENDING CUSTOM PTX.\n"); BEGIN(IN_COMMENT);

@@ -175,6 +175,8 @@ OP_DEF(HIT_GEOMETRY_OP,hit_geometry_impl,"hit_geometry",0,11)
 OP_DEF(GET_HITGROUP_OP,get_hitgroup_impl,"get_hitgroup",0,11)
 OP_DEF(GET_WARP_HITGROUP_OP,get_warp_hitgroup_impl,"get_warp_hitgroup",0,11)
 OP_DEF(GET_CLOSEST_HIT_SHADERID_OP,get_closest_hit_shaderID_impl,"get_closest_hit_shaderID",0,11)
+OP_DEF(GET_INTERSECTION_SHADERID_OP,get_intersection_shaderID_impl,"get_intersection_shaderID",0,11)
+OP_DEF(GET_INTERSECTION_SHADER_DATE_ADDRESS_OP,get_intersection_shader_data_address_impl,"get_intersection_shader_data_address",0,11)
 
 // Shader calls
 OP_DEF(CALL_MISS_SHADER_OP,call_miss_shader_impl,"call_miss_shader",0,13)
@@ -183,4 +185,3 @@ OP_DEF(CALL_INTERSECTION_SHADER_OP,call_intersection_shader_impl,"call_intersect
 OP_DEF(CALL_ANY_HIT_SHADER_OP,call_any_hit_shader_impl,"call_any_hit_shader",0,13)
 
 OP_DEF(TXL_OP,txl_impl,"txl",0,14)
-
