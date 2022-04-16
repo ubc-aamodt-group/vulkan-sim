@@ -22,7 +22,7 @@ Coalescing_warp_intersection_table::add_intersection(uint32_t hit_group_index, u
         loads.push_back(MemoryTransactionRecord(&table[i].hitGroupIndex, 4, TransactionType::Intersection_Table_Load));
         if (table[i].hitGroupIndex == hit_group_index)
         {
-            loads.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table_Load));
+            // loads.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table_Load));
             if (!table[i].thread_mask[tid])
             {
                 table[i].thread_mask[tid] = true;
