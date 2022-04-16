@@ -764,6 +764,13 @@ cache_stats &cache_stats::operator+=(const cache_stats &cs) {
   m_cache_port_available_cycles += cs.m_cache_port_available_cycles;
   m_cache_data_port_busy_cycles += cs.m_cache_data_port_busy_cycles;
   m_cache_fill_port_busy_cycles += cs.m_cache_fill_port_busy_cycles;
+
+  // #define DETAILED_CACHE_STATS
+  #ifdef DETAILED_CACHE_STATS
+  g_rt_miss += cs.g_rt_miss;
+  g_rt_cold_miss += cs.g_rt_cold_miss;
+  g_nonrt_miss += cs.g_nonrt_miss;
+  #endif
   return *this;
 }
 
@@ -794,6 +801,12 @@ void cache_stats::print_stats(FILE *fout, const char *cache_name) const {
               mem_access_type_str((enum mem_access_type)type), "TOTAL_ACCESS",
               total_access[type]);
   }
+
+  #ifdef DETAILED_CACHE_STATS
+  fprintf(fout, "nonrt_miss = %d\n", g_nonrt_miss);
+  fprintf(fout, "rt_cold_miss = %d\n", g_rt_cold_miss);
+  fprintf(fout, "rt_miss = %d\n", g_rt_miss);
+  #endif
 }
 
 void cache_stats::print_fail_stats(FILE *fout, const char *cache_name) const {
@@ -1684,6 +1697,25 @@ enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
                     m_stats.select_stats_status(probe_status, access_status));
   m_stats.inc_stats_pw(mf->get_access_type(), m_stats.select_stats_status(
                                                   probe_status, access_status));
+  
+  #ifdef DETAILED_CACHE_STATS
+  // Check if this is a RT access
+  if (access_status == MISS) {
+    if (mf->israytrace()) {
+      // Check if cold start
+      if (m_addr_set.find(addr) == m_addr_set.end()) {
+        m_addr_set.insert(addr);
+        m_stats.g_rt_cold_miss++;
+      }
+      else {
+        m_stats.g_rt_miss++;
+      }
+
+    } else {
+      m_stats.g_nonrt_miss++;
+    }
+  }
+  #endif
   return access_status;
 }
 

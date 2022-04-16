@@ -3095,7 +3095,13 @@ void rt_unit::cycle() {
         unsigned long long total_cycles = current_cycle - start_cycle;
         m_stats->rt_total_warp_latency += total_cycles;
         m_stats->rt_total_warps++;
-        
+
+        // #define PRINT_WARP_TIMING
+        #ifdef PRINT_WARP_TIMING
+        printf("sid: %2d wid: %2d uid: %5d start: %8d end: %8d total: %8d\n", 
+          m_sid, it->second.warp_id(), it->second.get_uid(), start_cycle, current_cycle, total_cycles);
+        #endif
+
         // Track thread latency in RT unit
         unsigned long long total_thread_cycles = 0;
         for (unsigned i=0; i<m_config->warp_size; i++) {
