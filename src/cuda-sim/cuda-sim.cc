@@ -2127,6 +2127,9 @@ void ptx_thread_info::ptx_exec_inst(warp_inst_t &inst, unsigned lane_id) {
       StatAddSample(m_gpu->gpgpu_ctx->func_sim->g_inst_classification_stat
                         [m_gpu->gpgpu_ctx->func_sim->g_ptx_kernel_count],
                     op_classification);
+      unsigned shader;
+      m_gpu->gpgpu_ctx->translate_pc_to_ptxlineno(inst.pc, shader);
+      m_gpu->gpgpu_ctx->func_sim->g_inst_class_stat[shader][op_classification]++;
       if (space_type)
         StatAddSample(m_gpu->gpgpu_ctx->func_sim->g_inst_classification_stat
                           [m_gpu->gpgpu_ctx->func_sim->g_ptx_kernel_count],

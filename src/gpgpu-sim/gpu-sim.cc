@@ -1503,6 +1503,14 @@ void gpgpu_sim::gpu_print_stat() {
     fprintf(statfout, "%lld ", gpgpu_ctx->func_sim->g_inst_type_latency[i]);
   }
   fprintf(statfout, "\n");
+  fprintf(statfout, "inst_class_by_shader\n");
+  for (unsigned i=0; i<5; i++) {
+    fprintf(statfout, "%d:", i);
+    for (unsigned j=0; j<20; j++) {
+      fprintf(statfout, "%d\t", gpgpu_ctx->func_sim->g_inst_class_stat[i][j]);
+    }
+    fprintf(statfout, "\n");
+  }
 
 #ifdef GPGPUSIM_POWER_MODEL
   if (m_config.g_power_simulation_enabled) {

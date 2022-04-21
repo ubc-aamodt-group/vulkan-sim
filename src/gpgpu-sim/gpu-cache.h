@@ -562,6 +562,7 @@ class cache_config {
       m_mshr_entries = m_nset * m_assoc * MAX_DEFAULT_CACHE_SIZE_MULTIBLIER;
       if (m_cache_type == SECTOR) m_mshr_entries *= SECTOR_CHUNCK_SIZE;
       m_mshr_max_merge = MAX_WARP_PER_SM;
+      printf("Streaming cache with %d mshr\n", m_mshr_entries);
     }
     switch (mshr_type) {
       case 'F':

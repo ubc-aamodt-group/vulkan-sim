@@ -765,7 +765,7 @@ cache_stats &cache_stats::operator+=(const cache_stats &cs) {
   m_cache_data_port_busy_cycles += cs.m_cache_data_port_busy_cycles;
   m_cache_fill_port_busy_cycles += cs.m_cache_fill_port_busy_cycles;
 
-  // #define DETAILED_CACHE_STATS
+  #define DETAILED_CACHE_STATS
   #ifdef DETAILED_CACHE_STATS
   g_rt_miss += cs.g_rt_miss;
   g_rt_cold_miss += cs.g_rt_cold_miss;

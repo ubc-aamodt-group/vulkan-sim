@@ -3043,9 +3043,19 @@ void rt_unit::cycle() {
 
   // Check if there are outstanding chunks to request
   if (!mem_access_q.empty()) {
-    // Find the appropriate warp
-    rt_inst = m_current_warps[mem_access_q_warp_uid];
-    m_current_warps.erase(mem_access_q_warp_uid);
+    // Check if warp still exists
+    if (m_current_warps.find(mem_access_q_warp_uid) == m_current_warps.end()) {
+      printf("Memory chunk original warp not found (w_uid: %d); erasing memory accesses starting with 0x%x.\n", mem_access_q_warp_uid, mem_access_q.front());
+      mem_access_q.clear();
+      if (mem_store_q.empty()) {
+        schedule_next_warp(rt_inst);
+      }
+    }
+    else {
+      // Find the appropriate warp
+      rt_inst = m_current_warps[mem_access_q_warp_uid];
+      m_current_warps.erase(mem_access_q_warp_uid);
+    }
   }
   else if (mem_store_q.empty() && !m_config->m_rt_coherence_engine) {
     // Choose next warp

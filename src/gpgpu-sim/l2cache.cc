@@ -381,23 +381,23 @@ void memory_partition_unit::set_dram_power_stats(
 }
 
 void memory_partition_unit::print(FILE *fp) const {
-  fprintf(fp, "Memory Partition %u: \n", m_id);
-  for (unsigned p = 0; p < m_config->m_n_sub_partition_per_memory_channel;
-       p++) {
-    m_sub_partition[p]->print(fp);
-  }
-  fprintf(fp, "In Dram Latency Queue (total = %zd): \n",
-          m_dram_latency_queue.size());
-  for (std::list<dram_delay_t>::const_iterator mf_dlq =
-           m_dram_latency_queue.begin();
-       mf_dlq != m_dram_latency_queue.end(); ++mf_dlq) {
-    mem_fetch *mf = mf_dlq->req;
-    fprintf(fp, "Ready @ %llu - ", mf_dlq->ready_cycle);
-    if (mf)
-      mf->print(fp);
-    else
-      fprintf(fp, " <NULL mem_fetch?>\n");
-  }
+  // fprintf(fp, "Memory Partition %u: \n", m_id);
+  // for (unsigned p = 0; p < m_config->m_n_sub_partition_per_memory_channel;
+  //      p++) {
+  //   m_sub_partition[p]->print(fp);
+  // }
+  // fprintf(fp, "In Dram Latency Queue (total = %zd): \n",
+  //         m_dram_latency_queue.size());
+  // for (std::list<dram_delay_t>::const_iterator mf_dlq =
+  //          m_dram_latency_queue.begin();
+  //      mf_dlq != m_dram_latency_queue.end(); ++mf_dlq) {
+  //   mem_fetch *mf = mf_dlq->req;
+  //   fprintf(fp, "Ready @ %llu - ", mf_dlq->ready_cycle);
+  //   if (mf)
+  //     mf->print(fp);
+  //   else
+  //     fprintf(fp, " <NULL mem_fetch?>\n");
+  // }
   m_dram->print(fp);
 }
 
