@@ -72,10 +72,10 @@ std::vector<shader_stage_info> VulkanRayTracing::shaders;
 // RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
 struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
 void* VulkanRayTracing::launcher_descriptorSets[1][10] = {NULL};
-void* VulkanRayTracing::child_addr_from_driver = NULL;
 std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
+bool VulkanRayTracing::dumped = false;
 
-bool use_external_launcher = true;
+bool use_external_launcher = false;
 
 bool VulkanRayTracing::_init_ = false;
 warp_intersection_table *** VulkanRayTracing::intersection_table;
@@ -341,6 +341,13 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
     // std::list<uint8_t *> path;
     // find_primitive((uint8_t*)_topLevelAS, 6, 2, path);
+
+    if (!use_external_launcher && !dumped) 
+    {
+        dump_AS(VulkanRayTracing::descriptorSet, _topLevelAS);
+        std::cout << "Trace dumped" << std::endl;
+        dumped = true;
+    }
 
     Traversal_data traversal_data;
 
@@ -1883,7 +1890,7 @@ void VulkanRayTracing::dumpStorageImage(struct anv_descriptor *desc, uint32_t se
 }
 
 
-void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files)
+void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files, VkAccelerationStructureKHR _topLevelAS)
 {
     FILE *fp;
     char *mesa_root = getenv("MESA_ROOT");
@@ -1911,9 +1918,9 @@ void VulkanRayTracing::dump_descriptor_set_for_AS(uint32_t setID, uint32_t descI
     int64_t min_backwards; // negative number
     int64_t min_forwards;
     int64_t max_forwards;
-    int64_t back_buffer_amount = 1024*20; //20kB buffer just in case
+    int64_t back_buffer_amount = 0; //20kB buffer just in case
     int64_t front_buffer_amount = 1024*20; //20kB buffer just in case
-    findOffsetBounds(max_backwards, min_backwards, min_forwards, max_forwards);
+    findOffsetBounds(max_backwards, min_backwards, min_forwards, max_forwards, _topLevelAS);
 
     bool haveBackwards = (max_backwards != 0) && (min_backwards != 0);
     bool haveForwards = (min_forwards != 0) && (max_forwards != 0);
@@ -2071,10 +2078,10 @@ void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
             // for some reason raytracing_extended skipped binding = 3
             // and somehow they have 34 descriptor sets but only 10 are used
             // so we just skip those
-            //continue;
+            continue;
        }
 
-       struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
+        struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
 
         const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
         struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
@@ -2136,7 +2143,7 @@ void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
             {
                 struct anv_address_range_descriptor *desc_data = desc_map;
                 //return (void *)(desc_data->address);
-                dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10, 1024*1024*10, true);
+                //dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10, 1024*1024*10, true);
                 break;
             }
 
@@ -2144,79 +2151,43 @@ void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
                 assert(0);
                 break;
         }
-    //   const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
-    //   struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
-    //   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
+   }
+}
 
-    //   assert(desc->type == bind_layout->type);
-      
-    //   switch (desc->type)
-    //   {
-    //      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-    //      {
-    //         assert(bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE);
-    //         assert(desc->sampler == NULL);
+void VulkanRayTracing::dump_AS(struct anv_descriptor_set *set, VkAccelerationStructureKHR _topLevelAS)
+{
+   for(int i = 0; i < set->descriptor_count; i++)
+   {
+       if(i == 3 || i > 9)
+       {
+            // for some reason raytracing_extended skipped binding = 3
+            // and somehow they have 34 descriptor sets but only 10 are used
+            // so we just skip those
+            continue;
+       }
 
-    //         struct anv_image_view *image_view = desc->image_view;
-    //         assert(image_view != NULL);
-    //         struct anv_image * image = image_view->image;
-    //         void* address = anv_address_map(image->planes[0].address);
-    //         dump_descriptor_set(0, i, address, 0, set->descriptors[i].type);
-    //         break;
-    //         //return address;
-    //      }
-    //      case VK_DESCRIPTOR_TYPE_SAMPLER:
-    //      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-    //      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-    //      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-    //      {
-    //         //return desc;
-    //      }
+        struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
 
-    //      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-    //      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-    //         assert(0);
-    //         break;
+        const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
+        struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+        void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
 
-    //      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-    //      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-    //      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-    //      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-    //      {
-    //         if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-    //             desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
-    //         {
-    //             // MRS_TODO: account for desc->offset?
-    //             //return anv_address_map(desc->buffer->address);
-    //             dump_descriptor_set(0, i, anv_address_map(desc->buffer->address), set->descriptors[i].buffer->size, set->descriptors[i].type);
-    //             break;
-    //         }
-    //         else
-    //         {
-    //             struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
-    //             //return anv_address_map(bview->address);
-    //             dump_descriptor_set(0, i, anv_address_map(bview->address), bview->range, set->descriptors[i].type);
-    //             break;
-    //         }
-    //      }
+        assert(desc->type == bind_layout->type);
 
-    //      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-    //         assert(0);
-    //         break;
+        switch (desc->type)
+        {
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            {
+                struct anv_address_range_descriptor *desc_data = desc_map;
+                //return (void *)(desc_data->address);
+                dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10, 1024*1024*10, true, _topLevelAS);
+                break;
+            }
 
-    //      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-    //      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
-    //      {
-    //         struct anv_address_range_descriptor *desc_data = desc_map;
-    //         //return (void *)(desc_data->address);
-    //         dump_descriptor_set_for_AS(0, i, (void *)(desc_data->address), desc_data->range, set->descriptors[i].type, 1024*1024*10);
-    //         break;
-    //      }
-
-    //      default:
-    //         assert(0);
-    //         break;
-    //   }
+            default:
+                break;
+        }
    }
 }
 
@@ -2335,12 +2306,9 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
 void VulkanRayTracing::pass_child_addr(void *address)
 {
     child_addrs_from_driver.push_back(address);
-    
-    //old
-    child_addr_from_driver = address;
 }
 
-void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards)
+void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS)
 {
     // uint64_t current_min_backwards = 0;
     // uint64_t current_max_backwards = 0;
@@ -2353,7 +2321,7 @@ void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_bac
 
     for (auto addr : child_addrs_from_driver)
     {
-        offset = (uint64_t)addr - (uint64_t)topLevelAS;
+        offset = (uint64_t)addr - (uint64_t)_topLevelAS;
         if (offset >= 0)
             positive_offsets.push_back(offset);
         else

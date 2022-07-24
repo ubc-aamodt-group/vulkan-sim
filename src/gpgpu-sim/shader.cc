@@ -2948,7 +2948,8 @@ void rt_unit::cycle() {
   }
 
   // Cycle coherence engine
-  m_ray_coherence_engine->cycle();
+  if (m_config->m_rt_coherence_engine)
+    m_ray_coherence_engine->cycle();
 
   // AerialVision stats
   m_stats->rt_nwarps[m_sid] = n_warps;

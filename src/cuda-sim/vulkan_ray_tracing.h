@@ -270,7 +270,7 @@ private:
     // For Launcher
     static void* launcher_descriptorSets[1][10];
     static std::vector<void*> child_addrs_from_driver;
-    static void *child_addr_from_driver;
+    static bool dumped;
     static bool _init_;
 public:
     // static RayDebugGPUData rayDebugGPUData[2000][2000];
@@ -334,8 +334,9 @@ public:
     static void image_load(struct anv_descriptor *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3);
 
     static void dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
-    static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files);
+    static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files, VkAccelerationStructureKHR _topLevelAS);
     static void dump_descriptor_sets(struct anv_descriptor_set *set);
+    static void dump_AS(struct anv_descriptor_set *set, VkAccelerationStructureKHR _topLevelAS);
     static void dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr);
     static void dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
     static void dumpStorageImage(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
@@ -367,7 +368,7 @@ public:
                                        uint32_t row_pitch_B,
                                        uint32_t filter);
     static void pass_child_addr(void *address);
-    static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards);
+    static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */
