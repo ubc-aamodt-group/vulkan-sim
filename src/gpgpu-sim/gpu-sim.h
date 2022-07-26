@@ -397,6 +397,8 @@ class gpgpu_sim_config : public power_config,
   double l2_period;
 
   // GPGPU-Sim timing model options
+  bool gpu_intermittent_stats;
+  int gpu_intermittent_stats_freq;
   unsigned long long gpu_max_cycle_opt;
   unsigned long long gpu_max_insn_opt;
   unsigned gpu_max_cta_opt;
@@ -515,6 +517,7 @@ class gpgpu_sim : public gpgpu_t {
   void get_pdom_stack_top_info(unsigned sid, unsigned tid, unsigned *pc,
                                unsigned *rpc);
 
+  bool print_intermittent_stats(unsigned long long cycle) const;
   int shared_mem_size() const;
   int shared_mem_per_block() const;
   int compute_capability_major() const;

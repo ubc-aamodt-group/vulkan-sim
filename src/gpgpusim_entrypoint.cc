@@ -127,7 +127,7 @@ void *gpgpu_sim_thread_concurrent(void *ctx_ptr) {
         ctx->the_gpgpusim->g_the_gpu->cycle();
         sim_cycles = true;
         ctx->the_gpgpusim->g_the_gpu->deadlock_check();
-        if (ctx->the_gpgpusim->g_the_gpu->gpu_sim_cycle % 10000 == 0) {
+        if (ctx->the_gpgpusim->g_the_gpu->print_intermittent_stats(ctx->the_gpgpusim->g_the_gpu->gpu_sim_cycle)) {
           ctx->the_gpgpusim->g_the_gpu->print_stats();
         }
       } else {

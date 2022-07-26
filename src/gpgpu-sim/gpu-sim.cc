@@ -608,6 +608,10 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   m_shader_config.reg_options(opp);
   m_memory_config.reg_options(opp);
   power_config::reg_options(opp);
+  option_parser_register(opp, "-gpgpu_intermittent_stats", OPT_BOOL, &gpu_intermittent_stats,
+                         "print intermittent stats", "0");
+  option_parser_register(opp, "-gpgpu_intermittent_stats_freq", OPT_INT64, &gpu_intermittent_stats_freq,
+                         "intermittent stats frequency", "10000");
   option_parser_register(opp, "-gpgpu_max_cycle", OPT_INT64, &gpu_max_cycle_opt,
                          "terminates gpu simulation early (0 = no limit)", "0");
   option_parser_register(opp, "-gpgpu_max_insn", OPT_INT64, &gpu_max_insn_opt,
@@ -955,6 +959,15 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
 
 int gpgpu_sim::shared_mem_size() const {
   return m_shader_config->gpgpu_shmem_size;
+}
+
+bool gpgpu_sim::print_intermittent_stats(unsigned long long cycle) const {
+  if (m_config.gpu_intermittent_stats) {
+    return cycle % m_config.gpu_intermittent_stats_freq == 0;
+  }
+  else {
+    return false;
+  }
 }
 
 int gpgpu_sim::shared_mem_per_block() const {
