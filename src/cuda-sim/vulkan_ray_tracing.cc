@@ -79,6 +79,7 @@ bool use_external_launcher = true;
 
 bool VulkanRayTracing::_init_ = false;
 warp_intersection_table *** VulkanRayTracing::intersection_table;
+IntersectionTableType VulkanRayTracing::intersectionTableType = IntersectionTableType::Baseline;
 
 float get_norm(float4 v)
 {
