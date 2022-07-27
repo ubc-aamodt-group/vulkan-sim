@@ -1599,6 +1599,7 @@ class shader_core_config : public core_config {
   char *specialized_unit_string[SPECIALIZED_UNIT_NUM];
   mutable std::vector<specialized_unit_params> m_specialized_unit;
   unsigned m_specialized_unit_num;
+  unsigned m_rt_intersection_table_type;
 };
 
 struct shader_core_stats_pod {

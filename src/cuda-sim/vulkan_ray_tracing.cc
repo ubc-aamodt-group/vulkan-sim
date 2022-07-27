@@ -287,8 +287,19 @@ void VulkanRayTracing::init(uint32_t launch_width, uint32_t launch_height)
         return;
     _init_ = true;
 
+    gpgpu_context *ctx;
+    ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+
     uint32_t width = (launch_width + 31) / 32;
     uint32_t height = launch_height;
+
+    if(ctx->the_gpgpusim->g_the_gpu->getShaderCoreConfig()->m_rt_intersection_table_type == 0)
+        intersectionTableType = IntersectionTableType::Baseline;
+    else if(ctx->the_gpgpusim->g_the_gpu->getShaderCoreConfig()->m_rt_intersection_table_type == 1)
+        intersectionTableType = IntersectionTableType::Function_Call_Coalescing;
+    else
+        assert(0);
 
     if(intersectionTableType == IntersectionTableType::Baseline)
     {
