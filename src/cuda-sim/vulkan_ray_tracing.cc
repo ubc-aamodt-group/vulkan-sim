@@ -72,6 +72,7 @@ std::vector<shader_stage_info> VulkanRayTracing::shaders;
 struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
 bool VulkanRayTracing::_init_ = false;
 warp_intersection_table *** VulkanRayTracing::intersection_table;
+IntersectionTableType VulkanRayTracing::intersectionTableType = IntersectionTableType::Baseline;
 
 float get_norm(float4 v)
 {
