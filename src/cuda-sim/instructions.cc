@@ -3418,8 +3418,8 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.u64 = 0;
   type_info_key::type_decode(type, size, t);
   if (!vector_spec) {
-    // mem->read(addr, size / 8, &data.s64); // MRS_TODO: this is the correct one needed
-    memcpy(&(data.s64), addr64, size / 8);
+    mem->read(addr, size / 8, &data.s64); // MRS_TODO: this is the correct one needed
+    // memcpy(&(data.s64), addr64, size / 8);
     // printf("float value = %f\n", *((float*)addr64));
     if (type == S16_TYPE || type == S32_TYPE) sign_extend(data, size, dst);
     thread->set_operand_value(dst, data, type, thread, pI);

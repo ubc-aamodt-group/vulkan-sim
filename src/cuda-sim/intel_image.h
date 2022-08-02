@@ -89,6 +89,7 @@ float linearRGB_to_SRGB(float s)
 Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, uint32_t level, ImageMemoryTransactionRecord& transaction, uint64_t launcher_offset = 0)
 {
     uint8_t *address;
+    uint8_t *deviceAddress;
     uint32_t setID;
     uint32_t descID;
     uint64_t size;
@@ -118,6 +119,7 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
         isl_tiling_mode = texture->isl_tiling_mode;
         row_pitch_B = texture->row_pitch_B;
         address = (uint8_t*) texture->address;
+        deviceAddress = (uint8_t*) texture->deviceAddress;
     }
     else
     {
@@ -161,8 +163,16 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
 
             uint32_t offset = (tileID * (tileWidth * tileHeight) + blockID) * ASTC_block_size;
             
-            transaction.address = address + offset;
-            transaction.size = 128 / 8;
+            if (use_external_launcher)
+            {
+                transaction.address = deviceAddress + offset;
+                transaction.size = 128 / 8;
+            }
+            else
+            {
+                transaction.address = address + offset;
+                transaction.size = 128 / 8;
+            }
 
             uint8_t dst_colors[256];
             if(!basisu::astc::decompress(dst_colors, address + offset, true, 8, 8))
@@ -187,8 +197,16 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             int tileY = y / tileHeight;
             int tileID = tileX + tileY * width / tileWidth;
 
-            transaction.address = address + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
-            transaction.size = 4;
+            if (use_external_launcher)
+            {
+                transaction.address = deviceAddress + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
+                transaction.size = 4;
+            }
+            else
+            {
+                transaction.address = address + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
+                transaction.size = 4;
+            }
 
             uint8_t colors[4];
 
@@ -211,8 +229,16 @@ Pixel load_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
             int tileY = y / tileHeight;
             int tileID = tileX + tileY * width / tileWidth;
 
-            transaction.address = address + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
-            transaction.size = 4;
+            if (use_external_launcher)
+            {
+                transaction.address = deviceAddress + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
+                transaction.size = 4;
+            }
+            else
+            {
+                transaction.address = address + (tileID * tileWidth * tileHeight + (x % tileWidth) * tileHeight + (y % tileHeight)) * 4;
+                transaction.size = 4;
+            }
 
             uint8_t colors[4];
 
@@ -372,6 +398,7 @@ inline uint64_t ceil_divide(uint64_t a, uint64_t b)
 void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, uint32_t level, Pixel pixel, ImageMemoryTransactionRecord& transaction)
 {
     void *address;
+    void *deviceAddress;
     uint32_t setID;
     uint32_t descID;
     uint32_t width;
@@ -399,6 +426,7 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
         isl_tiling_mode = metadata->isl_tiling_mode;
         row_pitch_B = metadata->row_pitch_B;
         address = metadata->address;
+        deviceAddress = metadata->deviceAddress;
     }
     else
     {
@@ -457,8 +485,16 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
                     uint32_t offset = (y / ytile_height) * ytile_height * row_pitch_B;
                     offset += (x * 4 % ytile_span) + (x * 4 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
 
-                    transaction.address = address + offset;
-                    transaction.size = 4;
+                    if (use_external_launcher)
+                    {
+                        transaction.address = deviceAddress + offset;
+                        transaction.size = 4;
+                    }
+                    else
+                    {
+                        transaction.address = address + offset;
+                        transaction.size = 4;
+                    }
 
                     assert(tiling == VK_IMAGE_TILING_OPTIMAL);
                     intel_linear_to_tiled(x * 4, x * 4 + 4, y, y + 1,
@@ -511,8 +547,16 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
                     uint32_t offset = (y / ytile_height) * ytile_height * row_pitch_B;
                     offset += (x * 4 % ytile_span) + (x * 4 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
 
-                    transaction.address = address + offset;
-                    transaction.size = 4;
+                    if (use_external_launcher)
+                    {
+                        transaction.address = deviceAddress + offset;
+                        transaction.size = 4;
+                    }
+                    else
+                    {
+                        transaction.address = address + offset;
+                        transaction.size = 4;
+                    }
 
                     assert(tiling == VK_IMAGE_TILING_OPTIMAL);
                     intel_linear_to_tiled(x * 4, x * 4 + 4, y, y + 1,
@@ -525,8 +569,16 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
                 {
                     uint32_t offset = (y * width + x) * 4;
 
-                    transaction.address = address + offset;
-                    transaction.size = 4;
+                    if (use_external_launcher)
+                    {
+                        transaction.address = deviceAddress + offset;
+                        transaction.size = 4;
+                    }
+                    else
+                    {
+                        transaction.address = address + offset;
+                        transaction.size = 4;
+                    }
 
                     uint8_t* p = ((uint8_t*)address) + offset;
                     p[0] = r;
@@ -559,8 +611,16 @@ void store_image_pixel(const struct anv_image *image, uint32_t x, uint32_t y, ui
                     uint32_t offset = (y / ytile_height) * ytile_height * row_pitch_B;
                     offset += (x * 16 % ytile_span) + (x * 16 / ytile_span) * bytes_per_column + (y % ytile_height) * ytile_span;
 
-                    transaction.address = address + offset;
-                    transaction.size = 4;
+                    if (use_external_launcher)
+                    {
+                        transaction.address = deviceAddress + offset;
+                        transaction.size = 4;
+                    }
+                    else
+                    {
+                        transaction.address = address + offset;
+                        transaction.size = 4;
+                    }
 
                     assert(tiling == VK_IMAGE_TILING_OPTIMAL);
                     intel_linear_to_tiled(x * 16, x * 16 + 16, y, y + 1,

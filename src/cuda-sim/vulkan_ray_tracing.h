@@ -49,6 +49,9 @@
 #define MIN_MAX(a,b,c) MAX(MIN((a), (b)), (c))
 #define MAX_MIN(a,b,c) MIN(MAX((a), (b)), (c))
 
+#define MAX_DESCRIPTOR_SETS 1
+#define MAX_DESCRIPTOR_SET_BINDINGS 32
+
 // enum class TransactionType {
 //     BVH_STRUCTURE,
 //     BVH_INTERNAL_NODE,
@@ -248,6 +251,7 @@ typedef struct Vulkan_RT_thread_data {
 typedef struct storage_image_metadata
 {
     void *address;
+    void *deviceAddress;
     uint32_t setID;
     uint32_t descID;
     uint32_t width;
@@ -264,6 +268,7 @@ typedef struct storage_image_metadata
 typedef struct texture_metadata
 {
     void *address;
+    void *deviceAddress;
     uint32_t setID;
     uint32_t descID;
     uint64_t size;
@@ -296,7 +301,8 @@ private:
     static struct anv_descriptor_set *descriptorSet;
 
     // For Launcher
-    static void* launcher_descriptorSets[1][10];
+    static void* launcher_descriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS];
+    static void* launcher_deviceDescriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS];
     static std::vector<void*> child_addrs_from_driver;
     static bool dumped;
     static bool _init_;
@@ -368,8 +374,9 @@ public:
     static void dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr);
     static void dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
     static void dumpStorageImage(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
-    static void setDescriptorSetFromLauncher(void *address, uint32_t setID, uint32_t descID);
+    static void setDescriptorSetFromLauncher(void *address, void *deviceAddress, uint32_t setID, uint32_t descID);
     static void setStorageImageFromLauncher(void *address, 
+                                            void *deviceAddress,
                                             uint32_t setID, 
                                             uint32_t descID, 
                                             uint32_t width,
@@ -381,7 +388,8 @@ public:
                                             VkImageTiling tiling,
                                             uint32_t isl_tiling_mode, 
                                             uint32_t row_pitch_B);
-    static void setTextureFromLauncher(void *address, 
+    static void setTextureFromLauncher(void *address,
+                                       void *deviceAddress, 
                                        uint32_t setID, 
                                        uint32_t descID, 
                                        uint64_t size,
