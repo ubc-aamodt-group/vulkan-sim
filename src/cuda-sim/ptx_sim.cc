@@ -36,6 +36,7 @@ typedef void *yyscan_t;
 #include "../gpgpu-sim/shader.h"
 #include "ptx.tab.h"
 #include "vulkan_ray_tracing.h"
+#include "vulkan_rt_thread_data.h"
 
 void feature_not_implemented(const char *f);
 

@@ -1,4 +1,5 @@
 #include "vulkan_ray_tracing.h"
+#include "vulkan_rt_thread_data.h"
 
 #include "vector-math.h"
 #include <iostream>
