@@ -27,6 +27,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "vulkan_ray_tracing.h"
+#include "vulkan_rt_thread_data.h"
 
 #include <iostream>
 #include <vector>

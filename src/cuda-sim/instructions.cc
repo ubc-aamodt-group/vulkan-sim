@@ -52,6 +52,7 @@ class ptx_recognizer;
 #include "ptx.tab.h"
 #include "ptx_loader.h"
 #include "vulkan_ray_tracing.h"
+#include "vulkan_rt_thread_data.h"
 
 // Jin: include device runtime for CDP
 #include "cuda_device_runtime.h"
