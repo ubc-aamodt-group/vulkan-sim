@@ -67,7 +67,8 @@ typedef struct Vulkan_RT_thread_data {
         variable_decleration_entry entry;
         entry.type = type;
         entry.name = name;
-        entry.address = (uint64_t) malloc(size);
+        // entry.address = (uint64_t) malloc(size);
+        entry.address = (uint64_t) VulkanRayTracing::gpgpusim_rt_alloc(size);
         entry.size = size;
         variable_decleration_table.push_back(entry);
 
@@ -98,9 +99,12 @@ typedef struct Vulkan_RT_thread_data {
             // hitAttribute->name = name;
             address = (float*)(hitAttribute->address);
         }
-        address[0] = barycentric.x;
-        address[1] = barycentric.y;
-        address[2] = barycentric.z;
+        // address[0] = barycentric.x;
+        // address[1] = barycentric.y;
+        // address[2] = barycentric.z;
+        gpgpu_context *ctx = GPGPU_Context();
+        CUctx_st *context = GPGPUSim_Context(ctx);
+        context->get_device()->get_gpgpu()->memcpy_to_gpu(address, &barycentric, sizeof(float3));
     }
 } Vulkan_RT_thread_data;
 

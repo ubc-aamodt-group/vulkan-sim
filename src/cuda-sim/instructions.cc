@@ -3410,7 +3410,7 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   memory_space *mem = NULL;
   addr_t addr = src1_data.u32;
-  char* addr64 = (char*) (src1_data.u64); // MRS_TODO: check how this changes other load instructions
+  // char* addr64 = (char*) (src1_data.u64); // MRS_TODO: check how this changes other load instructions
 
   decode_space(space, thread, src1, mem, addr);
 
@@ -5853,9 +5853,9 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   memory_space *mem = NULL;
   addr_t addr = addr_reg.u32;
-  void* address = (void*)(addr_reg.u64);
+  // void* address = (void*)(addr_reg.u64);
 
-  // decode_space(space, thread, dst, mem, addr);
+  decode_space(space, thread, dst, mem, addr);
 
   size_t size;
   int t;
@@ -5863,9 +5863,9 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   if (!vector_spec) {
     data = thread->get_operand_value(src1, dst, type, thread, 1);
-    //mem->write(addr, size / 8, &data.s64, thread, pI);
-    assert(size == 32);
-    memcpy(address, &data.s64, size / 8);
+    mem->write(addr, size / 8, &data.s64, thread, pI);
+    // assert(size == 32);
+    // memcpy(address, &data.s64, size / 8);
     // *address = data.f32;
   } else {
     assert (0);
@@ -6717,6 +6717,10 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
+  // v[0] = 224;
+  // v[1] = 160;
+  // v[2] = 0;
+
   ptx_reg_t data;
   data.u32 = v[0];
   thread->set_operand_value(src0, data, U32_TYPE, thread, pI);
@@ -6737,6 +6741,10 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[0] = thread->get_kernel().vulkan_metadata.launch_width;
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
+
+  // v[0] = 448;
+  // v[1] = 320;
+  // v[2] = 1;
 
   ptx_reg_t data;
   data.u32 = v[0];

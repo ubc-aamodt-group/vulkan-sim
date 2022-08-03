@@ -1344,8 +1344,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 32;
-    // launch_height = 32;
+    // launch_width = 1;
+    // launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
@@ -2421,4 +2421,19 @@ void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_bac
         min_forwards = 0;
         max_forwards = 0;
     }
+}
+
+
+void* VulkanRayTracing::gpgpusim_rt_alloc(uint32_t size)
+{
+    gpgpu_context *ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(size);
+    if (g_debug_execution >= 3) {
+        printf("GPGPU-Sim PTX: gpgpusim_allocing %zu bytes starting at 0x%llx..\n",
+            size, (unsigned long long)devPtr);
+        ctx->api->g_mallocPtr_Size[(unsigned long long)devPtr] = size;
+    }
+    assert(devPtr);
+    return devPtr;
 }
