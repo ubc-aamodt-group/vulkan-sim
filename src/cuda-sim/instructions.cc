@@ -6717,8 +6717,8 @@ void load_ray_launch_id_impl(const ptx_instruction *pI, ptx_thread_info *thread)
   v[1] = thread->get_ctaid().y;
   v[2] = thread->get_ctaid().z;
 
-  // v[0] = 224;
-  // v[1] = 160;
+  // v[0] = 0;
+  // v[1] = 30;
   // v[2] = 0;
 
   ptx_reg_t data;
@@ -6742,8 +6742,8 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
   v[1] = thread->get_kernel().vulkan_metadata.launch_height;
   v[2] = thread->get_kernel().vulkan_metadata.launch_depth;
 
-  // v[0] = 448;
-  // v[1] = 320;
+  // v[0] = 32;
+  // v[1] = 32;
   // v[2] = 1;
 
   ptx_reg_t data;
@@ -6758,11 +6758,17 @@ void load_ray_launch_size_impl(const ptx_instruction *pI, ptx_thread_info *threa
 }
 
 void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
+  uint32_t shader_counter;
+  mem->read(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter);
+
   uint32_t instance_index;
-  uint32_t shader_counter = thread->RT_thread_data->traversal_data.back().current_shader_counter;
   if(shader_counter == -1) // not in intersection shader
-    instance_index = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
+    mem->read(&(traversal_data->closest_hit.instance_index), sizeof(traversal_data->closest_hit.instance_index), &instance_index);
   else {
+
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
     instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
   }
@@ -6776,10 +6782,15 @@ void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_i
 }
 
 void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
+  uint32_t shader_counter;
+  mem->read(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter);
+
   uint32_t primitive_index;
-  uint32_t shader_counter = thread->RT_thread_data->traversal_data.back().current_shader_counter;
   if(shader_counter == -1) // not in intersection shader
-    primitive_index = thread->RT_thread_data->traversal_data.back().closest_hit.primitive_index;
+    mem->read(&(traversal_data->closest_hit.primitive_index), sizeof(traversal_data->closest_hit.primitive_index), &primitive_index);
   else {
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
     primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
@@ -6803,7 +6814,7 @@ void load_ray_world_to_object_impl(const ptx_instruction *pI, ptx_thread_info *t
 
   src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 1);
 
-  data.u64 = (uint64_t)thread->RT_thread_data->traversal_data.back().closest_hit.worldToObjectMatrix.m[src_data.u32];
+  data.u64 = (uint64_t)thread->RT_thread_data->traversal_data.back()->closest_hit.worldToObjectMatrix.m[src_data.u32];
 
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
@@ -6817,7 +6828,7 @@ void load_ray_object_to_world_impl(const ptx_instruction *pI, ptx_thread_info *t
 
   src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 1);
 
-  data.u64 = (uint64_t)thread->RT_thread_data->traversal_data.back().closest_hit.objectToWorldMatrix.m[src_data.u32];
+  data.u64 = (uint64_t)thread->RT_thread_data->traversal_data.back()->closest_hit.objectToWorldMatrix.m[src_data.u32];
 
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
@@ -6827,7 +6838,7 @@ void load_ray_world_direction_impl(const ptx_instruction *pI, ptx_thread_info *t
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u64 = (uint64_t)(&thread->RT_thread_data->traversal_data.back().ray_world_direction.x);
+  data.u64 = (uint64_t)(&thread->RT_thread_data->traversal_data.back()->ray_world_direction.x);
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
@@ -6836,7 +6847,7 @@ void load_ray_world_origin_impl(const ptx_instruction *pI, ptx_thread_info *thre
   const operand_info &dst = pI->dst();
 
   ptx_reg_t data;
-  data.u64 = (uint64_t)(&thread->RT_thread_data->traversal_data.back().ray_world_origin.x);
+  data.u64 = (uint64_t)(&thread->RT_thread_data->traversal_data.back()->ray_world_origin.x);
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
@@ -6844,10 +6855,16 @@ void load_ray_t_max_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst0 = pI->dst();
 
   float t_max;
-  if(thread->RT_thread_data->traversal_data.back().hit_geometry)
-    t_max = thread->RT_thread_data->traversal_data.back().closest_hit.world_min_thit;
+
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
+  bool hit_geometry;
+  mem->read(&(traversal_data->hit_geometry), sizeof(traversal_data->hit_geometry), &hit_geometry);
+  if(hit_geometry)
+    mem->read(&(traversal_data->closest_hit.world_min_thit), sizeof(t_max), &t_max);
   else
-    t_max = thread->RT_thread_data->traversal_data.back().Tmax;
+    mem->read(&(traversal_data->Tmax), sizeof(t_max), &t_max);
 
   ptx_reg_t data;
   data.f32 = t_max;
@@ -6855,10 +6872,13 @@ void load_ray_t_max_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void load_ray_t_min_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
   const operand_info &dst0 = pI->dst();
 
   ptx_reg_t data;
-  data.f32 = thread->RT_thread_data->traversal_data.back().Tmin;
+  mem->read(&(traversal_data->Tmin), sizeof(data.f32), &(data.f32));
   thread->set_operand_value(dst0, data, F32_TYPE, thread, pI);
 }
 
@@ -6955,24 +6975,51 @@ void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *th
   src2_data = thread->get_operand_value(src2, dst, U32_TYPE, thread, 1);
   uint32_t hit_kind = src2_data.u32;
 
-  Traversal_data *traversal_data = &thread->RT_thread_data->traversal_data.back();
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
+  float Tmin;
+  mem->read(&(traversal_data->Tmin), sizeof(traversal_data->Tmin), &Tmin);
 
   bool return_value = false;
 
-  if((traversal_data->Tmin <= t_hit))
-    if((traversal_data->hit_geometry && t_hit < traversal_data->closest_hit.world_min_thit) || (!traversal_data->hit_geometry && t_hit <= traversal_data->Tmax)) {
-      int32_t shader_counter = traversal_data->current_shader_counter;
+  if((Tmin <= t_hit)) {
+    float Tmax;
+    mem->read(&(traversal_data->Tmax), sizeof(traversal_data->Tmax), &Tmax);
+
+    float world_min_thit;
+    mem->read(&(traversal_data->closest_hit.world_min_thit), sizeof(traversal_data->closest_hit.world_min_thit), &world_min_thit);
+
+    bool hit_geometry;
+    mem->read(&(traversal_data->hit_geometry), sizeof(traversal_data->hit_geometry), &hit_geometry);
+
+    if((hit_geometry && t_hit < world_min_thit) || (!hit_geometry && t_hit <= Tmax)) {
+      int32_t shader_counter;
+      mem->read(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter);
+
       assert(shader_counter != -1);
       warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
 
       return_value = true;
-      traversal_data->hit_geometry = true;
-      traversal_data->closest_hit.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
-      traversal_data->closest_hit.hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
-      traversal_data->closest_hit.world_min_thit = t_hit;
-      traversal_data->closest_hit.primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
-      traversal_data->closest_hit.instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
+
+      hit_geometry = true;
+      mem->write(&(traversal_data->hit_geometry), sizeof(traversal_data->hit_geometry), &hit_geometry, thread, pI);
+
+      VkGeometryTypeKHR geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
+      mem->write(&(traversal_data->closest_hit.geometryType), sizeof(VkGeometryTypeKHR), &geometryType, thread, pI);
+
+      int32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
+      mem->write(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &hitGroupIndex, thread, pI);
+
+      mem->write(&(traversal_data->closest_hit.world_min_thit), sizeof(traversal_data->closest_hit.world_min_thit), &t_hit, thread, pI);
+
+      uint32_t primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
+      mem->write(&(traversal_data->closest_hit.primitive_index), sizeof(traversal_data->closest_hit.primitive_index), &primitive_index, thread, pI);
+
+      uint32_t instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
+      mem->write(&(traversal_data->closest_hit.instance_index), sizeof(traversal_data->closest_hit.instance_index), &instance_index, thread, pI);
     }
+  }
 
   data.pred =
       (return_value ==
@@ -7415,7 +7462,10 @@ void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst = pI->dst();
   ptx_reg_t data;
 
-  bool hit_geometry = thread->RT_thread_data->traversal_data.back().hit_geometry;
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+  bool hit_geometry;
+  mem->read(&(traversal_data->hit_geometry), sizeof(traversal_data->hit_geometry), &hit_geometry);
 
   data.pred =
       (hit_geometry ==
@@ -7434,7 +7484,9 @@ void get_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst = pI->dst();
   ptx_reg_t data;
 
-  data.u32 = thread->RT_thread_data->traversal_data.back().closest_hit.hitGroupIndex;
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+  mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(data.u32), &(data.u32));
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
@@ -7451,12 +7503,15 @@ void get_warp_hitgroup_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
   uint32_t shader_counter = src_data.u32;
 
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
   if(shader_counter == last_counter) {
     data.u32 = last_warp_hitgroup;
   }
   else if(shader_counter == last_counter + 1) {
     last_counter = shader_counter;
-    last_warp_hitgroup = thread->RT_thread_data->traversal_data.back().closest_hit.hitGroupIndex;
+    mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &last_warp_hitgroup);
     data.u32 = last_warp_hitgroup;
   }
   else
@@ -7472,12 +7527,20 @@ void get_closest_hit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *t
   const operand_info &dst = pI->dst();
   ptx_reg_t data;
 
-  Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
 
-  if(traversal_data->closest_hit.geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
-      data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
-  else
-      data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * traversal_data->closest_hit.hitGroupIndex);
+  VkGeometryTypeKHR geometryType;
+  mem->read(&(traversal_data->closest_hit.geometryType), sizeof(traversal_data->closest_hit.geometryType), &geometryType);
+
+  if(geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
+    data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
+  else {
+    int32_t hitGroupIndex;
+    mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &hitGroupIndex);
+
+    data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
+  }
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
@@ -7496,7 +7559,6 @@ void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *
   warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
   uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
 
-  Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
   data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1);
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);

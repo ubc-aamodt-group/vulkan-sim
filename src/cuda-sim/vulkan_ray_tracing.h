@@ -143,13 +143,6 @@ typedef struct Descriptor
     VkDescriptorType type;
 } Descriptor;
 
-typedef struct variable_decleration_entry{
-  uint64_t type;
-  std::string name;
-  uint64_t address;
-  uint32_t size;
-} variable_decleration_entry;
-
 typedef struct shader_stage_info {
     uint32_t ID;
     gl_shader_stage type;

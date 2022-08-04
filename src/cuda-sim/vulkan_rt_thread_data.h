@@ -14,6 +14,13 @@
 #include <cmath>
 #include <stack>
 
+typedef struct variable_decleration_entry{
+  uint64_t type;
+  std::string name;
+  uint64_t address;
+  uint32_t size;
+} variable_decleration_entry;
+
 typedef struct Hit_data{
     VkGeometryTypeKHR geometryType;
     float world_min_thit;
@@ -48,7 +55,7 @@ typedef struct Traversal_data {
 typedef struct Vulkan_RT_thread_data {
     std::vector<variable_decleration_entry> variable_decleration_table;
 
-    std::vector<Traversal_data> traversal_data;
+    std::vector<Traversal_data*> traversal_data;
 
 
     variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
