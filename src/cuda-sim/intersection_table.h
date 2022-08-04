@@ -29,6 +29,10 @@
 #ifndef INTERSECTION_TABLE_H
 #define INTERSECTION_TABLE_H
 
+#include "ptx_ir.h"
+#include "../../libcuda/gpgpu_context.h"
+#include "../abstract_hardware_model.h"
+
 #include <stdint.h>
 #include <assert.h>
 #include <vector>
@@ -50,14 +54,15 @@ public:
     // virtual warp_intersection_table() {}
     // virtual ~warp_intersection_table() {}
     virtual std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
-            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID) = 0;
+            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID,
+                            const ptx_instruction *pI, ptx_thread_info *thread) = 0;
     
     virtual void clear() = 0;
-    virtual bool shader_exists(uint32_t tid, uint32_t shader_counter) = 0;
+    virtual bool shader_exists(uint32_t tid, uint32_t shader_counter, const ptx_instruction *pI, ptx_thread_info *thread) = 0;
     virtual bool exit_shaders(uint32_t shader_counter, uint32_t tid) = 0;
-    virtual uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) = 0;
-    virtual uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) = 0;
-    virtual uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) = 0;
+    virtual uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread) = 0;
+    virtual uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread) = 0;
+    virtual uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread) = 0;
     virtual void* get_shader_data_address(uint32_t shader_counter, uint32_t tid) = 0;
 };
 
@@ -89,39 +94,15 @@ public:
     }
 
     std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
-            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
-    
-
-    bool shader_exists(uint32_t tid, uint32_t shader_counter) {
-        return shader_counter < tableSize && table[shader_counter].thread_mask[tid];
-    }
-
-    bool exit_shaders(uint32_t shader_counter, uint32_t tid) {
-        return shader_counter >= tableSize;
-    }
-
-    uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) {
-        return table[shader_counter].shader_data[tid].primitiveID;
-    }
-
-    uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) {
-        return table[shader_counter].shader_data[tid].instanceID;
-    }
-
-    uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) {
-        return table[shader_counter].hitGroupIndex;
-    }
-
-    void* get_shader_data_address(uint32_t shader_counter, uint32_t tid) {
-        return (void*)&table[shader_counter].shader_data[tid];
-    }
-
-    void clear() {
-        tableSize = 0;
-        delete table;
-        table = new Coalescing_Entry[INTERSECTION_TABLE_MAX_LENGTH];
-    }
-
+            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID,
+                            const ptx_instruction *pI, ptx_thread_info *thread);
+    void clear();
+    bool shader_exists(uint32_t tid, uint32_t shader_counter, const ptx_instruction *pI, ptx_thread_info *thread);
+    bool exit_shaders(uint32_t shader_counter, uint32_t tid);
+    uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
+    uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
+    uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
+    void* get_shader_data_address(uint32_t shader_counter, uint32_t tid);
 };
 
 
@@ -144,40 +125,17 @@ public:
         delete table;
     }
 
+    void clear();
+
     std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
-            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID);
-
-    bool shader_exists(uint32_t tid, uint32_t shader_counter) {
-        return shader_counter < index[tid];
-    }
-
-    bool exit_shaders(uint32_t shader_counter, uint32_t tid) {
-        return shader_counter >= index[tid];
-    }
-
-    uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid) {
-        return table[shader_counter].shader_data[tid].primitiveID;
-    }
-
-    uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid) {
-        return table[shader_counter].shader_data[tid].instanceID;
-    }
-
-    uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid) {
-        return table[shader_counter].hitGroupIndex[tid];
-    }
-
-    void* get_shader_data_address(uint32_t shader_counter, uint32_t tid) {
-        return (void*)&table[shader_counter].shader_data[tid];
-    }
-
-    void clear() {
-        for(int i = 0; i < 32; i++)
-            index[i] = 0;
-
-        delete table;
-        table = new Baseline_Entry[INTERSECTION_TABLE_MAX_LENGTH];
-    }
+            add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID,
+                            const ptx_instruction *pI, ptx_thread_info *thread);
+    bool shader_exists(uint32_t tid, uint32_t shader_counter, const ptx_instruction *pI, ptx_thread_info *thread);
+    bool exit_shaders(uint32_t shader_counter, uint32_t tid);
+    uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
+    uint32_t get_instanceID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
+    uint32_t get_hitGroupIndex(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
+    void* get_shader_data_address(uint32_t shader_counter, uint32_t tid);
 };
 
 

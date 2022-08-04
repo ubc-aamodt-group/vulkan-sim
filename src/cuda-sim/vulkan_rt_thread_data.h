@@ -12,6 +12,7 @@
 #include "compiler/shader_enums.h"
 #include <fstream>
 #include <cmath>
+#include <stack>
 
 typedef struct Hit_data{
     VkGeometryTypeKHR geometryType;
@@ -68,7 +69,7 @@ typedef struct Vulkan_RT_thread_data {
         entry.type = type;
         entry.name = name;
         // entry.address = (uint64_t) malloc(size);
-        entry.address = (uint64_t) VulkanRayTracing::gpgpusim_rt_alloc(size);
+        entry.address = (uint64_t) VulkanRayTracing::gpgpusim_alloc(size);
         entry.size = size;
         variable_decleration_table.push_back(entry);
 

@@ -6764,7 +6764,7 @@ void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_i
     instance_index = thread->RT_thread_data->traversal_data.back().closest_hit.instance_index;
   else {
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    instance_index = table->get_instanceID(shader_counter, thread->get_tid().x);
+    instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
   }
 
   assert(pI->get_num_operands() == 1);
@@ -6782,7 +6782,7 @@ void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
     primitive_index = thread->RT_thread_data->traversal_data.back().closest_hit.primitive_index;
   else {
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x);
+    primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
   }
 
 
@@ -6968,10 +6968,10 @@ void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *th
       return_value = true;
       traversal_data->hit_geometry = true;
       traversal_data->closest_hit.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
-      traversal_data->closest_hit.hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x);
+      traversal_data->closest_hit.hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
       traversal_data->closest_hit.world_min_thit = t_hit;
-      traversal_data->closest_hit.primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x);
-      traversal_data->closest_hit.instance_index = table->get_instanceID(shader_counter, thread->get_tid().x);
+      traversal_data->closest_hit.primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
+      traversal_data->closest_hit.instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
     }
 
   data.pred =
@@ -7368,7 +7368,7 @@ void run_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   uint32_t shader_counter = src_data.u32;
 
   warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-  bool intersection_exists = table->shader_exists(thread->get_tid().x, shader_counter);
+  bool intersection_exists = table->shader_exists(thread->get_tid().x, shader_counter, pI, thread);
 
   data.pred =
       (intersection_exists ==
@@ -7494,7 +7494,7 @@ void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *
   uint32_t shader_counter = src_data.u32;
 
   warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-  uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x);
+  uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
 
   Traversal_data* traversal_data = &thread->RT_thread_data->traversal_data.back();
   data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1);

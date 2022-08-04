@@ -351,7 +351,7 @@ void VulkanRayTracing::init(uint32_t launch_width, uint32_t launch_height)
 }
 
 
-bool debugTraversal = true;
+bool debugTraversal = false;
 
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
@@ -852,7 +852,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
 
                         warp_intersection_table* table = intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-                        auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID); // TODO: switch these to device addresses
+                        auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex[0], instanceLeaf.InstanceID, pI, thread); // TODO: switch these to device addresses
                         
                         // transactions.insert(transactions.end(), intersectionTransactions.first.begin(), intersectionTransactions.first.end());
                         for(auto & newTransaction : intersectionTransactions.first)
@@ -1240,6 +1240,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
+    // launch_width = 32;
+    // launch_height = 32;
     init(launch_width, launch_height);
     
     // Dump Descriptor Sets
@@ -1344,8 +1346,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 1;
-    // launch_height = 1;
+    launch_width = 1;
+    launch_height = 1;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
@@ -1438,7 +1440,7 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     traversal_data->current_shader_counter = (int32_t)shader_counter;
 
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x);
+    uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
 
     shader_stage_info intersection_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1)];
     function_info *entry = context->get_kernel(intersection_shader.function_name);
@@ -2424,7 +2426,7 @@ void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_bac
 }
 
 
-void* VulkanRayTracing::gpgpusim_rt_alloc(uint32_t size)
+void* VulkanRayTracing::gpgpusim_alloc(uint32_t size)
 {
     gpgpu_context *ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);

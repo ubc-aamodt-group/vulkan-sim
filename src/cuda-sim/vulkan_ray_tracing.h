@@ -313,7 +313,7 @@ public:
                                        uint32_t filter);
     static void pass_child_addr(void *address);
     static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS);
-    static void* gpgpusim_rt_alloc(uint32_t size);
+    static void* gpgpusim_alloc(uint32_t size);
 };
 
 #endif /* VULKAN_RAY_TRACING_H */
