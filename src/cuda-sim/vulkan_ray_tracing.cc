@@ -1244,8 +1244,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
-    launch_width = 32;
-    launch_height = 32;
+    // launch_width = 32;
+    // launch_height = 32;
     init(launch_width, launch_height);
     
     // Dump Descriptor Sets
