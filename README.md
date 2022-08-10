@@ -1,3 +1,201 @@
+#  Introduction   
+Welcome to Vulkan-Sim, a cycle level GPU simulator for Vulkan ray tracing workloads. Vulkan-Sim models a modern GPU architecture with a baseline RT unit architecture of our own based on past literature such as Intersection Prediction for Accelerated GPU Ray Tracing by Liu et al. from MICRO 2021.
+
+This document will walk you through Vulkan-Sim installation. It will show you how to dump traces from a sample Vulkan ray tracing program, and then replay the dumped traces with Vulkan-Sim's trace runner.
+
+If you use Vulkan-Sim in your research, please cite:  
+Mohammadreza Saed, Yuan Hsi Chou, Lufei Liu, Tyler Nowicki, Tor M. Aamodt, Vulkan-Sim: A GPU Architecture Simulator for Ray Tracing, In proceedings of the ACM/IEEE International Symposium on Microarchitecture (MICRO 2022), Chicago, Illinois, October 1–5, 2022.
+
+#  Required Hardware   
+An Intel CPU with integrated graphics is required to generate traces to use with Vulkan-Sim. The CPU we have tested on is i7-7700HQ.
+
+
+#  Required Software/Packages 
+- Ubuntu 20.04
+- Embree3 (embree-3.12 or later, download from https://www.embree.org/)
+- CUDA 10/11
+- gcc-9
+- g++-9
+
+Please install the following required packages for Vulkan-Sim.
+```
+sudo apt install -y build-essential git ninja-build meson libboost-all-dev xutils-dev bison zlib1g-dev flex libglu1-mesa-dev libxi-dev libxmu-dev libdrm-dev llvm libelf-dev libwayland-dev wayland-protocols libwayland-egl-backend-dev libxcb-glx0-dev libxcb-shm0-dev libx11-xcb-dev libxcb-dri2-0-dev libxcb-dri3-dev libxcb-present-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev libglm-dev
+```
+
+
+#  Vulkan-Sim Directory Setup
+1. Please create a folder to contain all components of Vulkan-Sim.
+```
+mkdir vulkan-sim-root/
+cd vulkan-sim-root/
+```
+2. Clone the following 3 repos in the folder you just created.
+```
+git clone https://github.com/ubc-aamodt-group/vulkan-sim
+git clone https://github.com/ubc-aamodt-group/mesa-vulkan-sim
+git clone https://github.com/ubc-aamodt-group/trace-runner-vulkan-sim
+```
+3. The resulting folder structure should look like this.
+```
+vulkan-sim-root/-|- vulkan-sim/
+                 |- mesa-vulkan-sim/
+                 |- trace-runner-vulkan-sim/
+                 |- embree-3.13.4.x86_64.linux/ (Embree3 can be installed anywhere, change mesa/src/intel/vulkan meson.build to match)
+```
+
+
+#  Vulkan-Sim Installation Instructions 
+Commands here assume you have navigated to `vulkan-sim-root/`. Make sure CUDA Toolkit abd embree3 are installed.
+
+1. Install the Vulkan SDK from the LunarG website.The commands for the latest version from their website are copied here.
+```
+wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.216-focal.list https://packages.lunarg.com/vulkan/1.3.216/lunarg-vulkan-1.3.216-focal.list
+sudo apt update
+sudo apt install vulkan-sdk
+```
+
+2. Set environment variables
+```
+# Change this to your CUDA install path
+export CUDA_INSTALL_PATH=/usr/local/cuda-11.7
+# Source this from your Embree path
+source embree-3.13.4.x86_64.linux/embree-vars.sh
+```
+
+3. Build vulkan-sim + mesa (run the following commands within vulkan-sim-artifact/). Please ignore the error in the first `ninja -C build/ install`, this is normal.
+```
+cd vulkan-sim/
+source setup_environment debug
+cd ../mesa-vulkan-sim/
+meson --prefix="${PWD}/lib" build/
+meson configure build/ -Dbuildtype=debug -D b_lundef=false
+ninja -C build/ install
+export VK_ICD_FILENAMES=${PWD}/lib/share/vulkan/icd.d/intel_icd.x86_64.json
+cd ../vulkan-sim/
+make -j
+cd ../mesa-vulkan-sim/
+ninja -C build/ install
+```
+
+4. Build the Vulkan-Sim trace runner
+```
+cd ../trace-runner-vulkan-sim/
+make
+```
+
+
+#  Trace Dumping Instructions 
+We provide general instructions on how to dump Vulkan RT traces for Vulkan-Sim. We also provide an example workload below to follow along with trace dumping.
+
+## **Example Workload For Trace Dumping**
+We provide a sample workload from our paper, RTV6. Please refer to the above instructions to follow along.
+
+### Modify Vulkan-Sim's dumping functions to match the application
+1. In `vulkan-sim/src/cuda-sim/vulkan_ray_tracing.cc:108`, change `bool use_external_launcher` to `false`. In the provided code, this is already done.
+2. Since RTV6 does not skip any descriptor sets, **please comment out the `continue;` in both lines 2162-2168 and 2247-2253 of `vulkan-sim/src/cuda-sim/vulkan_ray_tracing.cc`**  In the provided code, this is already done.
+3. Compile vulkan-sim in `vulkan-sim/` with `make -j`
+
+### Running RTV6 to dump it's trace
+1. Download RTV6 from our repo to a local folder
+```
+git clone https://github.com/ubc-aamodt-group/RayTracingInVulkan.git
+```
+2. Compile RTV6
+```
+cd RayTracingInVulkan/
+sudo apt-get -y install cmake curl unzip tar libxi-dev libxinerama-dev libxcursor-dev xorg-dev
+./vcpkg_linux.sh
+./build_linux.sh
+```
+3. Copy gpgpusim.config to the binary directory
+```
+# Change <vulkan-sim-root> to your own path!
+cp <vulkan-sim-root>/trace-runner-vulkan-sim/gpgpusim.config build/linux/bin/.
+```
+4. Run RTV6
+```
+cd build/linux/bin/
+./RayTracer --scene 6 --height 320 --width 448
+```
+5. Wait for "Trace dumped" to show up in the terminal. The traces will be in `<vulkan-sim-root>/mesa-vulkan-sim/gpgpusimShaders/`. You can terminate the program afterwards.
+6. Copy the traces to another folder (change `<vulkan-sim-root>` to your path)
+```
+mkdir <vulkan-sim-root>/trace-runner-vulkan-sim/RTV6-trace
+cd <vulkan-sim-root>/mesa/gpgpusimShaders/
+cp * <vulkan-sim-root>/trace-runner-vulkan-sim/RTV6-trace
+```
+
+## **General Instructions For Trace Dumping**
+1. In `vulkan-sim/src/cuda-sim/vulkan_ray_tracing.cc:108`, change `bool use_external_launcher` to `false`
+2. In `vulkan-sim/src/cuda-sim/vulkan_ray_tracing.cc`, `VulkanRayTracing::dump_descriptor_sets` (line 2072) and `VulkanRayTracing::dump_AS` (line 2157) are used to dump descriptor sets for ray tracing. Each loop in the function dumps a descriptor set starting at descriptor set 0 and each iteration increases the set number by 1. If the Vulkan application skips any descriptor sets or have unused descriptor sets, **please modify lines 2162-2168 and 2247-2253 to match your application**. It is just a if statement to skip certain descriptor sets.
+```
+for(int i = 0; i < set->descriptor_count; i++)
+   {
+       if(i == 3 || i > 9) // Change this if block to match your application
+       {
+            // for some reason raytracing_extended skipped binding = 3
+            // and somehow they have 34 descriptor sets but only 10 are used
+            // so we just skip those
+            continue;
+       }
+```
+
+3. Compile vulkan-sim with `make -j`
+4. Copy gpgpusim.config to your Vulkan ray tracing binary
+5. Run your Vulkan ray tracing binary
+6. Wait until the message `Trace dumped` shows up in the terminal. (Might be a bit hard to find with all the other log messages)
+7. Traces will be generated in `mesa-vulkan-sim/gpgpusimShaders/`. Copy the trace files in this folder to another location to use with the trace runner.
+
+
+
+#  Running Traces with Trace Runner 
+1. In `vulkan-sim/src/cuda-sim/vulkan_ray_tracing.cc:108`, change `bool use_external_launcher` to `true`
+2. Compile vulkan-sim with `make -j`
+3. Change directory to `trace-runner-vulkan-sim/`
+4. Compile vulkan_rt_trace_runner if haven't done so yet (Installation Instructions step 4)
+5. Run the trace with the following command
+```
+./vulkan_rt_runner RTV6-trace/ RTV6
+
+```
+In general the trace runner can be run with the following:
+```
+./vulkan_rt_runner <path_to_trace_folder> <workload>
+```
+The workload argument is used to tell Vulkan-Sim to apply application specific changes during simulation when replaying the trace. For RTV6, there are none to worry about.
+
+#  Trace File Extention Description   
+- **.callparam**: Contains call parameters to the `vkCmdTraceRaysKHR` API call.
+- **.hitsbt, .misssbt, .raygensbt**: Memory dump of various shader binding tables for the `vkCmdTraceRaysKHR` call.
+- **.asfront, .asmain, .asmetadata**: Acceleration structure memory dumps and its metadata used by the trace runner for loading the AS back into memory.
+- **.vkstorageimagemetadata**: Metadata for the trace runner to handle `VK_DESCRIPTOR_TYPE_STORAGE_IMAGE`, the numbers in the file name indicate the `setID` and `descriptorID` of the descriptor set.
+- **.vkdescrptorsetdata**: Memory dump of a descriptor set, the numbers in the file name indicate the `setID` and `descriptorID` of the descriptor set.
+- **.vktexturedata, .vktexturemetadata**: Memory dump and metadata for textures. Currently only ASTC textures are supported. The numbers in the file name indicate the `setID` and `descriptorID` of the descriptor set.
+- **.ptx**: Ray tracing shaders that are translated to PTX by Vulkan-Sim.
+
+
+#  Troubleshooting   
+## Mesa Compilation
+- If meson indicates missing libraries when compiling mesa, please follow the instructions and install the corresponding packages. E.g: If missing library `elf`, then install the package with `sudo apt install libelf-dev`
+- If mesa has problems linking to `embree` or `libcudart`, while in the mesa folder please check the file `src/intel/vulkan/meson.build` and make sure `embree_lib_dir`, `embree_header_dir`, and `#gpgpusim_lib_dir` have correct paths. If there is still an error, try using absolute paths.
+
+## Trace Runner Compilation
+- If there are errors linking to `libboost` even after installing `libboost-all-dev` through your package manager, you might need to download the library from https://www.boost.org/ and manually link to it in the `Makefile`.
+- If there are errors linking to `libcudart`, double check the `GPGPUSIM_PATH` in the `Makefile`.
+
+## Dumping Traces  
+### If a seg fault happens when running the Vulkan binary, please rerun with gdb to see what dumping function it crashes at.
+- If crashing in the if block in either `VulkanRayTracing::dump_descriptor_sets` or `VulkanRayTracing::dump_AS`, please double check if the Vulkan application skips any descriptor sets.
+- If crashing in `VulkanRayTracing::dump_descriptor_set_for_AS`, might need to change `back_buffer_amount` and `front_buffer_amount` to a smaller value as it may access invalid addresses.
+
+If the Vulkan application isnt invoking Vulkan-Sim, make sure the path of `$VK_ICD_FILENAMES` is correct when exporting. 
+```
+export VK_ICD_FILENAMES=<vulkan-sim-root>/mesa-vulkan-sim/lib/share/vulkan/icd.d/intel_icd.x86_64.json
+```
+
+
+# Old GPGPU-Sim README
 Welcome to GPGPU-Sim, a cycle-level simulator modeling contemporary graphics
 processing units (GPUs) running GPU computing workloads written in CUDA or
 OpenCL. Also included in GPGPU-Sim is a performance visualization tool called
