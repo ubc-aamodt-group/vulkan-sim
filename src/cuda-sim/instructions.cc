@@ -3409,8 +3409,8 @@ void ld_exec(const ptx_instruction *pI, ptx_thread_info *thread) {
   unsigned vector_spec = pI->get_vector();
 
   memory_space *mem = NULL;
-  addr_t addr = src1_data.u32;
-  // char* addr64 = (char*) (src1_data.u64); // MRS_TODO: check how this changes other load instructions
+  // addr_t addr = src1_data.u32;
+  addr_t addr = src1_data.u64;
 
   decode_space(space, thread, src1, mem, addr);
 
@@ -3487,6 +3487,7 @@ void mma_st_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
 
     memory_space *mem = NULL;
     addr_t addr = addr_reg.u32;
+    assert(0); // 32 bit address
 
     new_addr_type mem_txn_addr[MAX_ACCESSES_PER_INSN_PER_THREAD];
     int num_mem_txn = 0;
@@ -3607,6 +3608,7 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
 
     memory_space *mem = NULL;
     addr_t addr = src1_data.u32;
+    assert(0); // 32 bit address
     smid = thread->get_hw_sid();
     if (whichspace(addr) == shared_space) {
       addr = generic_to_shared(smid, addr);
@@ -5757,6 +5759,7 @@ void sst_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   memory_space *mem = NULL;
   addr_t addr =
       src2_data.u32 * 4;  // this assumes sstarr memory starts at address 0
+  assert(0); //32 bit address
   ptx_cta_info *cta_info = thread->m_cta_info;
 
   decode_space(space, thread, src1, mem, addr);
@@ -5852,8 +5855,8 @@ void st_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   unsigned vector_spec = pI->get_vector();
 
   memory_space *mem = NULL;
-  addr_t addr = addr_reg.u32;
-  // void* address = (void*)(addr_reg.u64);
+  // addr_t addr = addr_reg.u32;
+  addr_t addr = addr_reg.u64;
 
   decode_space(space, thread, dst, mem, addr);
 

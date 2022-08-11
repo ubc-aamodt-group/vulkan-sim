@@ -95,7 +95,7 @@ typedef struct Vulkan_RT_thread_data {
         return hitAttribute;
     }
 
-    void set_hitAttribute(float3 barycentric) {
+    void set_hitAttribute(float3 barycentric, const ptx_instruction *pI, ptx_thread_info *thread) {
         variable_decleration_entry* hitAttribute = get_hitAttribute();
         float* address;
         if(hitAttribute == NULL) {
@@ -110,9 +110,9 @@ typedef struct Vulkan_RT_thread_data {
         // address[0] = barycentric.x;
         // address[1] = barycentric.y;
         // address[2] = barycentric.z;
-        gpgpu_context *ctx = GPGPU_Context();
-        CUctx_st *context = GPGPUSim_Context(ctx);
-        context->get_device()->get_gpgpu()->memcpy_to_gpu(address, &barycentric, sizeof(float3));
+
+        memory_space *mem = thread->get_global_memory();
+        mem->write(address, sizeof(float3), &barycentric, thread, pI);
     }
 } Vulkan_RT_thread_data;
 
