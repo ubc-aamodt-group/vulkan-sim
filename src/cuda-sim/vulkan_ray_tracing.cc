@@ -636,7 +636,10 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             assert(instanceLeaf.BVHAddress != NULL);
             GEN_RT_BVH botLevelASAddr;
-            GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
+            if(use_external_launcher)
+                GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
+            else
+                GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(instanceLeaf.BVHAddress));
             transactions.push_back(MemoryTransactionRecord((uint8_t*)((uint64_t)leaf_addr + instanceLeaf.BVHAddress + device_offset), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
 
@@ -650,8 +653,12 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             float worldToObject_tMultiplier;
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
-
-            uint8_t * botLevelRootAddr = ((uint8_t *)((uint64_t)leaf_addr + instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
+            
+            uint8_t * botLevelRootAddr ;
+            if(use_external_launcher)
+                botLevelRootAddr = ((uint8_t *)((uint64_t)leaf_addr + instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
+            else
+                botLevelRootAddr = ((uint8_t *)(instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
             stack.push_back(StackEntry(botLevelRootAddr, false, false));
             assert(tree_level_map.find(leaf_addr) != tree_level_map.end());
             tree_level_map[botLevelRootAddr] = tree_level_map[leaf_addr];
@@ -2461,14 +2468,19 @@ void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_bac
 
 void* VulkanRayTracing::gpgpusim_alloc(uint32_t size)
 {
-    gpgpu_context *ctx = GPGPU_Context();
-    CUctx_st *context = GPGPUSim_Context(ctx);
-    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(size);
-    if (g_debug_execution >= 3) {
-        printf("GPGPU-Sim PTX: gpgpusim_allocing %zu bytes starting at 0x%llx..\n",
-            size, (unsigned long long)devPtr);
-        ctx->api->g_mallocPtr_Size[(unsigned long long)devPtr] = size;
+    if(!use_external_launcher) {
+        return malloc(size);
     }
-    assert(devPtr);
-    return devPtr;
+    else {
+        gpgpu_context *ctx = GPGPU_Context();
+        CUctx_st *context = GPGPUSim_Context(ctx);
+        void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(size);
+        if (g_debug_execution >= 3) {
+            printf("GPGPU-Sim PTX: gpgpusim_allocing %zu bytes starting at 0x%llx..\n",
+                size, (unsigned long long)devPtr);
+            ctx->api->g_mallocPtr_Size[(unsigned long long)devPtr] = size;
+        }
+        assert(devPtr);
+        return devPtr;
+    }
 }
