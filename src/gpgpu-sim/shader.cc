@@ -3085,7 +3085,9 @@ void rt_unit::cycle() {
   // Check to see if any warps are complete
   int completed_warp_uid = -1;
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
-    
+    warp_inst_t debug_inst = it->second;
+    assert(it->first == debug_inst.get_uid());
+    RT_DPRINTF("Checking warp inst uid: %d\n", debug_inst.get_uid());
     // A completed warp has no more memory accesses and all the intersection delays are complete and has no pending writes
     if (it->second.rt_mem_accesses_empty() && it->second.rt_intersection_delay_done() && !it->second.has_pending_writes()) {
       RT_DPRINTF("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, it->second.warp_id(), it->first);
@@ -3134,6 +3136,10 @@ void rt_unit::cycle() {
         // Complete max 1 warp per cycle (?)
         break;
       }
+    }
+    else
+    {
+      RT_DPRINTF("Cycle: %d, Warp inst uid: %d not done. rt_mem_accesses_empty: %d, rt_intersection_delay_done: %d, no pending_writes: %d\n", GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle, debug_inst.get_uid(), it->second.rt_mem_accesses_empty(), it->second.rt_intersection_delay_done(), !it->second.has_pending_writes());
     }
   }
   
