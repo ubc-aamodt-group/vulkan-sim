@@ -847,6 +847,9 @@ bool warp_inst_t::check_pending_writes(new_addr_type addr) {
     m_pending_writes.erase(addr);
     return true;
   }
+  else {
+    return false;
+  }
 }
 
 unsigned warp_inst_t::dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue) { 
