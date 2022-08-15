@@ -636,10 +636,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             assert(instanceLeaf.BVHAddress != NULL);
             GEN_RT_BVH botLevelASAddr;
-            if(use_external_launcher)
-                GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
-            else
-                GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(instanceLeaf.BVHAddress));
+            GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
             transactions.push_back(MemoryTransactionRecord((uint8_t*)((uint64_t)leaf_addr + instanceLeaf.BVHAddress + device_offset), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
 
@@ -655,10 +652,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
             
             uint8_t * botLevelRootAddr ;
-            if(use_external_launcher)
-                botLevelRootAddr = ((uint8_t *)((uint64_t)leaf_addr + instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
-            else
-                botLevelRootAddr = ((uint8_t *)(instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
+            botLevelRootAddr = ((uint8_t *)((uint64_t)leaf_addr + instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
             stack.push_back(StackEntry(botLevelRootAddr, false, false));
             assert(tree_level_map.find(leaf_addr) != tree_level_map.end());
             tree_level_map[botLevelRootAddr] = tree_level_map[leaf_addr];
