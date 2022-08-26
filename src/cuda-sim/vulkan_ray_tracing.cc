@@ -229,25 +229,44 @@ typedef struct StackEntry {
     StackEntry(uint8_t* addr, bool topLevel, bool leaf): addr(addr), topLevel(topLevel), leaf(leaf) {}
 } StackEntry;
 
-bool find_primitive(uint8_t* address, int primitiveID, int instanceID, std::list<uint8_t *>& path, bool isTopLevel = true, bool isLeaf = false, bool isRoot = true)
-{
-    path.push_back(address);
 
+std::ofstream print_tree;
+void traverse_tree(volatile uint8_t* address, bool isTopLevel = true, bool isLeaf = false, bool isRoot = true)
+{
     if(isRoot)
     {
-        GEN_RT_BVH topBVH; //TODO: test hit with world before traversal
+        GEN_RT_BVH topBVH;
         GEN_RT_BVH_unpack(&topBVH, (uint8_t*)address);
 
         uint8_t* topRootAddr = (uint8_t*)address + topBVH.RootNodeOffset;
 
-        if(find_primitive(topRootAddr, primitiveID, instanceID, path, isTopLevel, false, false))
-            return true;
+        if (print_tree.is_open())
+        {
+            print_tree << "traversing bvh , isTopLevel = " << isTopLevel << (void *)(address) << ", RootNodeOffset = (" << topBVH.RootNodeOffset << std::endl;
+        }
+
+        traverse_tree(topRootAddr, isTopLevel, false, false);
     }
     
     else if(!isLeaf) // internal nodes
     {
         struct GEN_RT_BVH_INTERNAL_NODE node;
         GEN_RT_BVH_INTERNAL_NODE_unpack(&node, address);
+
+        if (print_tree.is_open())
+        {
+            uint8_t *child_addrs[6];
+            child_addrs[0] = address + (node.ChildOffset * 64);
+            for(int i = 0; i < 5; i++)
+                child_addrs[i + 1] = child_addrs[i] + node.ChildSize[i] * 64;
+            
+            print_tree << "traversing internal node " << (void *)address;
+            print_tree << ", isTopLevel = " << isTopLevel << ", child offset = " << node.ChildOffset << ", node type = " << node.NodeType;
+            print_tree << ", child size = (" << node.ChildSize[0] << ", " << node.ChildSize[1] << ", " << node.ChildSize[2] << ", " << node.ChildSize[3] << ", " << node.ChildSize[4] << ", " << node.ChildSize[5] << ")";
+            print_tree << ", child type = (" << node.ChildType[0] << ", " << node.ChildType[1] << ", " << node.ChildType[2] << ", " << node.ChildType[3] << ", " << node.ChildType[4] << ", " << node.ChildType[5] << ")";
+            print_tree << ", child addresses = (" << (void*)(child_addrs[0]) << ", " << (void*)(child_addrs[1]) << ", " << (void*)(child_addrs[2]) << ", " << (void*)(child_addrs[3]) << ", " << (void*)(child_addrs[4]) << ", " << (void*)(child_addrs[5]) << ")";
+            print_tree << std::endl;
+        }
 
         uint8_t *child_addr = address + (node.ChildOffset * 64);
         for(int i = 0; i < 6; i++)
@@ -259,8 +278,7 @@ bool find_primitive(uint8_t* address, int primitiveID, int instanceID, std::list
                 else
                     isLeaf = false;
 
-                if(find_primitive(child_addr, primitiveID, instanceID, path, isTopLevel, isLeaf, false))
-                    return true;
+                traverse_tree(child_addr, isTopLevel, isLeaf, false);
             }
 
             child_addr += node.ChildSize[i] * 64;
@@ -278,10 +296,13 @@ bool find_primitive(uint8_t* address, int primitiveID, int instanceID, std::list
             float4x4 objectToWorldMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.ObjectToWorldm00);
 
             assert(instanceLeaf.BVHAddress != NULL);
-            if(instanceLeaf.InstanceID != instanceID)
-                return false;
-            if(find_primitive(instanceLeaf.BVHAddress, primitiveID, instanceID, path, false, false, true))
-                return true;
+
+            if (print_tree.is_open())
+            {
+                print_tree << "traversing top level leaf node " << (void *)address << ", instanceID = " << instanceLeaf.InstanceID << ", BVHAddress = " << instanceLeaf.BVHAddress << ", ShaderIndex = " << instanceLeaf.ShaderIndex << std::endl;
+            }
+
+            traverse_tree(address + instanceLeaf.BVHAddress, false, false, true);
         }
         else
         {
@@ -303,20 +324,30 @@ bool find_primitive(uint8_t* address, int primitiveID, int instanceID, std::list
 
                 assert(leaf.PrimitiveIndex1Delta == 0);
 
-                if(leaf.PrimitiveIndex0 == primitiveID)
+                if (print_tree.is_open())
                 {
-                    return true;
+                    print_tree << "quad node " << (void*)address << " ";
+                    print_tree << "primitiveID = " << leaf.PrimitiveIndex0 << "\n";
+
+                    print_tree << "p[0] = (" << p[0].x << ", " << p[0].y << ", " << p[0].z << ") ";
+                    print_tree << "p[1] = (" << p[1].x << ", " << p[1].y << ", " << p[1].z << ") ";
+                    print_tree << "p[2] = (" << p[2].x << ", " << p[2].y << ", " << p[2].z << ") ";
+                    print_tree << "p[3] = (" << p[3].x << ", " << p[3].y << ", " << p[3].z << ")" << std::endl;
                 }
             }
             else
             {
-                printf("sth is wrong here\n");
+                struct GEN_RT_BVH_PROCEDURAL_LEAF leaf;
+                GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, address);
+
+                if (print_tree.is_open())
+                {
+                    print_tree << "PROCEDURAL node " << (void*)address << " ";
+                    print_tree << "NumPrimitives = " << leaf.NumPrimitives << ", LastPrimitive = " << leaf.LastPrimitive << ", PrimitiveIndex[0]" << leaf.PrimitiveIndex[0] << "\n";
+                }
             }
         }
     }
-
-    path.pop_back();
-    return false;
 }
 
 void VulkanRayTracing::init(uint32_t launch_width, uint32_t launch_height)
@@ -364,6 +395,8 @@ void VulkanRayTracing::init(uint32_t launch_width, uint32_t launch_height)
 
 
 bool debugTraversal = false;
+bool found_AS = false;
+VkAccelerationStructureKHR topLevelAS_first = NULL;
 
 void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 				   uint rayFlags,
@@ -381,8 +414,6 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 {
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
-    // std::list<uint8_t *> path;
-    // find_primitive((uint8_t*)_topLevelAS, 6, 2, path);
 
     if (!use_external_launcher && !dumped) 
     {
@@ -419,8 +450,19 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         device_offset = (uint64_t)deviceAddress - (uint64_t)_topLevelAS;
     }
 
-    
-
+    // if(!found_AS)
+    // {
+    //     found_AS = true;
+    //     topLevelAS_first = _topLevelAS;
+    //     print_tree.open("bvh_tree.txt");
+    //     traverse_tree((uint8_t*)_topLevelAS);
+    //     print_tree.close();
+    // }
+    // else
+    // {
+    //     assert(topLevelAS_first != NULL);
+    //     assert(topLevelAS_first == _topLevelAS);
+    // }
 
     Traversal_data traversal_data;
 
@@ -539,7 +581,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             if (debugTraversal)
             {
-                traversalFile << "traversing top level internal node " << (void *)node_addr << "\n";
+                traversalFile << "traversing top level internal node " << (void *)node_addr;
+                traversalFile << ", child offset = " << node.ChildOffset << ", node type = " << node.NodeType;
+                traversalFile << ", child size = (" << node.ChildSize[0] << ", " << node.ChildSize[1] << ", " << node.ChildSize[2] << ", " << node.ChildSize[3] << ", " << node.ChildSize[4] << ", " << node.ChildSize[5] << ")";
+                traversalFile << ", child type = (" << node.ChildType[0] << ", " << node.ChildType[1] << ", " << node.ChildType[2] << ", " << node.ChildType[3] << ", " << node.ChildType[4] << ", " << node.ChildType[5] << ")";
+                traversalFile << std::endl;
             }
 
             bool child_hit[6];
@@ -631,6 +677,13 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_INSTANCE_LEAF)]++;
             total_nodes_accessed++;
 
+
+            if (debugTraversal)
+            {
+                traversalFile << "traversing top level leaf node " << (void *)leaf_addr << ", instanceID = " << instanceLeaf.InstanceID << ", BVHAddress = " << instanceLeaf.BVHAddress << ", ShaderIndex = " << instanceLeaf.ShaderIndex << std::endl;
+            }
+
+
             float4x4 worldToObjectMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.WorldToObjectm00);
             float4x4 objectToWorldMatrix = instance_leaf_matrix_to_float4x4(&instanceLeaf.ObjectToWorldm00);
 
@@ -639,6 +692,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
             transactions.push_back(MemoryTransactionRecord((uint8_t*)((uint64_t)leaf_addr + instanceLeaf.BVHAddress + device_offset), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
+
+            if (debugTraversal)
+            {
+                traversalFile << "bot level bvh " << (void *)(leaf_addr + instanceLeaf.BVHAddress) << ", RootNodeOffset = (" << botLevelASAddr.RootNodeOffset << std::endl;
+            }
 
             // std::ofstream offsetfile;
             // offsetfile.open("offsets.txt", std::ios::app);
@@ -659,9 +717,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
             if (debugTraversal)
             {
-                traversalFile << "traversing top level leaf node " << (void *)leaf_addr << " with instanceID = " << instanceLeaf.InstanceID << ", child bot root " << (void *)botLevelRootAddr << std::endl;
-                traversalFile << "warped ray to object coordinates ";
-                traversalFile << "origin = (" << objectRay.get_origin().x << ", " << objectRay.get_origin().y << ", " << objectRay.get_origin().z << "), ";
+                traversalFile << "bot level root address = " << (void*)botLevelRootAddr << std::endl;
+                traversalFile << "warped ray to object coordinates, origin = (" << objectRay.get_origin().x << ", " << objectRay.get_origin().y << ", " << objectRay.get_origin().z << "), ";
                 traversalFile << "direction = (" << objectRay.get_direction().x << ", " << objectRay.get_direction().y << ", " << objectRay.get_direction().z << "), ";
                 traversalFile << "tmin = " << objectRay.get_tmin() << ", tmax = " << objectRay.get_tmax() << std::endl << std::endl;
             }
@@ -691,7 +748,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
                     if (debugTraversal)
                     {
-                        traversalFile << "traversing bot level internal node " << (void *)node_addr << "\n";
+                        traversalFile << "traversing bot level internal node " << (void *)node_addr;
+                        traversalFile << ", child offset = " << node.ChildOffset << ", node type = " << node.NodeType;
+                        traversalFile << ", child size = (" << node.ChildSize[0] << ", " << node.ChildSize[1] << ", " << node.ChildSize[2] << ", " << node.ChildSize[3] << ", " << node.ChildSize[4] << ", " << node.ChildSize[5] << ")";
+                        traversalFile << ", child type = (" << node.ChildType[0] << ", " << node.ChildType[1] << ", " << node.ChildType[2] << ", " << node.ChildType[3] << ", " << node.ChildType[4] << ", " << node.ChildType[5] << ")";
+                        traversalFile << std::endl;
                     }
 
                     bool child_hit[6];
@@ -1257,8 +1318,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
-    // launch_width = 32;
-    // launch_height = 32;
+    // launch_width = 224;
+    // launch_height = 160;
     init(launch_width, launch_height);
     
     // Dump Descriptor Sets
@@ -1363,8 +1424,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     unsigned n_args = entry->num_args();
     //unsigned n_operands = pI->get_num_operands();
 
-    // launch_width = 1;
-    // launch_height = 1;
+    // launch_width = 192;
+    // launch_height = 32;
 
     dim3 blockDim = dim3(1, 1, 1);
     dim3 gridDim = dim3(1, launch_height, launch_depth);
