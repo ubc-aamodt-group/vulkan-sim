@@ -1019,7 +1019,7 @@ void VulkanRayTracing::endTraceRay(const ptx_instruction *pI, ptx_thread_info *t
     assert(thread->RT_thread_data->traversal_data.size() > 0);
     thread->RT_thread_data->traversal_data.pop_back();
     warp_intersection_table* table = intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    table->clear();
+    table->clear(pI, thread);
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)
