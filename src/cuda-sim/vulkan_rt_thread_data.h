@@ -2,7 +2,7 @@
 #define VULKAN_RT_THREAD_DATA_H
 
 #include "vulkan/vulkan.h"
-#include "vulkan/vulkan_intel.h"
+// #include "vulkan/vulkan_intel.h"
 
 #include "vulkan_ray_tracing.h"
 

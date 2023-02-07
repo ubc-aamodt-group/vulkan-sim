@@ -4862,6 +4862,7 @@ void rem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void ret_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
     // if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
+    printf("gpgpusim: return from function\n");
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -6890,6 +6891,7 @@ void vulkan_resource_index_impl(const ptx_instruction *pI, ptx_thread_info *thre
 }
 
 void load_vulkan_descriptor_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: load_vulkan_descriptor implementation\n");
 
   ptx_reg_t src1_data, src2_data, data;
 
@@ -7053,6 +7055,7 @@ void load_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void trace_ray_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    printf("gpgpusim: trace ray implementation\n");
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7205,6 +7208,7 @@ void call_pc_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    printf("gpgpusim: miss shader implementation\n");
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7226,6 +7230,7 @@ void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    printf("gpgpusim: closest hit shader implementation\n");
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7243,6 +7248,7 @@ void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *th
 void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    printf("gpgpusim: intersection shader implementation\n");
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7263,6 +7269,7 @@ void call_any_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread
 }
 
 void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+    printf("gpgpusim: image_deref_store implementation\n");
   if(print_debug_insts)
   {
     printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7324,6 +7331,7 @@ void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
 }
 
 void image_deref_load_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: image_deref_load implementation\n");
   ptx_reg_t src0_data, src1_data, src5_data, src6_data, data;
   
   const operand_info &src0 = pI->operand_lookup(0);
@@ -7370,6 +7378,7 @@ void store_deref_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
+    printf("gpgpusim: rt_alloc_mem implementation\n");
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),

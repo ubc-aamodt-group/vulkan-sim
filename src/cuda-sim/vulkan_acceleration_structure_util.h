@@ -30,7 +30,7 @@
 #define VULKAN_ACCELERATION_STRUCTURE_UTIL_H
 
 #include "vulkan/vulkan.h"
-#include "vulkan/vulkan_intel.h"
+// #include "vulkan/vulkan_intel.h"
 
 #include "vulkan/anv_acceleration_structure.h"
 #include "vulkan/anv_public.h"

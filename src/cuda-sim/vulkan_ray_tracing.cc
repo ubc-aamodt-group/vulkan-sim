@@ -86,7 +86,7 @@ namespace fs = boost::filesystem;
 // #undef signbit
 
 // #include "vulkan/anv_public.h"
-#include "intel_image.h"
+// #include "intel_image.h"
 
 // #include "anv_include.h"
 
@@ -1104,6 +1104,7 @@ std::string base_name(std::string & path)
 
 void VulkanRayTracing::setDescriptorSet(struct anv_descriptor_set *set)
 {
+    printf("gpgpusim: set descriptor set 0x%x\n", set);
     VulkanRayTracing::descriptorSet = set;
 }
 
@@ -1149,6 +1150,7 @@ void copyHardCodedShaders()
 
 uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
 {
+    std::cout << "gpgpusim: register shaders" << std::endl;
     copyHardCodedShaders();
 
     VulkanRayTracing::invoke_gpgpusim();
@@ -1293,6 +1295,7 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
 
 void VulkanRayTracing::invoke_gpgpusim()
 {
+	std::cout << "gpgpusim: invoking gpgpusim" << std::endl;
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1318,6 +1321,8 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
+	std::cout << "gpgpusim: launching cmd trace ray" << std::endl;
+    abort();
     // launch_width = 224;
     // launch_height = 160;
     init(launch_width, launch_height);
@@ -1644,6 +1649,7 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
 
 void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
 {
+    std::cout << "gpgpusim: set descriptor" << std::endl;
     if(descriptors.size() <= setID)
         descriptors.resize(setID + 1);
     if(descriptors[setID].size() <= descID)
@@ -1665,6 +1671,7 @@ void VulkanRayTracing::setDescriptorSetFromLauncher(void *address, void *deviceA
 
 void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
 {
+    printf("gpgpusim: get descriptor address\n");
     if (use_external_launcher)
     {
         return launcher_deviceDescriptorSets[setID][binding];
@@ -1672,71 +1679,8 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     }
     else 
     {
-        // assert(setID < descriptors.size());
-        // assert(binding < descriptors[setID].size());
-
-        struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
-
-        const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
-        struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
-        void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
-
-        assert(desc->type == bind_layout->type);
-
-        switch (desc->type)
-        {
-            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-            {
-                return (void *)(desc);
-            }
-            case VK_DESCRIPTOR_TYPE_SAMPLER:
-            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-            {
-                return desc;
-            }
-
-            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-            case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-                assert(0);
-                break;
-
-            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-            {
-                if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-                    desc->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
-                {
-                    // MRS_TODO: account for desc->offset?
-                    return anv_address_map(desc->buffer->address);
-                }
-                else
-                {
-                    struct anv_buffer_view *bview = &set->buffer_views[bind_layout->buffer_view_index];
-                    return anv_address_map(bview->address);
-                }
-            }
-
-            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-                assert(0);
-                break;
-
-            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
-            {
-                struct anv_address_range_descriptor *desc_data = desc_map;
-                return (void *)(desc_data->address);
-            }
-
-            default:
-                assert(0);
-                break;
-        }
-
-        // return descriptors[setID][binding].address;
+        printf("Descriptor set not yet implemented\n");
+        abort();
     }
 }
 
