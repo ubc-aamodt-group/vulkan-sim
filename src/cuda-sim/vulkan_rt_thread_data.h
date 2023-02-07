@@ -2,7 +2,10 @@
 #define VULKAN_RT_THREAD_DATA_H
 
 #include "vulkan/vulkan.h"
+
+#if defined(MESA_USE_INTEL_DRIVER)
 #include "vulkan/vulkan_intel.h"
+#endif
 
 #include "vulkan_ray_tracing.h"
 

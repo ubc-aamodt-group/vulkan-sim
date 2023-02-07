@@ -30,10 +30,17 @@
 #define VULKAN_ACCELERATION_STRUCTURE_UTIL_H
 
 #include "vulkan/vulkan.h"
+
+#if defined(MESA_USE_INTEL_DRIVER)
 #include "vulkan/vulkan_intel.h"
 
 #include "vulkan/anv_acceleration_structure.h"
 #include "vulkan/anv_public.h"
+
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+#include "lvp_acceleration_structure.h"
+#include "gpgpusim_bvh.h"
+#endif
 
 static uint8_t *
 get_anv_accel_address(VkAccelerationStructureKHR AS)

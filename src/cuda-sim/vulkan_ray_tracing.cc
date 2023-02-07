@@ -65,6 +65,9 @@ namespace fs = boost::filesystem;
 #include "vulkan_acceleration_structure_util.h"
 #include "../gpgpu-sim/vector-math.h"
 
+#if defined(MESA_USE_LVPIPE_DRIVER)
+#include "lvp_private.h"
+#endif 
 //#include "intel_image_util.h"
  #include "astc_decomp.h"
 
@@ -86,7 +89,10 @@ namespace fs = boost::filesystem;
 // #undef signbit
 
 // #include "vulkan/anv_public.h"
+
+#if defined(MESA_USE_INTEL_DRIVER)
 #include "intel_image.h"
+#endif
 
 // #include "anv_include.h"
 
@@ -99,7 +105,7 @@ std::ofstream VulkanRayTracing::imageFile;
 bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
 // RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
-struct anv_descriptor_set* VulkanRayTracing::descriptorSet = NULL;
+struct DESCRIPTOR_SET_STRUCT* VulkanRayTracing::descriptorSet = NULL;
 void* VulkanRayTracing::launcher_descriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS] = {NULL};
 void* VulkanRayTracing::launcher_deviceDescriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS] = {NULL};
 std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
@@ -1102,7 +1108,7 @@ std::string base_name(std::string & path)
   return path.substr(path.find_last_of("/") + 1);
 }
 
-void VulkanRayTracing::setDescriptorSet(struct anv_descriptor_set *set)
+void VulkanRayTracing::setDescriptorSet(struct DESCRIPTOR_SET_STRUCT *set)
 {
     VulkanRayTracing::descriptorSet = set;
 }
@@ -1376,8 +1382,10 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
 
     assert(launch_depth == 1);
 
-    struct anv_descriptor desc;
+#if defined(MESA_USE_INTEL_DRIVER)
+    struct DESCRIPTOR_STRUCT desc;
     desc.image_view = NULL;
+#endif
 
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
@@ -1665,6 +1673,7 @@ void VulkanRayTracing::setDescriptorSetFromLauncher(void *address, void *deviceA
 
 void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
     if (use_external_launcher)
     {
         return launcher_deviceDescriptorSets[setID][binding];
@@ -1738,14 +1747,19 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
 
         // return descriptors[setID][binding].address;
     }
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: getDescriptorAddress not implemented for lavapipe.\n");
+    abort();
+#endif
 }
 
-void VulkanRayTracing::getTexture(struct anv_descriptor *desc, 
+void VulkanRayTracing::getTexture(struct DESCRIPTOR_STRUCT *desc, 
                                     float x, float y, float lod, 
                                     float &c0, float &c1, float &c2, float &c3, 
                                     std::vector<ImageMemoryTransactionRecord>& transactions,
                                     uint64_t launcher_offset)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
     Pixel pixel;
 
     if (use_external_launcher)
@@ -1804,10 +1818,15 @@ void VulkanRayTracing::getTexture(struct anv_descriptor *desc,
     //         imageFile.flush();
     //     }
     // }
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: getTexture not implemented for lavapipe.\n");
+    abort();
+#endif
 }
 
-void VulkanRayTracing::image_load(struct anv_descriptor *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3)
+void VulkanRayTracing::image_load(struct DESCRIPTOR_STRUCT *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
     ImageMemoryTransactionRecord transaction;
 
     struct anv_image_view *image_view =  desc->image_view;
@@ -1828,11 +1847,18 @@ void VulkanRayTracing::image_load(struct anv_descriptor *desc, uint32_t x, uint3
     c1 = pixel.c1;
     c2 = pixel.c2;
     c3 = pixel.c3;
+
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: image_load not implemented for lavapipe.\n");
+    abort();
+
+#endif
 }
 
-void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
+void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
     ImageMemoryTransactionRecord transaction;
     Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
 
@@ -1897,6 +1923,11 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
     // // {
     // //     printf("this one has wrong value.\n");
     // // }
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: image_store not implemented for lavapipe.\n");
+    abort();
+
+#endif
 }
 
 // variable_decleration_entry* VulkanRayTracing::get_variable_decleration_entry(std::string name, ptx_thread_info *thread)
@@ -1923,9 +1954,10 @@ void VulkanRayTracing::image_store(struct anv_descriptor* desc, uint32_t gl_Laun
 // }
 
 
-void VulkanRayTracing::dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
+void VulkanRayTracing::dumpTextures(struct DESCRIPTOR_STRUCT *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
 {
-    anv_descriptor *desc_offset = ((anv_descriptor*)((void*)desc)); // offset for raytracing_extended
+#if defined(MESA_USE_INTEL_DRIVER)
+    DESCRIPTOR_STRUCT *desc_offset = ((DESCRIPTOR_STRUCT*)((void*)desc)); // offset for raytracing_extended
     struct anv_image_view *image_view =  desc_offset->image_view;
     struct anv_sampler *sampler = desc_offset->sampler;
 
@@ -1998,12 +2030,18 @@ void VulkanRayTracing::dumpTextures(struct anv_descriptor *desc, uint32_t setID,
                                                  image->planes[0].surface.isl.row_pitch_B,
                                                  filter);
     fclose(fp);
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: dumpTextures not implemented for lavapipe.\n");
+    abort();
+
+#endif
 
 }
 
 
-void VulkanRayTracing::dumpStorageImage(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
+void VulkanRayTracing::dumpStorageImage(struct DESCRIPTOR_STRUCT *desc, uint32_t setID, uint32_t binding, VkDescriptorType type)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
     assert(type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
     assert(desc->sampler == NULL);
@@ -2047,6 +2085,11 @@ void VulkanRayTracing::dumpStorageImage(struct anv_descriptor *desc, uint32_t se
                                                 isl_tiling_mode,
                                                 row_pitch_B);
     fclose(fp);
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: dumpStorageTexture not implemented for lavapipe.\n");
+    abort();
+
+#endif
 }
 
 
@@ -2229,8 +2272,9 @@ void VulkanRayTracing::dump_descriptor_set(uint32_t setID, uint32_t descID, void
 }
 
 
-void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
+void VulkanRayTracing::dump_descriptor_sets(struct DESCRIPTOR_SET_STRUCT *set)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
    for(int i = 0; i < set->descriptor_count; i++)
    {
        if(i == 3 || i > 9)
@@ -2241,10 +2285,10 @@ void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
             continue;
        }
 
-        struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
+        struct DESCRIPTOR_SET_STRUCT* set = VulkanRayTracing::descriptorSet;
 
-        const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
-        struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+        const struct DESCRIPTOR_LAYOUT_STRUCT *bind_layout = &set->layout->binding[i];
+        struct DESCRIPTOR_STRUCT *desc = &set->descriptors[bind_layout->descriptor_index];
         void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
 
         assert(desc->type == bind_layout->type);
@@ -2312,10 +2356,16 @@ void VulkanRayTracing::dump_descriptor_sets(struct anv_descriptor_set *set)
                 break;
         }
    }
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: dumpStorageTexture not implemented for lavapipe.\n");
+    abort();
+
+#endif
 }
 
-void VulkanRayTracing::dump_AS(struct anv_descriptor_set *set, VkAccelerationStructureKHR _topLevelAS)
+void VulkanRayTracing::dump_AS(struct DESCRIPTOR_SET_STRUCT *set, VkAccelerationStructureKHR _topLevelAS)
 {
+#if defined(MESA_USE_INTEL_DRIVER)
    for(int i = 0; i < set->descriptor_count; i++)
    {
        if(i == 3 || i > 9)
@@ -2326,10 +2376,10 @@ void VulkanRayTracing::dump_AS(struct anv_descriptor_set *set, VkAccelerationStr
             continue;
        }
 
-        struct anv_descriptor_set* set = VulkanRayTracing::descriptorSet;
+        struct DESCRIPTOR_SET_STRUCT* set = VulkanRayTracing::descriptorSet;
 
-        const struct anv_descriptor_set_binding_layout *bind_layout = &set->layout->binding[i];
-        struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+        const struct DESCRIPTOR_LAYOUT_STRUCT *bind_layout = &set->layout->binding[i];
+        struct DESCRIPTOR_STRUCT *desc = &set->descriptors[bind_layout->descriptor_index];
         void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset;
 
         assert(desc->type == bind_layout->type);
@@ -2348,7 +2398,12 @@ void VulkanRayTracing::dump_AS(struct anv_descriptor_set *set, VkAccelerationStr
             default:
                 break;
         }
-   }
+    }
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+    printf("gpgpusim: dumpStorageTexture not implemented for lavapipe.\n");
+    abort();
+
+#endif
 }
 
 void VulkanRayTracing::dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr)
