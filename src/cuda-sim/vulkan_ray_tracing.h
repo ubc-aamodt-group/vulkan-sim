@@ -197,6 +197,7 @@ typedef struct texture_metadata
 #define DESCRIPTOR_STRUCT anv_descriptor
 #define DESCRIPTOR_LAYOUT_STRUCT anv_descriptor_set_binding_layout
 
+#define VSIM_DEBUG_PRINT 0
 struct anv_descriptor_set;
 struct anv_descriptor;
 
@@ -205,10 +206,17 @@ struct anv_descriptor;
 #define DESCRIPTOR_STRUCT lvp_descriptor
 #define DESCRIPTOR_LAYOUT_STRUCT lvp_descriptor_set_binding_layout
 
+#define VSIM_DEBUG_PRINT 1
 struct lvp_descriptor_set;
 struct lvp_descriptor;
 
 #endif
+
+#define VSIM_DPRINTF(...) \
+   if(VSIM_DEBUG_PRINT) { \
+      printf(__VA_ARGS__); \
+      fflush(stdout); \
+   }
 
 class VulkanRayTracing
 {

@@ -1334,12 +1334,26 @@ void ptx_instruction::set_input_output_registers() {
     case TXL_OP:
       operand_classification = {1, 1, 2, 2, 2, 2, 1, 1, 1};
       break;
+    // IMG_DEREF are implemented differently between Intel and Lavapipe
     case IMG_DEREF_LD_OP:
-      operand_classification = {1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1};
+      if (num_operands == 13) {
+        operand_classification = {1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1};
+      } else if (num_operands == 16) {
+        operand_classification = {1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+      } else {
+        printf("Unexpected number of operands on line %d. Expected 13/16, received %d\n", m_source_line, num_operands);
+        abort();
+      }
       break;
     case IMG_DEREF_ST_OP:
-      // TODO: Operands need to be confirmed
-      operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+      if (num_operands == 13) {
+        operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+      } else if (num_operands == 16) {
+        operand_classification = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+      } else {
+        printf("Unexpected number of operands on line %d. Expected 13/16, received %d\n", m_source_line, num_operands);
+        abort();
+      }
       break;
     case HIT_GEOMETRY_OP:
       operand_classification = {2, 1};

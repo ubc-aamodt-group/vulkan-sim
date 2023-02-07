@@ -1110,6 +1110,7 @@ std::string base_name(std::string & path)
 
 void VulkanRayTracing::setDescriptorSet(struct DESCRIPTOR_SET_STRUCT *set)
 {
+    VSIM_DPRINTF("gpgpusim: set descriptor set 0x%x\n", set);
     VulkanRayTracing::descriptorSet = set;
 }
 
@@ -1155,6 +1156,7 @@ void copyHardCodedShaders()
 
 uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
 {
+    VSIM_DPRINTF("gpgpusim: register shaders\n");
     copyHardCodedShaders();
 
     VulkanRayTracing::invoke_gpgpusim();
@@ -1299,6 +1301,7 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
 
 void VulkanRayTracing::invoke_gpgpusim()
 {
+    VSIM_DPRINTF("gpgpusim: invoking gpgpusim\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1324,6 +1327,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
+    VSIM_DPRINTF("gpgpusim: launching cmd trace ray\n");
     // launch_width = 224;
     // launch_height = 160;
     init(launch_width, launch_height);
@@ -1652,6 +1656,7 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
 
 void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
 {
+    VSIM_DPRINTF("gpgpusim: set descriptor\n");
     if(descriptors.size() <= setID)
         descriptors.resize(setID + 1);
     if(descriptors[setID].size() <= descID)
