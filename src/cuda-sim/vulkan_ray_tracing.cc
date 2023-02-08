@@ -111,7 +111,8 @@ void* VulkanRayTracing::launcher_deviceDescriptorSets[MAX_DESCRIPTOR_SETS][MAX_D
 std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
 bool VulkanRayTracing::dumped = false;
 
-bool use_external_launcher = true;
+bool use_external_launcher = false;
+const bool dump_trace = false;
 
 bool VulkanRayTracing::_init_ = false;
 warp_intersection_table *** VulkanRayTracing::intersection_table;
@@ -421,7 +422,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     // printf("## calling trceRay function. rayFlags = %d, cullMask = %d, sbtRecordOffset = %d, sbtRecordStride = %d, missIndex = %d, origin = (%f, %f, %f), Tmin = %f, direction = (%f, %f, %f), Tmax = %f, payload = %d\n",
     //         rayFlags, cullMask, sbtRecordOffset, sbtRecordStride, missIndex, origin.x, origin.y, origin.z, Tmin, direction.x, direction.y, direction.z, Tmax, payload);
 
-    if (!use_external_launcher && !dumped) 
+    if (dump_trace && !dumped) 
     {
         dump_AS(VulkanRayTracing::descriptorSet, _topLevelAS);
         std::cout << "Trace dumped" << std::endl;
@@ -1333,7 +1334,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     init(launch_width, launch_height);
     
     // Dump Descriptor Sets
-    if (!use_external_launcher) 
+    if (dump_trace) 
     {
         dump_descriptor_sets(VulkanRayTracing::descriptorSet);
         dump_callparams_and_sbt(raygen_sbt, miss_sbt, hit_sbt, callable_sbt, is_indirect, launch_width, launch_height, launch_depth, launch_size_addr);
@@ -1753,8 +1754,25 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
         // return descriptors[setID][binding].address;
     }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: getDescriptorAddress not implemented for lavapipe.\n");
-    abort();
+    printf("gpgpusim: getDescriptorAddress for binding %d\n", binding);
+    struct lvp_descriptor_set* set = VulkanRayTracing::descriptorSet;
+    const struct lvp_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
+    struct lvp_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
+
+    switch (desc->type) {
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            printf("gpgpusim: storage image; descriptor address %p\n", desc);
+            return (void *) desc;
+            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            printf("gpgpusim: uniform buffer; buffer mem address %p\n", (void *) desc->info.ubo.pmem);
+            return (void *) desc->info.ubo.pmem;
+            break;
+        default:
+            printf("gpgpusim: unimplemented descriptor type\n");
+            abort();
+    }
 #endif
 }
 
@@ -2091,7 +2109,7 @@ void VulkanRayTracing::dumpStorageImage(struct DESCRIPTOR_STRUCT *desc, uint32_t
                                                 row_pitch_B);
     fclose(fp);
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dumpStorageTexture not implemented for lavapipe.\n");
+    printf("gpgpusim: dumpStorageImage not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2362,7 +2380,7 @@ void VulkanRayTracing::dump_descriptor_sets(struct DESCRIPTOR_SET_STRUCT *set)
         }
    }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dumpStorageTexture not implemented for lavapipe.\n");
+    printf("gpgpusim: dump_descriptor_sets not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2405,7 +2423,7 @@ void VulkanRayTracing::dump_AS(struct DESCRIPTOR_SET_STRUCT *set, VkAcceleration
         }
     }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dumpStorageTexture not implemented for lavapipe.\n");
+    printf("gpgpusim: dump_AS not implemented for lavapipe.\n");
     abort();
 
 #endif
