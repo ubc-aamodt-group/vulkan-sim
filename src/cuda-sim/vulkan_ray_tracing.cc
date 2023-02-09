@@ -1769,6 +1769,10 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
             printf("gpgpusim: uniform buffer; buffer mem address %p\n", (void *) desc->info.ubo.pmem);
             return (void *) desc->info.ubo.pmem;
             break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            printf("gpgpusim: accel struct; root address %p\n", (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset);
+            return (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset;
+            break;
         default:
             printf("gpgpusim: unimplemented descriptor type\n");
             abort();
