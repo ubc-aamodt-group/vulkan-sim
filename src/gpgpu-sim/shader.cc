@@ -3306,7 +3306,7 @@ mem_access_t rt_unit::create_mem_access(new_addr_type addr) {
   unsigned warp_parts = m_config->mem_warp_parts;
   unsigned subwarp_size = m_config->warp_size / warp_parts;
   
-  unsigned block_address = line_size_based_tag_func(addr, segment_size);
+  new_addr_type block_address = line_size_based_tag_func(addr, segment_size);
   unsigned chunk = (addr & 127) / 32;
   
   warp_inst_t::transaction_info info;
