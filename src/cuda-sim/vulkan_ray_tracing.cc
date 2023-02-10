@@ -1765,9 +1765,12 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
             return (void *) desc;
             break;
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
             printf("gpgpusim: uniform buffer; buffer mem address %p\n", (void *) desc->info.ubo.pmem);
             return (void *) desc->info.ubo.pmem;
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            printf("gpgpusim: storage buffer; buffer mem address %p\n", (void *) desc->info.ssbo.pmem);
+            return (void *) desc->info.ssbo.pmem;
             break;
         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
             printf("gpgpusim: accel struct; root address %p\n", (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset);
