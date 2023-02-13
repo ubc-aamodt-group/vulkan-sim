@@ -92,6 +92,8 @@ namespace fs = boost::filesystem;
 
 #if defined(MESA_USE_INTEL_DRIVER)
 #include "intel_image.h"
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+// #include "lvp_image.h"
 #endif
 
 // #include "anv_include.h"
@@ -972,6 +974,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         traversal_data.closest_hit.objectToWorldMatrix = closest_objectToWorld;
         traversal_data.closest_hit.world_min_thit = min_thit;
 
+        printf("gpgpusim: Ray hit geomID %d primID %d\n", traversal_data.closest_hit.geometry_index, traversal_data.closest_hit.primitive_index);
         float3 p[3];
         for(int i = 0; i < 3; i++)
         {
@@ -989,6 +992,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     else
     {
+        printf("gpgpusim: Ray missed.\n");
         traversal_data.hit_geometry = false;
     }
 
@@ -1452,6 +1456,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
         if(launch_width % 32 != 0)
             gridDim.x++;
     }
+    printf("gpgpusim: launch dimensions %d x %d x %d\n", gridDim.x, gridDim.y, gridDim.z);
 
     gpgpu_ptx_sim_arg_list_t args;
     // kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
@@ -1466,6 +1471,9 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     grid->vulkan_metadata.launch_height = launch_height;
     grid->vulkan_metadata.launch_depth = launch_depth;
     
+    printf("gpgpusim: SBT: raygen %p, miss %p, hit %p, callable %p\n", 
+            raygen_sbt, miss_sbt, hit_sbt, callable_sbt);
+            
     struct CUstream_st *stream = 0;
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
     ctx->the_gpgpusim->g_stream_manager->push(op);
@@ -1500,7 +1508,8 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     mem->read(&(traversal_data->missIndex), sizeof(traversal_data->missIndex), &missIndex);
 
     uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.miss_sbt) + 8 * missIndex);
-    
+    printf("gpgpusim: Calling Miss Shader at ID %d\n", shaderID);
+
     shader_stage_info miss_shader = shaders[shaderID];
 
     function_info *entry = context->get_kernel(miss_shader.function_name);
@@ -1526,12 +1535,18 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     mem->read(&(traversal_data->closest_hit.geometryType), sizeof(traversal_data->closest_hit.geometryType), &geometryType);
 
     shader_stage_info closesthit_shader;
-    if(geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
-        closesthit_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt))];
+    if(geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        uint32_t shaderID = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
+        closesthit_shader = shaders[shaderID];
+        printf("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
+
+    }
     else {
         int32_t hitGroupIndex;
         mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &hitGroupIndex);
-        closesthit_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex)];
+        uint32_t shaderID = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
+        closesthit_shader = shaders[shaderID];
+        printf("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
     }
 
     function_info *entry = context->get_kernel(closesthit_shader.function_name);
@@ -1539,6 +1554,7 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
 }
 
 void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter) {
+    printf("gpgpusim: Calling Intersection Shader\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1556,6 +1572,7 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
 }
 
 void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread) {
+    printf("gpgpusim: Calling Any Hit Shader\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1954,9 +1971,31 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     // //     printf("this one has wrong value.\n");
     // // }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: image_store not implemented for lavapipe.\n");
-    abort();
+    assert(desc->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
+    struct lvp_image *image = (struct lvp_image *)desc->info.image_view.pmem;
+    assert(image != NULL);
+    printf("gpgpusim: image_store to iamge %p\n", image);
+
+    Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
+
+    // TODO: Figure out how to store the image
+    printf("gpgpusim: pixel (%5.3f, %5.3f, %5.3f, %5.3f) at [%d, %d]\n", 
+            hitValue_X, hitValue_Y, hitValue_Z, hitValue_W, 
+            gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y);
+
+    // Setup transaction record for timing model
+    ImageMemoryTransactionRecord transaction;
+    transaction.type = ImageTransactionType::IMAGE_STORE;
+
+    // TODO: Temporary placeholder for address
+    transaction.address = (void *)image;
+    transaction.size = 4;
+
+    TXL_DPRINTF("Setting transaction for image_store\n");
+    thread->set_txl_transactions(transaction);
+
+    // store_image_pixel(image, gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y, 0, pixel, transaction);
 #endif
 }
 

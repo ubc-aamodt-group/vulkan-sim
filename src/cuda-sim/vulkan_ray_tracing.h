@@ -154,6 +154,34 @@ typedef struct shader_stage_info {
     char* function_name;
 } shader_stage_info;
 
+
+typedef struct Pixel{
+    Pixel(float c0, float c1, float c2, float c3)
+    : c0(c0), c1(c1), c2(c2), c3(c3) {}
+    Pixel() {}
+
+    union
+    {
+        float r;
+        float c0;
+    };
+    union
+    {
+        float g;
+        float c1;
+    };
+    union
+    {
+        float b;
+        float c2;
+    };
+    union
+    {
+        float a;
+        float c3;
+    };
+} Pixel;
+
 // For launcher
 typedef struct storage_image_metadata
 {
