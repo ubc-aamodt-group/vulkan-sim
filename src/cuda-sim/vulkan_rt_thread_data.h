@@ -17,8 +17,10 @@
 #include <cmath>
 #include <stack>
 
+#include "compiler/nir/nir.h"
+
 typedef struct variable_decleration_entry{
-  uint64_t type;
+  nir_variable_mode type;
   std::string name;
   uint64_t address;
   uint32_t size;
@@ -61,8 +63,8 @@ typedef struct Vulkan_RT_thread_data {
     std::vector<Traversal_data*> traversal_data;
 
 
-    variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
-        if(type == 8192)
+    variable_decleration_entry* get_variable_decleration_entry(nir_variable_mode type, std::string name, uint32_t size) {
+        if(type == nir_var_ray_hit_attrib)
             return get_hitAttribute();
         
         for (int i = 0; i < variable_decleration_table.size(); i++) {
@@ -74,7 +76,7 @@ typedef struct Vulkan_RT_thread_data {
         return NULL;
     }
 
-    uint64_t add_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
+    uint64_t add_variable_decleration_entry(nir_variable_mode type, std::string name, uint32_t size) {
         variable_decleration_entry entry;
         entry.type = type;
         entry.name = name;
@@ -89,7 +91,7 @@ typedef struct Vulkan_RT_thread_data {
     variable_decleration_entry* get_hitAttribute() {
         variable_decleration_entry* hitAttribute = NULL;
         for (int i = 0; i < variable_decleration_table.size(); i++) {
-            if (variable_decleration_table[i].type == 8192) {
+            if (variable_decleration_table[i].type == nir_var_ray_hit_attrib) {
                 assert (variable_decleration_table[i].address != NULL);
                 assert (hitAttribute == NULL); // There should be only 1 hitAttribute
                 hitAttribute = &(variable_decleration_table[i]);
@@ -102,10 +104,10 @@ typedef struct Vulkan_RT_thread_data {
         variable_decleration_entry* hitAttribute = get_hitAttribute();
         float* address;
         if(hitAttribute == NULL) {
-            address = (float*)add_variable_decleration_entry(8192, "attribs", 12);
+            address = (float*)add_variable_decleration_entry(nir_var_ray_hit_attrib, "attribs", 12);
         }
         else {
-            assert (hitAttribute->type == 8192);
+            assert (hitAttribute->type == nir_var_ray_hit_attrib);
             assert (hitAttribute->address != NULL);
             // hitAttribute->name = name;
             address = (float*)(hitAttribute->address);

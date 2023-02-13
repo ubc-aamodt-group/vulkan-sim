@@ -4862,7 +4862,7 @@ void rem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void ret_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
     // if(thread->get_ctaid().x == 2 && thread->get_ctaid().y == 89 && thread->get_ctaid().z == 0)
-    VSIM_DPRINTF("gpgpusim: return from function\n");
+    VSIM_DPRINTF("gpgpusim: return from function in %s\n", pI->source_file());
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -6968,6 +6968,7 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: report_ray_intersection_impl\n");
   ptx_reg_t src1_data, src2_data, data;
 
   const operand_info &dst = pI->dst();
@@ -7399,14 +7400,14 @@ void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
   std::string name = dst.get_symbol()->name();
   uint32_t size = src1_data.u32;
-  uint32_t type = src2_data.u32;
+  nir_variable_mode type = (nir_variable_mode)src2_data.u32;
   uint64_t address = NULL;
   
   // printf("########## variable name = %s, size = %d\n", name.c_str(), size);
   variable_decleration_entry* variable_decleration = thread->RT_thread_data->get_variable_decleration_entry(type, name, size);
   if (variable_decleration != NULL) {
     address = variable_decleration->address;
-    if(variable_decleration->type != 8192) // MRS_TODO: in raytracing_extended closest hit attribs needs 36 bytes instead of 12 which is wrong
+    if(variable_decleration->type != nir_var_ray_hit_attrib) // MRS_TODO: in raytracing_extended closest hit attribs needs 36 bytes instead of 12 which is wrong
       assert(variable_decleration->size == size);
     assert (address != NULL);
   } 
@@ -7482,6 +7483,7 @@ void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.pred =
       (hit_geometry ==
       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  printf("gpgpusim: hit_geometry_impl -> %d\n", data.pred);
 
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 
