@@ -69,7 +69,7 @@ namespace fs = boost::filesystem;
 #include "lvp_private.h"
 #endif 
 //#include "intel_image_util.h"
- #include "astc_decomp.h"
+#include "astc_decomp.h"
 
 // #define HAVE_PTHREAD
 // #define UTIL_ARCH_LITTLE_ENDIAN 1
@@ -1973,16 +1973,24 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
 #elif defined(MESA_USE_LVPIPE_DRIVER)
     assert(desc->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
-    struct lvp_image *image = (struct lvp_image *)desc->info.image_view.pmem;
+    struct lvp_image *image = (struct lvp_image *)desc->info.image_view.image;
+    VkFormat vk_format = image->vk.format;
     assert(image != NULL);
-    printf("gpgpusim: image_store to iamge %p\n", image);
+    printf("gpgpusim: image_store to %s at %p\n", image->vk.base.object_name, image);
 
     Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
 
-    // TODO: Figure out how to store the image
-    printf("gpgpusim: pixel (%5.3f, %5.3f, %5.3f, %5.3f) at [%d, %d]\n", 
-            hitValue_X, hitValue_Y, hitValue_Z, hitValue_W, 
-            gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y);
+    // Store image
+    if(writeImageBinary)
+    {
+        std::string image_file_name(image->vk.base.object_name);
+        image_file_name += ".txt";
+        FILE* fp;
+        fp = fopen(image_file_name.c_str(), "a+");
+        fprintf(fp, "[%3d, %3d]: ", gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y);
+        fprintf(fp, "rgba(%3.0f, %3.0f, %3.0f, %5.3f)\n", hitValue_X * 255, hitValue_Y * 255, hitValue_Z * 255, hitValue_W);
+        fclose(fp);
+    }
 
     // Setup transaction record for timing model
     ImageMemoryTransactionRecord transaction;
