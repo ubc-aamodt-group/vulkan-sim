@@ -6968,7 +6968,7 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("gpgpusim: report_ray_intersection_impl\n");
+  VSIM_DPRINTF("gpgpusim: report_ray_intersection_impl\n");
   ptx_reg_t src1_data, src2_data, data;
 
   const operand_info &dst = pI->dst();
@@ -7483,7 +7483,7 @@ void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.pred =
       (hit_geometry ==
       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
-  printf("gpgpusim: hit_geometry_impl -> %d\n", data.pred);
+  VSIM_DPRINTF("gpgpusim: hit_geometry_impl -> %d\n", data.pred);
 
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 

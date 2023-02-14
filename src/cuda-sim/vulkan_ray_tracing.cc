@@ -974,7 +974,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         traversal_data.closest_hit.objectToWorldMatrix = closest_objectToWorld;
         traversal_data.closest_hit.world_min_thit = min_thit;
 
-        printf("gpgpusim: Ray hit geomID %d primID %d\n", traversal_data.closest_hit.geometry_index, traversal_data.closest_hit.primitive_index);
+        VSIM_DPRINTF("gpgpusim: Ray hit geomID %d primID %d\n", traversal_data.closest_hit.geometry_index, traversal_data.closest_hit.primitive_index);
         float3 p[3];
         for(int i = 0; i < 3; i++)
         {
@@ -992,7 +992,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     else
     {
-        printf("gpgpusim: Ray missed.\n");
+        VSIM_DPRINTF("gpgpusim: Ray missed.\n");
         traversal_data.hit_geometry = false;
     }
 
@@ -1456,7 +1456,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
         if(launch_width % 32 != 0)
             gridDim.x++;
     }
-    printf("gpgpusim: launch dimensions %d x %d x %d\n", gridDim.x, gridDim.y, gridDim.z);
+    VSIM_DPRINTF("gpgpusim: launch dimensions %d x %d x %d\n", gridDim.x, gridDim.y, gridDim.z);
 
     gpgpu_ptx_sim_arg_list_t args;
     // kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
@@ -1471,7 +1471,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     grid->vulkan_metadata.launch_height = launch_height;
     grid->vulkan_metadata.launch_depth = launch_depth;
     
-    printf("gpgpusim: SBT: raygen %p, miss %p, hit %p, callable %p\n", 
+    VSIM_DPRINTF("gpgpusim: SBT: raygen %p, miss %p, hit %p, callable %p\n", 
             raygen_sbt, miss_sbt, hit_sbt, callable_sbt);
             
     struct CUstream_st *stream = 0;
@@ -1508,7 +1508,7 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     mem->read(&(traversal_data->missIndex), sizeof(traversal_data->missIndex), &missIndex);
 
     uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.miss_sbt) + 8 * missIndex);
-    printf("gpgpusim: Calling Miss Shader at ID %d\n", shaderID);
+    VSIM_DPRINTF("gpgpusim: Calling Miss Shader at ID %d\n", shaderID);
 
     shader_stage_info miss_shader = shaders[shaderID];
 
@@ -1538,7 +1538,7 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     if(geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
         uint32_t shaderID = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
         closesthit_shader = shaders[shaderID];
-        printf("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
+        VSIM_DPRINTF("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
 
     }
     else {
@@ -1546,7 +1546,7 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
         mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &hitGroupIndex);
         uint32_t shaderID = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
         closesthit_shader = shaders[shaderID];
-        printf("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
+        VSIM_DPRINTF("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
     }
 
     function_info *entry = context->get_kernel(closesthit_shader.function_name);
@@ -1554,7 +1554,7 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
 }
 
 void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter) {
-    printf("gpgpusim: Calling Intersection Shader\n");
+    VSIM_DPRINTF("gpgpusim: Calling Intersection Shader\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1572,7 +1572,7 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
 }
 
 void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread) {
-    printf("gpgpusim: Calling Any Hit Shader\n");
+    VSIM_DPRINTF("gpgpusim: Calling Any Hit Shader\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1771,30 +1771,30 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
         // return descriptors[setID][binding].address;
     }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: getDescriptorAddress for binding %d\n", binding);
+    VSIM_DPRINTF("gpgpusim: getDescriptorAddress for binding %d\n", binding);
     struct lvp_descriptor_set* set = VulkanRayTracing::descriptorSet;
     const struct lvp_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
     struct lvp_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
 
     switch (desc->type) {
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-            printf("gpgpusim: storage image; descriptor address %p\n", desc);
+            VSIM_DPRINTF("gpgpusim: storage image; descriptor address %p\n", desc);
             return (void *) desc;
             break;
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-            printf("gpgpusim: uniform buffer; buffer mem address %p\n", (void *) desc->info.ubo.pmem);
+            VSIM_DPRINTF("gpgpusim: uniform buffer; buffer mem address %p\n", (void *) desc->info.ubo.pmem);
             return (void *) desc->info.ubo.pmem;
             break;
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            printf("gpgpusim: storage buffer; buffer mem address %p\n", (void *) desc->info.ssbo.pmem);
+            VSIM_DPRINTF("gpgpusim: storage buffer; buffer mem address %p\n", (void *) desc->info.ssbo.pmem);
             return (void *) desc->info.ssbo.pmem;
             break;
         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
-            printf("gpgpusim: accel struct; root address %p\n", (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset);
+            VSIM_DPRINTF("gpgpusim: accel struct; root address %p\n", (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset);
             return (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset;
             break;
         default:
-            printf("gpgpusim: unimplemented descriptor type\n");
+            VSIM_DPRINTF("gpgpusim: unimplemented descriptor type\n");
             abort();
     }
 #endif
@@ -1866,7 +1866,7 @@ void VulkanRayTracing::getTexture(struct DESCRIPTOR_STRUCT *desc,
     //     }
     // }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: getTexture not implemented for lavapipe.\n");
+    VSIM_DPRINTF("gpgpusim: getTexture not implemented for lavapipe.\n");
     abort();
 #endif
 }
@@ -1896,7 +1896,7 @@ void VulkanRayTracing::image_load(struct DESCRIPTOR_STRUCT *desc, uint32_t x, ui
     c3 = pixel.c3;
 
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: image_load not implemented for lavapipe.\n");
+    VSIM_DPRINTF("gpgpusim: image_load not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -1976,7 +1976,7 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     struct lvp_image *image = (struct lvp_image *)desc->info.image_view.image;
     VkFormat vk_format = image->vk.format;
     assert(image != NULL);
-    printf("gpgpusim: image_store to %s at %p\n", image->vk.base.object_name, image);
+    VSIM_DPRINTF("gpgpusim: image_store to %s at %p\n", image->vk.base.object_name, image);
 
     Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
 
@@ -2108,7 +2108,7 @@ void VulkanRayTracing::dumpTextures(struct DESCRIPTOR_STRUCT *desc, uint32_t set
                                                  filter);
     fclose(fp);
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dumpTextures not implemented for lavapipe.\n");
+    VSIM_DPRINTF("gpgpusim: dumpTextures not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2163,7 +2163,7 @@ void VulkanRayTracing::dumpStorageImage(struct DESCRIPTOR_STRUCT *desc, uint32_t
                                                 row_pitch_B);
     fclose(fp);
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dumpStorageImage not implemented for lavapipe.\n");
+    VSIM_DPRINTF("gpgpusim: dumpStorageImage not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2434,7 +2434,7 @@ void VulkanRayTracing::dump_descriptor_sets(struct DESCRIPTOR_SET_STRUCT *set)
         }
    }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dump_descriptor_sets not implemented for lavapipe.\n");
+    VSIM_DPRINTF("gpgpusim: dump_descriptor_sets not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2477,7 +2477,7 @@ void VulkanRayTracing::dump_AS(struct DESCRIPTOR_SET_STRUCT *set, VkAcceleration
         }
     }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: dump_AS not implemented for lavapipe.\n");
+    VSIM_DPRINTF("gpgpusim: dump_AS not implemented for lavapipe.\n");
     abort();
 
 #endif
