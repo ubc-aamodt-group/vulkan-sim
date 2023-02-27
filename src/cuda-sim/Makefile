@@ -80,6 +80,11 @@ OPT += -fPIC
 
 # Temporary hardcode value
 OPT += -DMESA_USE_LVPIPE_DRIVER
+ifeq ($(DEBUG),1)
+	OPT += -DVSIM_DEBUG_PRINT=1
+else
+	OPT += -DVSIM_DEBUG_PRINT=0
+endif
 
 ifeq ($(TRACE),1)
 	OPT += -DTRACING_ON=1

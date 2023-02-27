@@ -1115,7 +1115,7 @@ std::string base_name(std::string & path)
 
 void VulkanRayTracing::setDescriptorSet(struct DESCRIPTOR_SET_STRUCT *set)
 {
-    VSIM_DPRINTF("gpgpusim: set descriptor set 0x%x\n", set);
+    printf("gpgpusim: set descriptor set 0x%x\n", set);
     VulkanRayTracing::descriptorSet = set;
 }
 
@@ -1161,7 +1161,7 @@ void copyHardCodedShaders()
 
 uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage shaderType)
 {
-    VSIM_DPRINTF("gpgpusim: register shaders\n");
+    printf("gpgpusim: register shaders\n");
     copyHardCodedShaders();
 
     VulkanRayTracing::invoke_gpgpusim();
@@ -1306,7 +1306,7 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
 
 void VulkanRayTracing::invoke_gpgpusim()
 {
-    VSIM_DPRINTF("gpgpusim: invoking gpgpusim\n");
+    printf("gpgpusim: invoking gpgpusim\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
@@ -1332,7 +1332,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
                       uint32_t launch_height,
                       uint32_t launch_depth,
                       uint64_t launch_size_addr) {
-    VSIM_DPRINTF("gpgpusim: launching cmd trace ray\n");
+    printf("gpgpusim: launching cmd trace ray\n");
     // launch_width = 224;
     // launch_height = 160;
     init(launch_width, launch_height);
@@ -1456,7 +1456,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
         if(launch_width % 32 != 0)
             gridDim.x++;
     }
-    VSIM_DPRINTF("gpgpusim: launch dimensions %d x %d x %d\n", gridDim.x, gridDim.y, gridDim.z);
+    printf("gpgpusim: launch dimensions %d x %d x %d\n", gridDim.x, gridDim.y, gridDim.z);
 
     gpgpu_ptx_sim_arg_list_t args;
     // kernel_info_t *grid = ctx->api->gpgpu_cuda_ptx_sim_init_grid(
@@ -1471,7 +1471,7 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     grid->vulkan_metadata.launch_height = launch_height;
     grid->vulkan_metadata.launch_depth = launch_depth;
     
-    VSIM_DPRINTF("gpgpusim: SBT: raygen %p, miss %p, hit %p, callable %p\n", 
+    printf("gpgpusim: SBT: raygen %p, miss %p, hit %p, callable %p\n", 
             raygen_sbt, miss_sbt, hit_sbt, callable_sbt);
             
     struct CUstream_st *stream = 0;
@@ -1674,7 +1674,7 @@ void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *th
 
 void VulkanRayTracing::setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type)
 {
-    VSIM_DPRINTF("gpgpusim: set descriptor\n");
+    printf("gpgpusim: set descriptor\n");
     if(descriptors.size() <= setID)
         descriptors.resize(setID + 1);
     if(descriptors[setID].size() <= descID)
@@ -1866,7 +1866,7 @@ void VulkanRayTracing::getTexture(struct DESCRIPTOR_STRUCT *desc,
     //     }
     // }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    VSIM_DPRINTF("gpgpusim: getTexture not implemented for lavapipe.\n");
+    printf("gpgpusim: getTexture not implemented for lavapipe.\n");
     abort();
 #endif
 }
@@ -2108,7 +2108,7 @@ void VulkanRayTracing::dumpTextures(struct DESCRIPTOR_STRUCT *desc, uint32_t set
                                                  filter);
     fclose(fp);
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    VSIM_DPRINTF("gpgpusim: dumpTextures not implemented for lavapipe.\n");
+    printf("gpgpusim: dumpTextures not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2163,7 +2163,7 @@ void VulkanRayTracing::dumpStorageImage(struct DESCRIPTOR_STRUCT *desc, uint32_t
                                                 row_pitch_B);
     fclose(fp);
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    VSIM_DPRINTF("gpgpusim: dumpStorageImage not implemented for lavapipe.\n");
+    printf("gpgpusim: dumpStorageImage not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2434,7 +2434,7 @@ void VulkanRayTracing::dump_descriptor_sets(struct DESCRIPTOR_SET_STRUCT *set)
         }
    }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    VSIM_DPRINTF("gpgpusim: dump_descriptor_sets not implemented for lavapipe.\n");
+    printf("gpgpusim: dump_descriptor_sets not implemented for lavapipe.\n");
     abort();
 
 #endif
@@ -2477,7 +2477,7 @@ void VulkanRayTracing::dump_AS(struct DESCRIPTOR_SET_STRUCT *set, VkAcceleration
         }
     }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    VSIM_DPRINTF("gpgpusim: dump_AS not implemented for lavapipe.\n");
+    printf("gpgpusim: dump_AS not implemented for lavapipe.\n");
     abort();
 
 #endif

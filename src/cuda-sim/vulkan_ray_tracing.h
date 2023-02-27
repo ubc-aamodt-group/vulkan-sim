@@ -234,7 +234,6 @@ struct anv_descriptor;
 #define DESCRIPTOR_STRUCT lvp_descriptor
 #define DESCRIPTOR_LAYOUT_STRUCT lvp_descriptor_set_binding_layout
 
-#define VSIM_DEBUG_PRINT 1
 struct lvp_descriptor_set;
 struct lvp_descriptor;
 
