@@ -104,6 +104,7 @@ uint32_t VulkanRayTracing::geometryCount = 0;
 VkAccelerationStructureKHR VulkanRayTracing::topLevelAS = NULL;
 std::vector<std::vector<Descriptor> > VulkanRayTracing::descriptors;
 std::ofstream VulkanRayTracing::imageFile;
+std::map<std::string, std::string> outputImages;
 bool VulkanRayTracing::firstTime = true;
 std::vector<shader_stage_info> VulkanRayTracing::shaders;
 // RayDebugGPUData VulkanRayTracing::rayDebugGPUData[2000][2000] = {0};
@@ -1362,8 +1363,6 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
         
         // imageFile.open("image.txt", std::ios::out);
     }
-    else
-        return;
     // memset(((uint8_t*)descriptors[0][1].address), uint8_t(127), launch_height * launch_width * 4);
     // return;
 
@@ -1983,8 +1982,22 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     // Store image
     if(writeImageBinary)
     {
-        std::string image_file_name(image->vk.base.object_name);
-        image_file_name += ".txt";
+        std::string image_name(image->vk.base.object_name);
+        if (outputImages.find(image_name) == outputImages.end()) {
+            // Get timestamp string
+            time_t curr_time;
+            time(&curr_time);
+            char *timestamp = ctime(&curr_time);
+            char *s = timestamp;
+            while (*s) {
+                if (*s == ' ' || *s == '\t' || *s == ':') *s = '-';
+                if (*s == '\n' || *s == '\r') *s = 0;
+                s++;
+            }
+            std::string timestamp_str(timestamp);
+            outputImages[image_name] = image_name + timestamp_str + ".txt";
+        }
+        std::string image_file_name = outputImages[image_name];
         FILE* fp;
         fp = fopen(image_file_name.c_str(), "a+");
         fprintf(fp, "[%3d, %3d]: ", gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y);
