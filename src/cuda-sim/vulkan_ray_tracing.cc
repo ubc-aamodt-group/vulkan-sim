@@ -1996,6 +1996,7 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
             }
             std::string timestamp_str(timestamp);
             outputImages[image_name] = image_name + timestamp_str + ".txt";
+            printf("gpgpusim: saving image %s to %s\n", image_name, outputImages[image_name]);
         }
         std::string image_file_name = outputImages[image_name];
         FILE* fp;
@@ -2009,9 +2010,56 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     ImageMemoryTransactionRecord transaction;
     transaction.type = ImageTransactionType::IMAGE_STORE;
 
-    // TODO: Temporary placeholder for address
+    VkImageTiling tiling = image->vk.tiling;
+    uint32_t width = image->vk.extent.width;
+    uint32_t height = image->vk.extent.height;
+    uint32_t pixelX = gl_LaunchIDEXT_X;
+    uint32_t pixelY = gl_LaunchIDEXT_Y;
+
     transaction.address = (void *)image;
-    transaction.size = 4;
+
+    // Size of image_store content depends on data type
+    switch (vk_format) {
+        case VK_FORMAT_R32G32B32A32_SFLOAT:
+            transaction.size = 16;
+            break; 
+
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            transaction.size = 4;
+            break;
+
+        default:
+            printf("gpgpusim: unsupported image format option %d\n", vk_format);
+            abort();
+    }
+
+    switch (tiling) {
+        // Just an arbitrary tiling (TODO: Find a better tiling option)
+        case VK_IMAGE_TILING_OPTIMAL:
+            uint32_t tileWidth = 16;
+            uint32_t tileHeight = 16;
+
+            uint32_t nTileX = ceil(width / tileWidth);
+            uint32_t tileX = floor(pixelX / tileWidth);
+            uint32_t tileY = floor(pixelY / tileHeight);
+
+            uint32_t tileOffset = tileWidth * tileHeight * (tileY * nTileX + tileX);
+            uint32_t pixelOffset = (pixelY % tileHeight) * tileWidth + (pixelX % tileWidth);
+
+            transaction.address = (void *) image + ((tileOffset + pixelOffset) * transaction.size);
+            break;
+
+        // Linear
+        case VK_IMAGE_TILING_LINEAR:
+            uint32_t offset = pixelY * width + pixelX;
+            transaction.address = (void *) image + offset * transaction.size;
+            break;
+
+        default:
+            printf("gpgpusim: unsupported image tiling option %d\n", tiling);
+            abort();
+    }
+
 
     TXL_DPRINTF("Setting transaction for image_store\n");
     thread->set_txl_transactions(transaction);
