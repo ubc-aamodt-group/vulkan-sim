@@ -1116,8 +1116,14 @@ std::string base_name(std::string & path)
 
 void VulkanRayTracing::setDescriptorSet(struct DESCRIPTOR_SET_STRUCT *set)
 {
-    printf("gpgpusim: set descriptor set 0x%x\n", set);
-    VulkanRayTracing::descriptorSet = set;
+    if (VulkanRayTracing::descriptorSet == NULL) {
+        printf("gpgpusim: set descriptor set 0x%x\n", set);
+        VulkanRayTracing::descriptorSet = set;
+    }
+    // TODO: Figure out why it sets the descriptor set twice
+    else {
+        printf("gpgpusim: descriptor set already set; ignoring update.\n");
+    }
 }
 
 static bool invoked = false;
