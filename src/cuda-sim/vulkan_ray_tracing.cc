@@ -2042,6 +2042,7 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     switch (tiling) {
         // Just an arbitrary tiling (TODO: Find a better tiling option)
         case VK_IMAGE_TILING_OPTIMAL:
+        {
             uint32_t tileWidth = 16;
             uint32_t tileHeight = 16;
 
@@ -2054,16 +2055,19 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
 
             transaction.address = (void *) image + ((tileOffset + pixelOffset) * transaction.size);
             break;
-
+        }
         // Linear
         case VK_IMAGE_TILING_LINEAR:
+        {
             uint32_t offset = pixelY * width + pixelX;
             transaction.address = (void *) image + offset * transaction.size;
             break;
-
+        }
         default:
+        {
             printf("gpgpusim: unsupported image tiling option %d\n", tiling);
             abort();
+        }
     }
 
 
