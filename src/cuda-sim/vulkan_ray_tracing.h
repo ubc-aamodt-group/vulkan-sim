@@ -261,6 +261,8 @@ private:
     static void* launcher_descriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS];
     static void* launcher_deviceDescriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS];
     static std::vector<void*> child_addrs_from_driver;
+    static std::map<void*, void*> VulkanRayTracing::blas_addr_map;
+    static void* tlas_addr;
     static bool dumped;
     static bool _init_;
 public:
@@ -361,6 +363,8 @@ public:
                                        uint32_t row_pitch_B,
                                        uint32_t filter);
     static void pass_child_addr(void *address);
+    static void allocBLAS(void* rootAddr, uint64_t bufferSize);
+    static void allocTLAS(void* rootAddr, uint64_t bufferSize);
     static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS);
     static void* gpgpusim_alloc(uint32_t size);
 };

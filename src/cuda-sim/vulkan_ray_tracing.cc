@@ -112,6 +112,9 @@ struct DESCRIPTOR_SET_STRUCT* VulkanRayTracing::descriptorSet = NULL;
 void* VulkanRayTracing::launcher_descriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS] = {NULL};
 void* VulkanRayTracing::launcher_deviceDescriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS] = {NULL};
 std::vector<void*> VulkanRayTracing::child_addrs_from_driver;
+std::map<void*, void*> VulkanRayTracing::blas_addr_map;
+void* VulkanRayTracing::tlas_addr;
+
 bool VulkanRayTracing::dumped = false;
 
 bool use_external_launcher = false;
@@ -434,7 +437,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
     // Convert device address back to host address for func sim. This will break if the device address was modified then passed to traceRay. Should be fixable if I also record the size when I malloc then I can check the bounds of the device address.
     uint8_t* deviceAddress = nullptr;
-    int64_t device_offset = 0;
+    int64_t device_offset = (uint64_t)tlas_addr - (uint64_t)_topLevelAS;
     if (use_external_launcher)
     {
         deviceAddress = (uint8_t*)_topLevelAS;
@@ -529,7 +532,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     GEN_RT_BVH_unpack(&topBVH, (uint8_t*)_topLevelAS);
     transactions.push_back(MemoryTransactionRecord((uint8_t*)((uint64_t)_topLevelAS + device_offset), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
     ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
-    
+
     uint8_t* topRootAddr = (uint8_t*)_topLevelAS + topBVH.RootNodeOffset;
 
     // Get min/max
@@ -581,6 +584,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
         while (next_node_addr > 0)
         {
+            // TLAS offset
+            device_offset = (uint64_t)tlas_addr - (uint64_t)_topLevelAS;
+
             node_addr = next_node_addr;
             next_node_addr = NULL;
             struct GEN_RT_BVH_INTERNAL_NODE node;
@@ -676,6 +682,9 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         // traverse top level leaf nodes
         while (!stack.empty() && stack.back().leaf)
         {
+            // TLAS offset
+            device_offset = (uint64_t)tlas_addr - (uint64_t)_topLevelAS;
+
             assert(stack.back().topLevel);
 
             uint8_t* leaf_addr = stack.back().addr;
@@ -700,7 +709,14 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             assert(instanceLeaf.BVHAddress != NULL);
             GEN_RT_BVH botLevelASAddr;
             GEN_RT_BVH_unpack(&botLevelASAddr, (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress));
-            transactions.push_back(MemoryTransactionRecord((uint8_t*)((uint64_t)leaf_addr + instanceLeaf.BVHAddress + device_offset), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
+
+            // BLAS offset
+            uint8_t * botLevelRootAddr = (uint8_t *)(leaf_addr + instanceLeaf.BVHAddress);
+            RT_DPRINTF("Traversing BLAS %p -> %p\n", (void*)botLevelRootAddr, blas_addr_map[(void*)botLevelRootAddr]);
+            assert(blas_addr_map.find((void*)botLevelRootAddr) != blas_addr_map.end());
+            device_offset = (uint64_t)blas_addr_map[(void*)botLevelRootAddr] - (uint64_t)botLevelRootAddr;
+
+            transactions.push_back(MemoryTransactionRecord((uint8_t*)(botLevelRootAddr + device_offset), GEN_RT_BVH_length * 4, TransactionType::BVH_STRUCTURE));
             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_STRUCTURE)]++;
 
             if (debugTraversal)
@@ -719,7 +735,6 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
             float worldToObject_tMultiplier;
             Ray objectRay = make_transformed_ray(ray, worldToObjectMatrix, &worldToObject_tMultiplier);
             
-            uint8_t * botLevelRootAddr ;
             botLevelRootAddr = ((uint8_t *)((uint64_t)leaf_addr + instanceLeaf.BVHAddress)) + botLevelASAddr.RootNodeOffset;
             stack.push_back(StackEntry(botLevelRootAddr, false, false));
             assert(tree_level_map.find(leaf_addr) != tree_level_map.end());
@@ -1023,6 +1038,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     if (level > ctx->func_sim->g_max_tree_depth) {
         ctx->func_sim->g_max_tree_depth = level;
+    }
+
+    RT_DPRINTF("Traversal: \n");
+    for (auto t : transactions) {
+        RT_DPRINTF("\ttransaction %d, address %p, size %d\n", t.type, t.address, t.size);
     }
 }
 
@@ -1478,6 +1498,13 @@ void VulkanRayTracing::vkCmdTraceRaysKHR(
     
     printf("gpgpusim: SBT: raygen %p, miss %p, hit %p, callable %p\n", 
             raygen_sbt, miss_sbt, hit_sbt, callable_sbt);
+
+    printf("gpgpusim: blas address\n");
+    for (auto mapping : blas_addr_map) {
+        printf("\t[%p] -> %p\n", mapping.first, mapping.second);
+    }
+
+    printf("gpgpusim: tlas address %p\n", tlas_addr);
             
     struct CUstream_st *stream = 0;
     stream_operation op(grid, ctx->func_sim->g_ptx_sim_mode, stream);
@@ -1984,33 +2011,6 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     VSIM_DPRINTF("gpgpusim: image_store to %s at %p\n", image->vk.base.object_name, image);
 
     Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
-
-    // Store image
-    if(writeImageBinary)
-    {
-        std::string image_name(image->vk.base.object_name);
-        if (outputImages.find(image_name) == outputImages.end()) {
-            // Get timestamp string
-            time_t curr_time;
-            time(&curr_time);
-            char *timestamp = ctime(&curr_time);
-            char *s = timestamp;
-            while (*s) {
-                if (*s == ' ' || *s == '\t' || *s == ':') *s = '-';
-                if (*s == '\n' || *s == '\r') *s = 0;
-                s++;
-            }
-            std::string timestamp_str(timestamp);
-            outputImages[image_name] = image_name + timestamp_str + ".txt";
-            printf("gpgpusim: saving image %s to %s\n", image_name, outputImages[image_name]);
-        }
-        std::string image_file_name = outputImages[image_name];
-        FILE* fp;
-        fp = fopen(image_file_name.c_str(), "a+");
-        fprintf(fp, "[%3d, %3d]: ", gl_LaunchIDEXT_X, gl_LaunchIDEXT_Y);
-        fprintf(fp, "rgba(%3.0f, %3.0f, %3.0f, %5.3f)\n", hitValue_X * 255, hitValue_Y * 255, hitValue_Z * 255, hitValue_W);
-        fclose(fp);
-    }
 
     // Setup transaction record for timing model
     ImageMemoryTransactionRecord transaction;
@@ -2675,6 +2675,28 @@ void VulkanRayTracing::setTextureFromLauncher(void *address,
 void VulkanRayTracing::pass_child_addr(void *address)
 {
     child_addrs_from_driver.push_back(address);
+}
+
+void VulkanRayTracing::allocBLAS(void* rootAddr, uint64_t bufferSize) {
+    // Allocate GPGPU-Sim memory address for determinism
+    gpgpu_context *ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(bufferSize);
+    assert(devPtr);
+
+    printf("gpgpusim: set BLAS address for 0x%lx at %p to %p\n", bufferSize, rootAddr, devPtr);
+    blas_addr_map[rootAddr] = devPtr;
+}
+
+void VulkanRayTracing::allocTLAS(void* rootAddr, uint64_t bufferSize) {
+    // Allocate GPGPU-Sim memory address for determinism
+    gpgpu_context *ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(bufferSize);
+    assert(devPtr);
+
+    printf("gpgpusim: set TLAS address %p to %p\n", rootAddr, devPtr);
+    tlas_addr = devPtr;
 }
 
 void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS)

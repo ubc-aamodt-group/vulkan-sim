@@ -165,4 +165,14 @@ extern "C" void gpgpusim_pass_child_addr(void *address)
     VulkanRayTracing::pass_child_addr(address);
 }
 
+extern "C" void gpgpusim_allocBLAS(void* rootAddr, uint64_t bufferSize)
+{
+    VulkanRayTracing::allocBLAS(rootAddr, bufferSize);
+}
+
+extern "C" void gpgpusim_allocTLAS(void* rootAddr, uint64_t bufferSize)
+{
+    VulkanRayTracing::allocTLAS(rootAddr, bufferSize);
+}
+
 #endif /* GPGPUSIM_CALLS_FROM_MESA_CC */
