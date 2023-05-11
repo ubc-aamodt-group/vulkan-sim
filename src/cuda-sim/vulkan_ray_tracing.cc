@@ -2008,7 +2008,7 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     struct lvp_image *image = (struct lvp_image *)desc->info.image_view.image;
     VkFormat vk_format = image->vk.format;
     assert(image != NULL);
-    VSIM_DPRINTF("gpgpusim: image_store to %s at %p\n", image->vk.base.object_name, image);
+    VSIM_DPRINTF("gpgpusim: image_store to %s at %p\n", image->vk.base.object_name, image->pmem_gpgpusim);
 
     Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
 
@@ -2021,8 +2021,6 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
     uint32_t height = image->vk.extent.height;
     uint32_t pixelX = gl_LaunchIDEXT_X;
     uint32_t pixelY = gl_LaunchIDEXT_Y;
-
-    transaction.address = (void *)image;
 
     // Size of image_store content depends on data type
     switch (vk_format) {
@@ -2053,14 +2051,14 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
             uint32_t tileOffset = tileWidth * tileHeight * (tileY * nTileX + tileX);
             uint32_t pixelOffset = (pixelY % tileHeight) * tileWidth + (pixelX % tileWidth);
 
-            transaction.address = (void *) image + ((tileOffset + pixelOffset) * transaction.size);
+            transaction.address = image->pmem_gpgpusim + ((tileOffset + pixelOffset) * transaction.size);
             break;
         }
         // Linear
         case VK_IMAGE_TILING_LINEAR:
         {
             uint32_t offset = pixelY * width + pixelX;
-            transaction.address = (void *) image + offset * transaction.size;
+            transaction.address = image->pmem_gpgpusim + offset * transaction.size;
             break;
         }
         default:
@@ -2069,7 +2067,6 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
             abort();
         }
     }
-
 
     TXL_DPRINTF("Setting transaction for image_store\n");
     thread->set_txl_transactions(transaction);
@@ -2677,26 +2674,14 @@ void VulkanRayTracing::pass_child_addr(void *address)
     child_addrs_from_driver.push_back(address);
 }
 
-void VulkanRayTracing::allocBLAS(void* rootAddr, uint64_t bufferSize) {
-    // Allocate GPGPU-Sim memory address for determinism
-    gpgpu_context *ctx = GPGPU_Context();
-    CUctx_st *context = GPGPUSim_Context(ctx);
-    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(bufferSize);
-    assert(devPtr);
-
-    printf("gpgpusim: set BLAS address for 0x%lx at %p to %p\n", bufferSize, rootAddr, devPtr);
-    blas_addr_map[rootAddr] = devPtr;
+void VulkanRayTracing::allocBLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr) {
+    printf("gpgpusim: set BLAS address for 0x%lx at %p to %p\n", bufferSize, rootAddr, gpgpusimAddr);
+    blas_addr_map[rootAddr] = gpgpusimAddr;
 }
 
-void VulkanRayTracing::allocTLAS(void* rootAddr, uint64_t bufferSize) {
-    // Allocate GPGPU-Sim memory address for determinism
-    gpgpu_context *ctx = GPGPU_Context();
-    CUctx_st *context = GPGPUSim_Context(ctx);
-    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(bufferSize);
-    assert(devPtr);
-
-    printf("gpgpusim: set TLAS address %p to %p\n", rootAddr, devPtr);
-    tlas_addr = devPtr;
+void VulkanRayTracing::allocTLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr) {
+    printf("gpgpusim: set TLAS address %p to %p\n", rootAddr, gpgpusimAddr);
+    tlas_addr = gpgpusimAddr;
 }
 
 void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS)
@@ -2748,19 +2733,35 @@ void VulkanRayTracing::findOffsetBounds(int64_t &max_backwards, int64_t &min_bac
 
 void* VulkanRayTracing::gpgpusim_alloc(uint32_t size)
 {
+    gpgpu_context *ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(size);
+    if (g_debug_execution >= 3) {
+        printf("GPGPU-Sim PTX: gpgpusim_allocing %zu bytes starting at 0x%llx..\n",
+            size, (unsigned long long)devPtr);
+        ctx->api->g_mallocPtr_Size[(unsigned long long)devPtr] = size;
+    }
+    assert(devPtr);
+
     if(!use_external_launcher) {
-        return malloc(size);
+        void* bufferAddr = malloc(size);
+        memory_space *mem = context->get_device()->get_gpgpu()->get_global_memory();
+        mem->bind_vulkan_buffer(bufferAddr, size, devPtr);
     }
-    else {
-        gpgpu_context *ctx = GPGPU_Context();
-        CUctx_st *context = GPGPUSim_Context(ctx);
-        void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(size);
-        if (g_debug_execution >= 3) {
-            printf("GPGPU-Sim PTX: gpgpusim_allocing %zu bytes starting at 0x%llx..\n",
-                size, (unsigned long long)devPtr);
-            ctx->api->g_mallocPtr_Size[(unsigned long long)devPtr] = size;
-        }
-        assert(devPtr);
-        return devPtr;
-    }
+
+    return devPtr;
+}
+
+void* VulkanRayTracing::allocBuffer(void* bufferAddr, uint64_t bufferSize)
+{
+    gpgpu_context *ctx = GPGPU_Context();
+    CUctx_st *context = GPGPUSim_Context(ctx);
+    void* devPtr = context->get_device()->get_gpgpu()->gpu_malloc(bufferSize);
+    assert(devPtr);
+
+    memory_space *mem = context->get_device()->get_gpgpu()->get_global_memory();
+    
+    printf("gpgpusim: binding gpgpusim buffer %p (size %d) to vulkan buffer %p\n", devPtr, bufferSize, bufferAddr);
+    mem->bind_vulkan_buffer(bufferAddr, bufferSize, devPtr);
+    return devPtr;
 }

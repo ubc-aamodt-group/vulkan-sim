@@ -363,8 +363,9 @@ public:
                                        uint32_t row_pitch_B,
                                        uint32_t filter);
     static void pass_child_addr(void *address);
-    static void allocBLAS(void* rootAddr, uint64_t bufferSize);
-    static void allocTLAS(void* rootAddr, uint64_t bufferSize);
+    static void allocBLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr);
+    static void allocTLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr);
+    static void* allocBuffer(void* bufferAddr, uint64_t bufferSize);
     static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS);
     static void* gpgpusim_alloc(uint32_t size);
 };

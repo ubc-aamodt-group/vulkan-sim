@@ -165,14 +165,19 @@ extern "C" void gpgpusim_pass_child_addr(void *address)
     VulkanRayTracing::pass_child_addr(address);
 }
 
-extern "C" void gpgpusim_allocBLAS(void* rootAddr, uint64_t bufferSize)
+extern "C" void gpgpusim_allocBLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr)
 {
-    VulkanRayTracing::allocBLAS(rootAddr, bufferSize);
+    VulkanRayTracing::allocBLAS(rootAddr, bufferSize, gpgpusimAddr);
 }
 
-extern "C" void gpgpusim_allocTLAS(void* rootAddr, uint64_t bufferSize)
+extern "C" void gpgpusim_allocTLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr)
 {
-    VulkanRayTracing::allocTLAS(rootAddr, bufferSize);
+    VulkanRayTracing::allocTLAS(rootAddr, bufferSize, gpgpusimAddr);
+}
+
+extern "C" void* gpgpusim_allocBuffer(void* bufferAddr, uint64_t bufferSize)
+{
+    return VulkanRayTracing::allocBuffer(bufferAddr, bufferSize);
 }
 
 #endif /* GPGPUSIM_CALLS_FROM_MESA_CC */

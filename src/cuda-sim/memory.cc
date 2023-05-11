@@ -60,7 +60,15 @@ void memory_space_impl<BSIZE>::write(mem_addr_t addr, size_t length,
                                      class ptx_thread_info *thd,
                                      const ptx_instruction *pI) {
   if(!use_external_launcher) {
-    memcpy(addr, data, length);
+    void* vulkan_addr = find_vulkan_buffer(addr);
+
+    if (vulkan_addr) {
+      memcpy(vulkan_addr, data, length);
+    }
+    else {
+      printf("gpgpusim: WARNING: Memory backing buffer not found for address %p. This data write may be invalid\n");
+      memcpy(addr, data, length);
+    }
   }
   else {
     mem_addr_t index = addr >> m_log2_block_size;
@@ -137,10 +145,35 @@ void memory_space_impl<BSIZE>::read_single_block(mem_addr_t blk_idx,
 }
 
 template <unsigned BSIZE>
+void* memory_space_impl<BSIZE>::find_vulkan_buffer(mem_addr_t addr) const {
+  for (auto it = m_vulkan_address_map.begin(); it != m_vulkan_address_map.end(); ++it) {
+    void* buffer_addr = it->first;
+    unsigned buffer_size = m_vulkan_address_size_map.at(buffer_addr);
+
+    if(addr >= buffer_addr && addr < (buffer_addr + buffer_size)) {
+      void* vulkan_addr = it->second;
+      unsigned offset = addr - (unsigned long long)buffer_addr;
+      
+      // printf("gpgpusim: found vulkan buffer %p for gpgpusim buffer %p for address %p with offset 0x%x.\n", vulkan_addr, buffer_addr, addr, offset);
+      return (void*)((unsigned long long)vulkan_addr + offset);
+    }
+  }
+  return NULL;
+}
+
+template <unsigned BSIZE>
 void memory_space_impl<BSIZE>::read(mem_addr_t addr, size_t length,
                                     void *data) const {
   if(!use_external_launcher) {
-    memcpy(data, addr, length);
+    void* vulkan_addr = find_vulkan_buffer(addr);
+
+    if (vulkan_addr) {
+      memcpy(data, vulkan_addr, length);
+    }
+    else {
+      printf("gpgpusim: WARNING: Memory backing buffer not found for address %p. This data read may be invalid\n");
+      memcpy(data, addr, length);
+    }
   }
   else {
     mem_addr_t index = addr >> m_log2_block_size;
@@ -188,6 +221,12 @@ void memory_space_impl<BSIZE>::print(const char *format, FILE *fout) const {
 template <unsigned BSIZE>
 void memory_space_impl<BSIZE>::set_watch(addr_t addr, unsigned watchpoint) {
   m_watchpoints[watchpoint] = addr;
+}
+
+template <unsigned BSIZE>
+void memory_space_impl<BSIZE>::bind_vulkan_buffer(void* bufferAddr, unsigned bufferSize, void* devPtr) {
+  m_vulkan_address_map[devPtr] = bufferAddr;
+  m_vulkan_address_size_map[devPtr] = bufferSize;
 }
 
 template class memory_space_impl<32>;
