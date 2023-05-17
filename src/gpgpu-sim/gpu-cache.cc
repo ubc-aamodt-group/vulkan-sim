@@ -769,7 +769,10 @@ cache_stats &cache_stats::operator+=(const cache_stats &cs) {
   #ifdef DETAILED_CACHE_STATS
   g_rt_miss += cs.g_rt_miss;
   g_rt_cold_miss += cs.g_rt_cold_miss;
-  g_nonrt_miss += cs.g_nonrt_miss;
+  for (unsigned status = 0; status < NUM_CACHE_REQUEST_STATUS; ++status) {
+    g_rt_cache_stats[status] += cs.g_rt_cache_stats[status];
+    g_rt_cache_write_stats[status] += cs.g_rt_cache_write_stats[status];
+  }
   #endif
   return *this;
 }
@@ -802,10 +805,45 @@ void cache_stats::print_stats(FILE *fout, const char *cache_name) const {
               total_access[type]);
   }
 
+  fprintf(fout, "\t%s[GLOBAL_ACC_R]_miss_rate = %5.4f\n", m_cache_name.c_str(),
+          (float)(m_stats[GLOBAL_ACC_R][MISS] + m_stats[GLOBAL_ACC_R][SECTOR_MISS]) /total_access[GLOBAL_ACC_R]);
+
   #ifdef DETAILED_CACHE_STATS
-  fprintf(fout, "nonrt_miss = %d\n", g_nonrt_miss);
-  fprintf(fout, "rt_cold_miss = %d\n", g_rt_cold_miss);
-  fprintf(fout, "rt_miss = %d\n", g_rt_miss);
+  fprintf(fout, "RT_%s:\n", m_cache_name.c_str());
+  fprintf(fout, "\trt_read_cold_miss = %d\n", g_rt_cold_miss);
+  fprintf(fout, "\trt_read_other_miss = %d\n", g_rt_miss);
+
+  unsigned total_misses = 0;
+  unsigned total_accesses = 0;
+
+  for (unsigned status = 0; status < NUM_CACHE_REQUEST_STATUS; ++status) {
+    fprintf(fout, "\trt_stats[READ][%s] = %d\n", 
+    cache_request_status_str((enum cache_request_status)status), 
+    g_rt_cache_stats[status]);
+    if (status == HIT || status == MISS || status == SECTOR_MISS ||
+          status == HIT_RESERVED) {
+      total_accesses += g_rt_cache_stats[status];
+      if (status == MISS || status == SECTOR_MISS) {
+        total_misses += g_rt_cache_stats[status];
+      }
+    }
+  }
+  fprintf(fout, "\trt_read_miss_rate = %5.4f\n", (float)total_misses/total_accesses);
+
+  for (unsigned status = 0; status < NUM_CACHE_REQUEST_STATUS; ++status) {
+    fprintf(fout, "\trt_stats[WRITE][%s] = %d\n", 
+    cache_request_status_str((enum cache_request_status)status), 
+    g_rt_cache_write_stats[status]);
+    if (status == HIT || status == MISS || status == SECTOR_MISS ||
+          status == HIT_RESERVED) {
+      total_accesses += g_rt_cache_write_stats[status];
+      if (status == MISS || status == SECTOR_MISS) {
+        total_misses += g_rt_cache_write_stats[status];
+      }
+    }
+  }
+
+  fprintf(fout, "\trt_overall_miss_rate = %5.4f\n", (float)total_misses/total_accesses);
   #endif
 }
 
@@ -1700,21 +1738,31 @@ enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
   
   #ifdef DETAILED_CACHE_STATS
   // Check if this is a RT access
-  if (access_status == MISS) {
-    if (mf->israytrace()) {
-      // Check if cold start
-      if (m_addr_set.find(addr) == m_addr_set.end()) {
-        m_addr_set.insert(addr);
-        m_stats.g_rt_cold_miss++;
-      }
-      else {
-        m_stats.g_rt_miss++;
-      }
+  if (mf->israytrace()) {
+    int access_outcome = m_stats.select_stats_status(probe_status, access_status);
 
-    } else {
-      m_stats.g_nonrt_miss++;
+    // Keep writes separate and don't include them in cache miss count
+    if (wr) {
+      m_stats.g_rt_cache_write_stats[access_outcome]++;
+    }
+
+    else {
+      m_stats.g_rt_cache_stats[access_outcome]++;
+
+      // Classify misses
+      if (access_outcome == MISS) {
+        // Check if cold start
+        if (m_addr_set.find(addr) == m_addr_set.end()) {
+          m_addr_set.insert(addr);
+          m_stats.g_rt_cold_miss++;
+        }
+        else {
+          m_stats.g_rt_miss++;
+        }
+      }
     }
   }
+
   #endif
   return access_status;
 }
