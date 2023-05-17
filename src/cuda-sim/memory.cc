@@ -66,7 +66,7 @@ void memory_space_impl<BSIZE>::write(mem_addr_t addr, size_t length,
       memcpy(vulkan_addr, data, length);
     }
     else {
-      printf("gpgpusim: WARNING: Memory backing buffer not found for address %p. This data write may be invalid\n");
+      printf("gpgpusim: WARNING: Memory backing buffer not found for address %p. This data write may be invalid\n", addr);
       memcpy(addr, data, length);
     }
   }
@@ -146,19 +146,17 @@ void memory_space_impl<BSIZE>::read_single_block(mem_addr_t blk_idx,
 
 template <unsigned BSIZE>
 void* memory_space_impl<BSIZE>::find_vulkan_buffer(mem_addr_t addr) const {
-  for (auto it = m_vulkan_address_map.begin(); it != m_vulkan_address_map.end(); ++it) {
-    void* buffer_addr = it->first;
-    unsigned buffer_size = m_vulkan_address_size_map.at(buffer_addr);
+  mem_addr_t index = addr & ~(VULKAN_ADDR_BLK - 1);
+  unsigned offset = addr & (VULKAN_ADDR_BLK - 1);
 
-    if(addr >= buffer_addr && addr < (buffer_addr + buffer_size)) {
-      void* vulkan_addr = it->second;
-      unsigned offset = addr - (unsigned long long)buffer_addr;
-      
-      // printf("gpgpusim: found vulkan buffer %p for gpgpusim buffer %p for address %p with offset 0x%x.\n", vulkan_addr, buffer_addr, addr, offset);
-      return (void*)((unsigned long long)vulkan_addr + offset);
-    }
+  if (m_vulkan_address_map.find((void*)index) != m_vulkan_address_map.end()) {
+    void* vulkan_addr = m_vulkan_address_map.at((void*)index);
+    return (void*)((unsigned long long)vulkan_addr + offset);
   }
-  return NULL;
+  else {
+    printf("Could not find %p in Vulkan address map\n", (void*)index);
+    return NULL;
+  }
 }
 
 template <unsigned BSIZE>
@@ -171,7 +169,7 @@ void memory_space_impl<BSIZE>::read(mem_addr_t addr, size_t length,
       memcpy(data, vulkan_addr, length);
     }
     else {
-      printf("gpgpusim: WARNING: Memory backing buffer not found for address %p. This data read may be invalid\n");
+      printf("gpgpusim: WARNING: Memory backing buffer not found for address %p. This data read may be invalid\n", addr);
       memcpy(data, addr, length);
     }
   }
@@ -225,8 +223,13 @@ void memory_space_impl<BSIZE>::set_watch(addr_t addr, unsigned watchpoint) {
 
 template <unsigned BSIZE>
 void memory_space_impl<BSIZE>::bind_vulkan_buffer(void* bufferAddr, unsigned bufferSize, void* devPtr) {
-  m_vulkan_address_map[devPtr] = bufferAddr;
-  m_vulkan_address_size_map[devPtr] = bufferSize;
+  unsigned index = 0;
+  void* addr = bufferAddr;
+  while (addr < (bufferAddr + bufferSize)) {
+    m_vulkan_address_map[devPtr + index * VULKAN_ADDR_BLK] = addr;
+    addr += VULKAN_ADDR_BLK;
+    index++;
+  }
 }
 
 template class memory_space_impl<32>;

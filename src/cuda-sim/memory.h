@@ -49,6 +49,8 @@
 typedef address_type mem_addr_t;
 
 #define MEM_BLOCK_SIZE (4 * 1024)
+#define VULKAN_ADDR_BLK 16
+#define VULKAN_ADDR_LOG2_BLK 4
 
 template <unsigned BSIZE>
 class mem_storage {
@@ -129,7 +131,6 @@ class memory_space_impl : public memory_space {
   map_t m_data;
   std::map<unsigned, mem_addr_t> m_watchpoints;
   std::map<void*, void*> m_vulkan_address_map;
-  std::map<void*, unsigned> m_vulkan_address_size_map;
 };
 
 #endif
