@@ -1907,6 +1907,7 @@ struct shader_core_stats_pod {
   // Other ray tracing stats
   unsigned long long rt_total_warp_latency;
   unsigned long long rt_total_thread_latency;
+  double rt_total_simt_efficiency;
   double rt_total_warp_occupancy;
   unsigned rt_total_warps;
   unsigned long long *rt_total_cacheline_fetched;
