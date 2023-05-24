@@ -86,14 +86,14 @@ from configs import avconfig
 class formEntry:
   
   #This class is essentially a form placed inside a tab. It collects all the data from the user required for graphing. It then instantiates a new object that takes care of all the graphing
-  graphForVarType = { 1:[0,3], 2:[0,3], 3:[4], 4:[0,3,5], 5:[6] }
+  graphForVarType = { 1:[0,3], 2:[0,3,7], 3:[4], 4:[0,3,5], 5:[6] }
   
   def __init__(self, graphTabs, numb, vars, res, entry):
     
     #Variable Initializations
     self.data = vars
     self.subBool = 0
-    self.possGraphs = ['Line', 'Histogram', 'Bar Chart', 'Parallel Intensity Plot', 'Stacked Bar Chart', 'Parallel Intensity Plot (Sum)', 'Scatter Plot']
+    self.possGraphs = ['Line', 'Histogram', 'Bar Chart', 'Parallel Intensity Plot', 'Stacked Bar Chart', 'Parallel Intensity Plot (Sum)', 'Scatter Plot', 'Average Line']
     self.res = res
     self.subplots = []
     self.dataChosenX = "globalCycle"
@@ -278,6 +278,7 @@ class formEntry:
       if self.data[self.fileChosen][self.dataChosenY].type == 1 or self.data[self.fileChosen][self.dataChosenY].type == 2 or self.data[self.fileChosen][self.dataChosenY].type == 4:
           self.cTypeGraph.insert(Tk.END, self.possGraphs[0])
           self.cTypeGraph.insert(Tk.END, self.possGraphs[3])
+          self.cTypeGraph.insert(Tk.END, self.possGraphs[7])
       else:
           self.cTypeGraph.insert(Tk.END, self.possGraphs[4])
            
@@ -572,7 +573,7 @@ class subplotInstance(formEntry):
     self.graphChosen = ''
     self.data = data
     self.var0 = Tk.IntVar()
-    self.possGraphs = ['Line', 'Histogram', 'Bar Chart', 'Parallel Intensity Plot', 'Stacked Bar Chart', 'Parallel Intensity Plot (Sum)', 'Scatter Plot']
+    self.possGraphs = ['Line', 'Histogram', 'Bar Chart', 'Parallel Intensity Plot', 'Stacked Bar Chart', 'Parallel Intensity Plot (Sum)', 'Scatter Plot', "Average Line"]
     self.dydx = 0
     self.ChosenVarsTextbox = plotInstance.ChosenVarsTextbox
     self.num = subNum
@@ -726,7 +727,7 @@ class graphManager:
         self.dataChosen = dataChosen
         self.data = data
         self.disconnect = 0
-        self.possGraphs = ['Line', 'Histogram', 'Bar Chart', 'Parallel Intensity Plot', 'Stacked Bar Chart', 'Parallel Intensity Plot (Sum)', 'Scatter Plot']
+        self.possGraphs = ['Line', 'Histogram', 'Bar Chart', 'Parallel Intensity Plot', 'Stacked Bar Chart', 'Parallel Intensity Plot (Sum)', 'Scatter Plot', "Average Line"]
         self.xlim = 0
         self.xAxisStepsWilStack = {}
         self.cbarAxes = {}
@@ -1004,6 +1005,13 @@ class graphManager:
           if (self.dataPointer.graphChosen == self.possGraphs[3]):
               yTicks = [n for n in range(len(y))]
               self.plotParallelIntensity(x, xAxis, y, yAxis, yAxis, yTicks, plotID)
+          elif (self.dataPointer.graphChosen == self.possGraphs[7]):
+              print("Chosen average plot")
+              y = self.takeAverage(y)
+
+              print(len(x))
+              print(len(y))
+              self.plot2VarLine(x, xAxis, y, yAxis)
           
           else:           
               #Label and Plot
@@ -1285,6 +1293,19 @@ class graphManager:
         self.canvas.show()
       
     
+    def takeAverage(self, y):
+        print("Taking average")
+        average = []
+        for cycle in range(0, len(y[0])):
+            avg_value = 0
+            for shader in range(0, len(y)):
+               avg_value += y[shader][cycle]
+            avg_value /= len(y)
+            average.append(avg_value)
+               
+        return average
+    
+
     def takeDerivativeMult(self,x,y):
         multDerivative = []
 
