@@ -487,6 +487,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     traversal_data.Tmin = Tmin;
     traversal_data.Tmax = Tmax;
 
+    bool hit_procedural = false;
+
     std::ofstream traversalFile;
 
     if (debugTraversal)
@@ -942,6 +944,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                     }
                     else
                     {
+                        hit_procedural = true;
                         struct GEN_RT_BVH_PROCEDURAL_LEAF leaf;
                         GEN_RT_BVH_PROCEDURAL_LEAF_unpack(&leaf, leaf_addr);
                         transactions.push_back(MemoryTransactionRecord((uint8_t*)((uint64_t)leaf_addr + device_offset), GEN_RT_BVH_PROCEDURAL_LEAF_length * 4, TransactionType::BVH_PROCEDURAL_LEAF));
@@ -1005,6 +1008,11 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         thread->RT_thread_data->set_hitAttribute(barycentric, pI, thread);
 
         // store_transactions.push_back(MemoryStoreTransactionRecord(&traversal_data, sizeof(traversal_data), StoreTransactionType::Traversal_Results));
+    }
+    else if (hit_procedural)
+    {
+        VSIM_DPRINTF("gpgpusim: Ray hit procedural geometry; requires intersection shader.\n");
+        traversal_data.hit_geometry = false;
     }
     else
     {
@@ -1568,7 +1576,7 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
 
     shader_stage_info closesthit_shader;
     if(geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
-        uint32_t shaderID = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
+        uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
         closesthit_shader = shaders[shaderID];
         VSIM_DPRINTF("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
 
@@ -1576,7 +1584,7 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
     else {
         int32_t hitGroupIndex;
         mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &hitGroupIndex);
-        uint32_t shaderID = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
+        uint32_t shaderID = *((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
         closesthit_shader = shaders[shaderID];
         VSIM_DPRINTF("gpgpusim: Calling Closest Hit Shader at ID %d\n", shaderID);
     }
@@ -1598,7 +1606,7 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
     uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
 
-    shader_stage_info intersection_shader = shaders[*((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1)];
+    shader_stage_info intersection_shader = shaders[*((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1)];
     function_info *entry = context->get_kernel(intersection_shader.function_name);
     callShader(pI, thread, entry);
 }

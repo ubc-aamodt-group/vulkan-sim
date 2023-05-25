@@ -7451,11 +7451,13 @@ void intersection_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   data.pred =
       (exit_intersection ==
        0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  VSIM_DPRINTF("gpgpusim: intersection_exit_impl -> %s\n", data.pred ? "intersection shader" : "no intersection shader");
   
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 }
 
 void get_intersection_shader_data_address_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VSIM_DPRINTF("gpgpusim: get_intersection_shader_data_address_impl\n");
   const operand_info &dst = pI->dst();
   const operand_info &src = pI->src1();
   ptx_reg_t data, src_data;
@@ -7483,7 +7485,9 @@ void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   data.pred =
       (hit_geometry ==
       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
-  VSIM_DPRINTF("gpgpusim: hit_geometry_impl -> %d\n", data.pred);
+
+  // Predicate is set to 1 when jumping over the section
+  VSIM_DPRINTF("gpgpusim: hit_geometry_impl -> %s\n", data.pred ? "miss" : "closest hit");
 
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 
@@ -7548,18 +7552,19 @@ void get_closest_hit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *t
   mem->read(&(traversal_data->closest_hit.geometryType), sizeof(traversal_data->closest_hit.geometryType), &geometryType);
 
   if(geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
-    data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
+    data.u32 = *((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt));
   else {
     int32_t hitGroupIndex;
     mem->read(&(traversal_data->closest_hit.hitGroupIndex), sizeof(traversal_data->closest_hit.hitGroupIndex), &hitGroupIndex);
 
-    data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
+    data.u32 = *((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex);
   }
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VSIM_DPRINTF("gpgpusim: get_intersection_shaderID_impl\n");
   static uint32_t last_counter = 0;
   static uint32_t last_warp_hitgroup = -1;
 
@@ -7573,7 +7578,7 @@ void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *
   warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
   uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
 
-  data.u32 = *((uint64_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1);
+  data.u32 = *((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1);
   
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
