@@ -2698,16 +2698,6 @@ void cuda_sim::gpgpu_cuda_ptx_sim_main_func(kernel_info_t &kernel,
         (char *)"%08x");
   }
 
-  // registering this kernel as done
-
-  // openCL kernel simulation calls don't register the kernel so we don't
-  // register its exit
-  if (!openCL) {
-    // extern stream_manager *g_stream_manager;
-    gpgpu_ctx->the_gpgpusim->g_stream_manager->register_finished_kernel(
-        kernel.get_uid());
-  }
-
   //******PRINTING*******
   printf("GPGPU-Sim: Done functional simulation (%u instructions simulated).\n",
          g_ptx_sim_num_insn);
@@ -2740,6 +2730,16 @@ void cuda_sim::gpgpu_cuda_ptx_sim_main_func(kernel_info_t &kernel,
   printf("gpgpu_simulation_rate = %u (inst/sec)\n",
          (unsigned)(g_ptx_sim_num_insn / elapsed_time));
   fflush(stdout);
+  
+  // registering this kernel as done
+
+  // openCL kernel simulation calls don't register the kernel so we don't
+  // register its exit
+  if (!openCL) {
+    // extern stream_manager *g_stream_manager;
+    gpgpu_ctx->the_gpgpusim->g_stream_manager->register_finished_kernel(
+        kernel.get_uid());
+  }
 }
 
 void functionalCoreSim::initializeCTA(unsigned ctaid_cp) {
