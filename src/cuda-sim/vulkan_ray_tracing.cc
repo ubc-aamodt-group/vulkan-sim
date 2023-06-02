@@ -1251,8 +1251,7 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
             // shader.function_name = "anyhit_" + std::to_string(shader.ID);
             strcpy(shader.function_name, "anyhit_");
             strcat(shader.function_name, std::to_string(shader.ID).c_str());
-            deviceFunction = "";
-            assert(0);
+            deviceFunction = "MESA_SHADER_ANYHIT";
             break;
         case MESA_SHADER_CLOSEST_HIT:
             // shader.function_name = "closesthit_" + std::to_string(shader.ID);

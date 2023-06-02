@@ -6967,6 +6967,12 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->m_last_memory_space = tex_space;
 }
 
+void ignore_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  VSIM_DPRINTF("gpgpusim: ignore_ray_intersection_impl\n");
+  printf("Unimplemented!\n");
+  abort();
+}
+
 void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   VSIM_DPRINTF("gpgpusim: report_ray_intersection_impl\n");
   ptx_reg_t src1_data, src2_data, data;
@@ -7265,7 +7271,7 @@ void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *t
   VulkanRayTracing::callIntersectionShader(pI, thread, shader_counter);
 }
 
-void call_any_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+void call_anyhit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   VulkanRayTracing::callAnyHitShader(pI, thread);
 }
 
@@ -7419,6 +7425,21 @@ void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
+void run_anyhit_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: run_anyhit_impl unimplemented!\n");
+  abort();
+}
+
+void anyhit_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: anyhit_exit_impl unimplemented!\n");
+  abort();
+}
+
+void get_anyhit_shader_data_address_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: get_anyhit_shader_data_address_impl unimplemented!\n");
+  abort();
+}
+
 void run_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   const operand_info &dst = pI->dst();
   const operand_info &src = pI->src1();
@@ -7493,6 +7514,9 @@ void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 }
 
+void get_anyhit_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  assert(0);
+}
 
 void get_intersection_index_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   assert(0);
@@ -7583,6 +7607,10 @@ void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *
   thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
+void get_anyhit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
+  printf("gpgpusim: get_anyhit_shaderID_impl unimplemented!\n");
+  abort();
+}
 
 // wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3
 void wrap_32_4_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
