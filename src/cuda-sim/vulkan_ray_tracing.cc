@@ -122,6 +122,7 @@ const bool dump_trace = false;
 
 bool VulkanRayTracing::_init_ = false;
 warp_intersection_table *** VulkanRayTracing::intersection_table;
+warp_intersection_table *** VulkanRayTracing::anyhit_table;
 IntersectionTableType VulkanRayTracing::intersectionTableType = IntersectionTableType::Baseline;
 
 float get_norm(float4 v)
@@ -404,6 +405,13 @@ void VulkanRayTracing::init(uint32_t launch_width, uint32_t launch_height)
         }
 
     }
+    anyhit_table = new Baseline_warp_intersection_table**[width];
+    for(int i = 0; i < width; i++)
+    {
+        anyhit_table[i] = new Baseline_warp_intersection_table*[height];
+        for(int j = 0; j < height; j++)
+            anyhit_table[i][j] = new Baseline_warp_intersection_table();
+    }
 }
 
 
@@ -479,6 +487,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
     Traversal_data traversal_data;
 
+    traversal_data.n_all_hits = 0;
     traversal_data.ray_world_direction = direction;
     traversal_data.ray_world_origin = origin;
     traversal_data.sbtRecordOffset = sbtRecordOffset;
@@ -503,6 +512,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
 
     bool terminateOnFirstHit = rayFlags & SpvRayFlagsTerminateOnFirstHitKHRMask;
     bool skipClosestHitShader = rayFlags & SpvRayFlagsSkipClosestHitShaderKHRMask;
+    bool skipAnyHitShader = rayFlags & SpvRayFlagsOpaqueKHRMask;
 
     std::vector<MemoryTransactionRecord> transactions;
     std::vector<MemoryStoreTransactionRecord> store_transactions;
@@ -927,6 +937,69 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                             ctx->func_sim->g_rt_mem_access_type[static_cast<int>(TransactionType::BVH_QUAD_LEAF_HIT)]++;
                             total_nodes_accessed++;
 
+                            if (!skipAnyHitShader) {
+                                VSIM_DPRINTF("gpgpusim: Adding triangle intersection to anyhit shader table\n");
+                                warp_intersection_table* table = anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+                                
+                                uint32_t hit_group_index = instanceLeaf.InstanceContributionToHitGroupIndex;
+                                auto intersectionTransactions = table->add_intersection(hit_group_index, thread->get_tid().x, leaf.PrimitiveIndex0, instanceLeaf.InstanceID, pI, thread); // TODO: switch these to device addresses
+
+                                for(auto & newTransaction : intersectionTransactions.first)
+                                {
+                                    bool found = false;
+                                    for(auto & transaction : transactions)
+                                        if(transaction.address == newTransaction.address)
+                                        {
+                                            found = true;
+                                            break;
+                                        }
+                                    if(!found)
+                                        transactions.push_back(newTransaction);
+
+                                }
+                                store_transactions.insert(store_transactions.end(), intersectionTransactions.second.begin(), intersectionTransactions.second.end());
+
+                                VSIM_DPRINTF("gpgpusim: Storing triangle intersection HitAttributes for anyhit shader\n");
+
+                                ctx->func_sim->g_rt_num_any_hits++;
+
+                                Hit_data anyhit_hit_attributes;
+                                anyhit_hit_attributes.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+                                anyhit_hit_attributes.geometry_index = leaf.LeafDescriptor.GeometryIndex;
+                                anyhit_hit_attributes.primitive_index = leaf.PrimitiveIndex0;
+                                anyhit_hit_attributes.instance_index = instanceLeaf.InstanceID;
+
+                                float anyhit_thit = thit / worldToObject_tMultiplier;
+                                float3 intersection_point = ray.get_origin() + make_float3(ray.get_direction().x * anyhit_thit, ray.get_direction().y * anyhit_thit, ray.get_direction().z * anyhit_thit);
+                                float3 rayatinter = ray.at(anyhit_thit);
+
+                                anyhit_hit_attributes.intersection_point = intersection_point;
+                                anyhit_hit_attributes.worldToObjectMatrix = worldToObjectMatrix;
+                                anyhit_hit_attributes.objectToWorldMatrix = objectToWorldMatrix;
+                                anyhit_hit_attributes.world_min_thit = anyhit_thit;
+                                
+                                float3 p[3];
+                                for(int i = 0; i < 3; i++)
+                                {
+                                    p[i].x = leaf.QuadVertex[i].X;
+                                    p[i].y = leaf.QuadVertex[i].Y;
+                                    p[i].z = leaf.QuadVertex[i].Z;
+                                }
+                                float3 object_intersection_point = objectRay.get_origin() + make_float3(objectRay.get_direction().x * thit, objectRay.get_direction().y * thit, objectRay.get_direction().z * thit);
+                                float3 barycentric = Barycentric(object_intersection_point, p[0], p[1], p[2]);
+                                anyhit_hit_attributes.barycentric_coordinates = barycentric;
+
+                                VSIM_DPRINTF("gpgpusim: Ray hit geomID %d primID %d at (%5.3f, %5.3f, %5.3f) with t = %5.3f\n", anyhit_hit_attributes.geometry_index, anyhit_hit_attributes.primitive_index, barycentric.x, barycentric.y, barycentric.z, thit);
+
+                                // Allocate memory to store hit attributes
+                                memory_space *mem = thread->get_global_memory();
+                                Hit_data* device_hit_attributes = (Hit_data*) VulkanRayTracing::gpgpusim_alloc(sizeof(Hit_data));
+                                mem->write(device_hit_attributes, sizeof(Hit_data), &anyhit_hit_attributes, thread, pI);
+                                thread->RT_thread_data->all_hit_data.push_back(device_hit_attributes);
+
+                                traversal_data.n_all_hits++;
+                            }
+
                             if(terminateOnFirstHit)
                             {
                                 stack.clear();
@@ -994,6 +1067,8 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
         traversal_data.closest_hit.world_min_thit = min_thit;
 
         VSIM_DPRINTF("gpgpusim: Ray hit geomID %d primID %d\n", traversal_data.closest_hit.geometry_index, traversal_data.closest_hit.primitive_index);
+        VSIM_DPRINTF("gpgpusim: Ray [%d] awaiting %d anyhit shader calls\n", thread->get_uid(), traversal_data.n_all_hits);
+        assert(thread->RT_thread_data->all_hit_data.size() == traversal_data.n_all_hits);
         float3 p[3];
         for(int i = 0; i < 3; i++)
         {
@@ -1016,7 +1091,7 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
     }
     else
     {
-        VSIM_DPRINTF("gpgpusim: Ray missed.\n");
+        VSIM_DPRINTF("gpgpusim: Ray [%d] missed.\n", thread->get_uid());
         traversal_data.hit_geometry = false;
     }
 
@@ -1058,8 +1133,11 @@ void VulkanRayTracing::endTraceRay(const ptx_instruction *pI, ptx_thread_info *t
 {
     assert(thread->RT_thread_data->traversal_data.size() > 0);
     thread->RT_thread_data->traversal_data.pop_back();
-    warp_intersection_table* table = intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    table->clear(pI, thread);
+    thread->RT_thread_data->all_hit_data.clear();
+    warp_intersection_table* itable = intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+    itable->clear(pI, thread);
+    warp_intersection_table* atable = anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+    atable->clear(pI, thread);
 }
 
 bool VulkanRayTracing::mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit)
@@ -1251,7 +1329,7 @@ uint32_t VulkanRayTracing::registerShaders(char * shaderPath, gl_shader_stage sh
             // shader.function_name = "anyhit_" + std::to_string(shader.ID);
             strcpy(shader.function_name, "anyhit_");
             strcat(shader.function_name, std::to_string(shader.ID).c_str());
-            deviceFunction = "MESA_SHADER_ANYHIT";
+            deviceFunction = "MESA_SHADER_ANY_HIT";
             break;
         case MESA_SHADER_CLOSEST_HIT:
             // shader.function_name = "closesthit_" + std::to_string(shader.ID);
@@ -1610,13 +1688,22 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     callShader(pI, thread, entry);
 }
 
-void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread) {
+void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter) {
     VSIM_DPRINTF("gpgpusim: Calling Any Hit Shader\n");
     gpgpu_context *ctx;
     ctx = GPGPU_Context();
     CUctx_st *context = GPGPUSim_Context(ctx);
 
-    assert(0);
+    memory_space *mem = thread->get_global_memory();
+    Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+    mem->write(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter, thread, pI);
+
+    warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+    uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
+
+    shader_stage_info anyhit_shader = shaders[*((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1)];
+    function_info *entry = context->get_kernel(anyhit_shader.function_name);
+    callShader(pI, thread, entry);
 }
 
 void VulkanRayTracing::callShader(const ptx_instruction *pI, ptx_thread_info *thread, function_info *target_func) {

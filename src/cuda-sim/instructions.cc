@@ -6969,8 +6969,24 @@ void txl_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 
 void ignore_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   VSIM_DPRINTF("gpgpusim: ignore_ray_intersection_impl\n");
-  printf("Unimplemented!\n");
-  abort();
+
+  memory_space *mem = thread->get_global_memory();
+  Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
+  int32_t shader_counter;
+  mem->read(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter);
+
+  Hit_data* hit_data_addr = thread->RT_thread_data->all_hit_data[shader_counter];
+  Hit_data attributes;
+  mem->read(hit_data_addr, sizeof(Hit_data), &attributes);
+
+  float3 bary = attributes.barycentric_coordinates;
+  VSIM_DPRINTF("gpgpusim: Ray [%d] ignoring hit %d at (%5.3f, %5.3f, %5.3f) with t = %5.3f\n", thread->get_uid(), shader_counter, bary.x, bary.y, bary.z, attributes.world_min_thit);
+
+  // Mark world_min_thit as negative number to indicate invalid hit (all valid hit points should have t > 0)
+  // traversal_data->all_hits[shader_counter].world_min_thit = -1;
+  float invalid_hit = -1.0f;
+  mem->write(&(hit_data_addr->world_min_thit), sizeof(float), &invalid_hit, thread, pI);
 }
 
 void report_ray_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7215,7 +7231,7 @@ void call_pc_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-    VSIM_DPRINTF("gpgpusim: miss shader implementation\n");
+    VSIM_DPRINTF("gpgpusim: Ray [%d] miss shader implementation\n", thread->get_uid());
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7237,7 +7253,7 @@ void call_miss_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 void call_closest_hit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
   // if(thread->get_tid().x == 0 && thread->get_tid().y == 0 && thread->get_tid().z == 0)
   //   if(thread->get_ctaid().x == 0 && thread->get_ctaid().y == 0 && thread->get_ctaid().z == 0)
-    VSIM_DPRINTF("gpgpusim: closest hit shader implementation\n");
+    VSIM_DPRINTF("gpgpusim: Ray [%d] closest hit shader implementation\n", thread->get_uid());
     if(print_debug_insts)
     {
       printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
@@ -7272,7 +7288,20 @@ void call_intersection_shader_impl(const ptx_instruction *pI, ptx_thread_info *t
 }
 
 void call_anyhit_shader_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  VulkanRayTracing::callAnyHitShader(pI, thread);
+  VSIM_DPRINTF("gpgpusim: anyhit shader implementation\n");
+    if(print_debug_insts)
+    {
+      printf("########## running line %d of file %s. thread(%d, %d, %d), cta(%d, %d, %d)\n", pI->source_line(), pI->source_file(),
+                                        thread->get_tid().x, thread->get_tid().y, thread->get_tid().z,
+                                        thread->get_ctaid().x, thread->get_ctaid().y, thread->get_ctaid().z);
+      fflush(stdout);
+    }
+
+  const operand_info &src = pI->operand_lookup(0);
+  ptx_reg_t src_data = thread->get_operand_value(src, src, U32_TYPE, thread, 1);
+  uint32_t shader_counter = src_data.u32;
+
+  VulkanRayTracing::callAnyHitShader(pI, thread, shader_counter);
 }
 
 void image_deref_store_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7416,6 +7445,15 @@ void rt_alloc_mem_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
     if(variable_decleration->type != nir_var_ray_hit_attrib) // MRS_TODO: in raytracing_extended closest hit attribs needs 36 bytes instead of 12 which is wrong
       assert(variable_decleration->size == size);
     assert (address != NULL);
+
+    // // For debugging
+    // if (variable_decleration->type == nir_var_ray_hit_attrib) {
+    //   memory_space *mem = thread->get_global_memory();
+    //   float3 barycentrics;
+    //   mem->read(variable_decleration->address, sizeof(float3), &barycentrics);
+    //   printf("gpgpusim: Ray [%d] closest hit at (%5.3f, %5.3f, %5.3f)\n", thread->get_uid(), barycentrics.x, barycentrics.y, barycentrics.z);
+    // }
+
   } 
   else {
     address = thread->RT_thread_data->add_variable_decleration_entry(type, name, size);
@@ -7431,13 +7469,85 @@ void run_anyhit_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
 }
 
 void anyhit_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("gpgpusim: anyhit_exit_impl unimplemented!\n");
-  abort();
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+  VSIM_DPRINTF("gpgpusim: Ray [%d] anyhit shader_counter %d\n", thread->get_uid(), shader_counter);
+
+  warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  bool exit_intersection = table->exit_shaders(shader_counter, thread->get_tid().x);
+
+  data.pred =
+      (exit_intersection ==
+       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
+  VSIM_DPRINTF("gpgpusim: anyhit_exit_impl -> %s\n", data.pred ? "anyhit shader" : "no anyhit shader");
+
+  if (!data.pred) {
+    memory_space *mem = thread->get_global_memory();
+    Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+    uint32_t n_hits;
+    mem->read(&(traversal_data->n_all_hits), sizeof(traversal_data->n_all_hits), &n_hits);
+
+    if (n_hits != 0) {
+      VSIM_DPRINTF("gpgpusim: all %d anyhit shader calls complete; processing closest hit!\n", n_hits);
+      std::vector<Hit_data*> &hit_list = thread->RT_thread_data->all_hit_data;
+      assert(hit_list.size() == n_hits);
+
+      bool hit_exists = false; // TODO: Sync this with accepted closest hits in case some geometry do not use anyhit shader
+      float tmin = 0;
+      Hit_data hit_attributes;
+      Hit_data closest_hit;
+      for (unsigned i = 0; i < n_hits; i++) {
+        mem->read(hit_list[i], sizeof(Hit_data), &hit_attributes);
+        VSIM_DPRINTF("gpgpusim: Ray [%d] (%d) (%5.3f, %5.3f, %5.3f) with t = %5.3f\n", thread->get_uid(), i, hit_attributes.barycentric_coordinates.x, hit_attributes.barycentric_coordinates.y, hit_attributes.barycentric_coordinates.z, hit_attributes.world_min_thit);
+        if (hit_attributes.world_min_thit > 0 && // Check the hit is valid
+            (tmin == 0 || hit_attributes.world_min_thit < tmin)) // Set as closest hit if no hits yet or hit is closest
+        {
+          // Closest hit so far
+          hit_exists = true;
+          closest_hit = hit_attributes;
+          tmin = hit_attributes.world_min_thit;
+        }
+      }
+
+      if (hit_exists) {
+        // Update closest hit entry to pass to closest hit shader
+        VSIM_DPRINTF("gpgpusim: closest hit identified\n");
+        VSIM_DPRINTF("gpgpusim: Ray [%d] closest hit at (%5.3f, %5.3f, %5.3f) with t = %5.3f\n", thread->get_uid(), closest_hit.barycentric_coordinates.x, closest_hit.barycentric_coordinates.y, closest_hit.barycentric_coordinates.z, closest_hit.world_min_thit);
+
+        thread->RT_thread_data->set_hitAttribute(closest_hit.barycentric_coordinates, pI, thread);
+        mem->write(&(traversal_data->closest_hit), sizeof(Hit_data), &closest_hit, thread, pI);
+      }
+
+      else {
+        // Update hit_geometry
+        VSIM_DPRINTF("gpgpusim: no hits accepted\n");
+        mem->write(&(traversal_data->hit_geometry), sizeof(traversal_data->hit_geometry), &hit_exists, thread, pI);
+      }
+    }
+  }
+  
+  thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 }
 
 void get_anyhit_shader_data_address_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("gpgpusim: get_anyhit_shader_data_address_impl unimplemented!\n");
-  abort();
+  VSIM_DPRINTF("gpgpusim: get_anyhit_shader_data_address_impl\n");
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, dst, U32_TYPE, thread, 0);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  void* address = table->get_shader_data_address(shader_counter, thread->get_tid().x);
+
+  data.u64 = (uint64_t)address;
+  
+  thread->set_operand_value(dst, data, B64_TYPE, thread, pI);
 }
 
 void run_intersection_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
@@ -7608,8 +7718,25 @@ void get_intersection_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *
 }
 
 void get_anyhit_shaderID_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-  printf("gpgpusim: get_anyhit_shaderID_impl unimplemented!\n");
-  abort();
+  VSIM_DPRINTF("gpgpusim: get_anyhit_shaderID_impl ");
+  static uint32_t last_counter = 0;
+  static uint32_t last_warp_hitgroup = -1;
+
+  const operand_info &dst = pI->dst();
+  const operand_info &src = pI->src1();
+  ptx_reg_t data, src_data;
+
+  src_data = thread->get_operand_value(src, src, U32_TYPE, thread, 1);
+  uint32_t shader_counter = src_data.u32;
+
+  warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+  uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
+
+  // TODO: Adjust this for situations with both intersection and anyhit shaders
+  data.u32 = *((uint32_t *)(thread->get_kernel().vulkan_metadata.hit_sbt) + 8 * hitGroupIndex + 1);
+  VSIM_DPRINTF("shader %d\n", data.u32);
+  
+  thread->set_operand_value(dst, data, U32_TYPE, thread, pI);
 }
 
 // wrap_32_4 %ssa_0, %ssa_0_0, %ssa_0_1, %ssa_0_2, %ssa_0_3

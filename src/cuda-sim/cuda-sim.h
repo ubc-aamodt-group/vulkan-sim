@@ -154,6 +154,7 @@ class cuda_sim {
   // Ray tracing memory access type stats
   unsigned g_rt_mem_access_type[static_cast<int>(TransactionType::UNDEFINED)] = {0};
   unsigned g_rt_num_hits = 0; 
+  unsigned g_rt_num_any_hits = 0; 
   bool g_rt_world_set = false;
   float3 g_rt_world_min = {0, 0, 0};
   float3 g_rt_world_max = {0, 0, 0};

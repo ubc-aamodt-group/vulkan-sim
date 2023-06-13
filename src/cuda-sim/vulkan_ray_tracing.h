@@ -268,6 +268,7 @@ private:
 public:
     // static RayDebugGPUData rayDebugGPUData[2000][2000];
     static warp_intersection_table*** intersection_table;
+    static warp_intersection_table*** anyhit_table;
     static IntersectionTableType intersectionTableType;
 
 private:
@@ -317,7 +318,7 @@ public:
     static void callMissShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter);
-    static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t binding);
 

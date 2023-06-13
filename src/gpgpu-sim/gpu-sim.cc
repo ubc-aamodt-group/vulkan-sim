@@ -1508,6 +1508,7 @@ void gpgpu_sim::gpu_print_stat() {
   fprintf(statfout, "\n");
 
   fprintf(statfout, "rt_num_hits = %d\n", gpgpu_ctx->func_sim->g_rt_num_hits);
+  fprintf(statfout, "rt_num_any_hits = %d\n", gpgpu_ctx->func_sim->g_rt_num_any_hits);
   fprintf(statfout, "rt_n_anyhit_rays = %d\n", gpgpu_ctx->func_sim->g_n_anyhit_rays);
   fprintf(statfout, "rt_n_closesthit_rays = %d\n", gpgpu_ctx->func_sim->g_n_closesthit_rays);
   fprintf(statfout, "rt_n_total_rays = %d\n", gpgpu_ctx->func_sim->g_n_closesthit_rays + gpgpu_ctx->func_sim->g_n_anyhit_rays);

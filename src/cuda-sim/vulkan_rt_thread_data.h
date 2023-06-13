@@ -49,6 +49,7 @@ typedef struct Traversal_data {
     float Tmax;
     int32_t current_shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
 
+    uint32_t n_all_hits;
     uint32_t rayFlags;
     uint32_t cullMask;
     uint32_t sbtRecordOffset;
@@ -61,6 +62,7 @@ typedef struct Vulkan_RT_thread_data {
     std::vector<variable_decleration_entry> variable_decleration_table;
 
     std::vector<Traversal_data*> traversal_data;
+    std::vector<Hit_data*> all_hit_data;
 
 
     variable_decleration_entry* get_variable_decleration_entry(nir_variable_mode type, std::string name, uint32_t size) {
