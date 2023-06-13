@@ -773,7 +773,7 @@ void shader_core_stats::print(FILE *fout) const {
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
   fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
   fprintf(fout, "rt_avg_efficiency = %f\n", (float)rt_total_simt_efficiency / rt_total_warps);
-  fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_latency / rt_total_cycles_sum / m_config->num_shader());
+  fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_latency / rt_total_cycles_sum / m_config->m_rt_max_warps);
   print_roofline(fout);
   fprintf(fout, "rt_writes = %d\n", rt_writes);
   fprintf(fout, "rt_max_mem_store_q = %d\n", rt_max_store_q);
@@ -1038,7 +1038,7 @@ void shader_core_stats::visualizer_print(gzFile visualizer_file) {
 
   gzprintf(visualizer_file, "cacheMissRate_globalL1_all:  ");
   for (unsigned i = 0; i < m_config->num_shader(); i++)
-    gzprintf(visualizer_file, "%u ", l1d_missrate[i]);
+    gzprintf(visualizer_file, "%f ", l1d_missrate[i]);
   gzprintf(visualizer_file, "\n");
   gzprintf(visualizer_file, "L1DMiss:  ");
   for (unsigned i = 0; i < m_config->num_shader(); i++)
