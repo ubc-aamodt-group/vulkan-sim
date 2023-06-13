@@ -1902,6 +1902,7 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
     const struct lvp_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding];
     struct lvp_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
 
+    // printf("DESCRIPTOR TYPE: %d\n", desc->type);
     switch (desc->type) {
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
             VSIM_DPRINTF("gpgpusim: storage image; descriptor address %p\n", desc);
@@ -1918,6 +1919,10 @@ void* VulkanRayTracing::getDescriptorAddress(uint32_t setID, uint32_t binding)
         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
             VSIM_DPRINTF("gpgpusim: accel struct; root address %p\n", (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset);
             return (void *)desc->info.ubo.pmem + desc->info.ubo.buffer_offset;
+            break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            VSIM_DPRINTF("gpgpusim: image sampler; descriptor address %p\n", desc);
+            return (void *) desc;
             break;
         default:
             VSIM_DPRINTF("gpgpusim: unimplemented descriptor type\n");
@@ -1992,10 +1997,52 @@ void VulkanRayTracing::getTexture(struct DESCRIPTOR_STRUCT *desc,
     //     }
     // }
 #elif defined(MESA_USE_LVPIPE_DRIVER)
-    printf("gpgpusim: getTexture not implemented for lavapipe.\n");
-    abort();
+    // printf("gpgpusim: getTexture not implemented for lavapipe.\n");
+    //
+    // printf("GIVEN DESC: %p\n", desc);
+
+    if (x < 0 || x > 1)
+        x -= std::floor(x);
+    if (y < 0 || y > 1)
+        y -= std::floor(y);
+
+    // printf("X: %f, Y: %f\n", x, y);
+
+    struct lvp_descriptor d = *(struct lvp_descriptor*) desc;
+    const struct lvp_image *img = d.info.sampler_view->image;
+    uint32_t width = img->vk.extent.width;
+    uint32_t height = img->vk.extent.height;
+    void *i = img->pmem;
+
+    uint32_t x_int = std::floor(x * width);
+    uint32_t y_int = std::floor(y * height);
+    if(x_int >= width)
+        x_int -= width;
+    if(y_int >= height)
+        y_int -= height;
+
+    void *c = i + (y_int * height + x_int) * 4;
+
+    ImageMemoryTransactionRecord transaction;
+    transaction.type = ImageTransactionType::TEXTURE_LOAD;
+    transaction.address = c;
+    transaction.address = 0;
+    transaction.size = 4;
+    transactions.push_back(transaction);
+
+    uint8_t *colors = (uint8_t*) c;
+    c0 = colors[0] / 255.0;
+    c1 = colors[1] / 255.0;
+    c2 = colors[2] / 255.0;
+    c3 = colors[3] / 255.0;
+
+    // abort();
 #endif
 }
+
+#if defined(MESA_USE_LVPIPE_DRIVER)
+FILE *img_bin = nullptr;
+#endif
 
 void VulkanRayTracing::image_load(struct DESCRIPTOR_STRUCT *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3)
 {
@@ -2106,13 +2153,47 @@ void VulkanRayTracing::image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_L
 
     Pixel pixel = Pixel(hitValue_X, hitValue_Y, hitValue_Z, hitValue_W);
 
+    uint32_t width = image->vk.extent.width;
+    uint32_t height = image->vk.extent.height;
+
+    if (writeImageBinary) {
+        // TODO: fix the bottom, is NULL
+        // assert(image->vk.base.object_name);
+        // std::string img_name(image->vk.base.object_name);
+        std::string img_name("SCENE");
+
+        if (outputImages.find(img_name) == outputImages.end()) {
+            std::time_t raw_time = std::time(0);
+            struct tm *time_info;
+            char time_buf[30];
+
+            time_info = localtime(&raw_time);
+
+            strftime(time_buf, sizeof(time_buf), "%d-%m-%Y-%H-%M-%S-", time_info);
+
+            std::string time_offset(time_buf);
+            std::string new_img_file_name = time_offset + img_name;
+
+            outputImages[img_name] = new_img_file_name + ".ppm";
+            printf("gpgpusim: saving image %s to file %s\n", img_name.c_str(), outputImages[img_name].c_str());
+
+            img_bin = fopen(outputImages[img_name].c_str(), "w");
+            fprintf(img_bin, "P3\n%d %d\n255\n", width, height);
+        }
+
+        uint32_t header_offset = 
+            strlen("P3\n \n255\n") + std::to_string(width).length() + std::to_string(height).length();
+        uint32_t value_offset = (gl_LaunchIDEXT_X + gl_LaunchIDEXT_Y * width) * (3*3 + 3);
+        fseeko(img_bin, header_offset + value_offset, SEEK_SET);
+        fprintf(img_bin, "%3.0f %3.0f %3.0f\n", 
+                hitValue_X * 255, hitValue_Y * 255, hitValue_Z * 255);
+    }
+
     // Setup transaction record for timing model
     ImageMemoryTransactionRecord transaction;
     transaction.type = ImageTransactionType::IMAGE_STORE;
 
     VkImageTiling tiling = image->vk.tiling;
-    uint32_t width = image->vk.extent.width;
-    uint32_t height = image->vk.extent.height;
     uint32_t pixelX = gl_LaunchIDEXT_X;
     uint32_t pixelY = gl_LaunchIDEXT_Y;
 
@@ -2859,3 +2940,4 @@ void* VulkanRayTracing::allocBuffer(void* bufferAddr, uint64_t bufferSize)
     mem->bind_vulkan_buffer(bufferAddr, bufferSize, devPtr);
     return devPtr;
 }
+
