@@ -2026,7 +2026,6 @@ void VulkanRayTracing::getTexture(struct DESCRIPTOR_STRUCT *desc,
     ImageMemoryTransactionRecord transaction;
     transaction.type = ImageTransactionType::TEXTURE_LOAD;
     transaction.address = c;
-    transaction.address = 0;
     transaction.size = 4;
     transactions.push_back(transaction);
 
