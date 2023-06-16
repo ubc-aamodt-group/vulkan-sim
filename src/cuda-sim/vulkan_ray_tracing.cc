@@ -1621,6 +1621,9 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
     int32_t current_shader_counter = -1;
     mem->write(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &current_shader_counter, thread, pI);
 
+    int32_t current_shader_type = -1;
+    mem->write(&(traversal_data->current_shader_type), sizeof(traversal_data->current_shader_type), &current_shader_type, thread, pI);
+
     uint32_t missIndex;
     mem->read(&(traversal_data->missIndex), sizeof(traversal_data->missIndex), &missIndex);
 
@@ -1647,6 +1650,9 @@ void VulkanRayTracing::callClosestHitShader(const ptx_instruction *pI, ptx_threa
 
     int32_t current_shader_counter = -1;
     mem->write(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &current_shader_counter, thread, pI);
+
+    int32_t current_shader_type = -1;
+    mem->write(&(traversal_data->current_shader_type), sizeof(traversal_data->current_shader_type), &current_shader_type, thread, pI);
 
     VkGeometryTypeKHR geometryType;
     mem->read(&(traversal_data->closest_hit.geometryType), sizeof(traversal_data->closest_hit.geometryType), &geometryType);
@@ -1680,6 +1686,9 @@ void VulkanRayTracing::callIntersectionShader(const ptx_instruction *pI, ptx_thr
     Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
     mem->write(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter, thread, pI);
 
+    int32_t current_shader_type = 1;
+    mem->write(&(traversal_data->current_shader_type), sizeof(traversal_data->current_shader_type), &current_shader_type, thread, pI);
+
     warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
     uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);
 
@@ -1697,6 +1706,9 @@ void VulkanRayTracing::callAnyHitShader(const ptx_instruction *pI, ptx_thread_in
     memory_space *mem = thread->get_global_memory();
     Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
     mem->write(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter, thread, pI);
+
+    int32_t current_shader_type = 2;
+    mem->write(&(traversal_data->current_shader_type), sizeof(traversal_data->current_shader_type), &current_shader_type, thread, pI);
 
     warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
     uint32_t hitGroupIndex = table->get_hitGroupIndex(shader_counter, thread->get_tid().x, pI, thread);

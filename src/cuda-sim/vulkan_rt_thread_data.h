@@ -48,7 +48,7 @@ typedef struct Traversal_data {
     float Tmin;
     float Tmax;
     int32_t current_shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
-
+    int32_t current_shader_type; 
     uint32_t n_all_hits;
     uint32_t rayFlags;
     uint32_t cullMask;

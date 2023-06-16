@@ -6768,13 +6768,26 @@ void load_ray_instance_custom_index_impl(const ptx_instruction *pI, ptx_thread_i
   uint32_t shader_counter;
   mem->read(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter);
 
+  uint32_t shader_type;
+  mem->read(&(traversal_data->current_shader_type), sizeof(traversal_data->current_shader_type), &shader_type);
+
   uint32_t instance_index;
-  if(shader_counter == -1) // not in intersection shader
+  if(shader_counter == -1) // not in intersection shader or anyhit shader
     mem->read(&(traversal_data->closest_hit.instance_index), sizeof(traversal_data->closest_hit.instance_index), &instance_index);
   else {
-
-    warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
+    // intersection shader
+    if (shader_type == 1) {
+      warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+      instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
+    }
+    else if (shader_type == 2) {
+      warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+      instance_index = table->get_instanceID(shader_counter, thread->get_tid().x, pI, thread);
+    }
+    else {
+      printf("Unrecognized shader_type %d\n", shader_type);
+      abort();
+    }
   }
 
   assert(pI->get_num_operands() == 1);
@@ -6792,12 +6805,25 @@ void load_primitive_id_impl(const ptx_instruction *pI, ptx_thread_info *thread) 
   uint32_t shader_counter;
   mem->read(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &shader_counter);
 
+  uint32_t shader_type;
+  mem->read(&(traversal_data->current_shader_type), sizeof(traversal_data->current_shader_type), &shader_type);
+
   uint32_t primitive_index;
   if(shader_counter == -1) // not in intersection shader
     mem->read(&(traversal_data->closest_hit.primitive_index), sizeof(traversal_data->closest_hit.primitive_index), &primitive_index);
   else {
-    warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
-    primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
+    if (shader_type == 1) {
+      warp_intersection_table* table = VulkanRayTracing::intersection_table[thread->get_ctaid().x][thread->get_ctaid().y];
+      primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
+    }
+    else if (shader_type == 2) {
+      warp_intersection_table* table = VulkanRayTracing::anyhit_table[thread->get_ctaid().x][thread->get_ctaid().y];
+      primitive_index = table->get_primitiveID(shader_counter, thread->get_tid().x, pI, thread);
+    }
+    else {
+      printf("Unrecognized shader_type %d\n", shader_type);
+      abort();
+    }
   }
 
 
