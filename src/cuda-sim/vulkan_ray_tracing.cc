@@ -917,14 +917,16 @@ void VulkanRayTracing::traceRay(VkAccelerationStructureKHR _topLevelAS,
                         float world_thit = thit / worldToObject_tMultiplier;
 
                         //TODO: why the Tmin Tmax consition wasn't handled in the object coordinates?
-                        if(hit && Tmin <= world_thit && world_thit <= Tmax && world_thit < min_thit)
+                        if(hit && Tmin <= world_thit && world_thit <= Tmax)
                         {
                             if (debugTraversal)
                             {
                                 traversalFile << "quad node " << (void *)leaf_addr << ", primitiveID " << leaf.PrimitiveIndex0 << " is the closest hit. world_thit " << thit / worldToObject_tMultiplier;
                             }
 
-                            min_thit = thit / worldToObject_tMultiplier;
+                            if (skipAnyHitShader && world_thit < min_thit) {
+                                min_thit = thit / worldToObject_tMultiplier;
+                            }
                             min_thit_object = thit;
                             closest_leaf = leaf;
                             closest_instanceLeaf = instanceLeaf;
@@ -1617,6 +1619,10 @@ void VulkanRayTracing::callMissShader(const ptx_instruction *pI, ptx_thread_info
 
     memory_space *mem = thread->get_global_memory();
     Traversal_data* traversal_data = thread->RT_thread_data->traversal_data.back();
+
+    bool hit_geometry;
+    mem->read(&(traversal_data->hit_geometry), sizeof(bool), &hit_geometry);
+    assert(!hit_geometry);
 
     int32_t current_shader_counter = -1;
     mem->write(&(traversal_data->current_shader_counter), sizeof(traversal_data->current_shader_counter), &current_shader_counter, thread, pI);

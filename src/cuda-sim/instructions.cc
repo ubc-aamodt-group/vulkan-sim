@@ -7545,6 +7545,7 @@ void anyhit_exit_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
         VSIM_DPRINTF("gpgpusim: Ray [%d] closest hit at (%5.3f, %5.3f, %5.3f) with t = %5.3f\n", thread->get_uid(), closest_hit.barycentric_coordinates.x, closest_hit.barycentric_coordinates.y, closest_hit.barycentric_coordinates.z, closest_hit.world_min_thit);
 
         thread->RT_thread_data->set_hitAttribute(closest_hit.barycentric_coordinates, pI, thread);
+        mem->write(&(traversal_data->hit_geometry), sizeof(traversal_data->hit_geometry), &hit_exists, thread, pI);
         mem->write(&(traversal_data->closest_hit), sizeof(Hit_data), &closest_hit, thread, pI);
       }
 
@@ -7644,7 +7645,7 @@ void hit_geometry_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
       0);  // inverting predicate since ptxplus uses "1" for a set zero flag
 
   // Predicate is set to 1 when jumping over the section
-  VSIM_DPRINTF("gpgpusim: hit_geometry_impl -> %s\n", data.pred ? "miss" : "closest hit");
+  VSIM_DPRINTF("gpgpusim: Ray [%d] hit_geometry_impl -> %s\n", thread->get_uid(), data.pred ? "miss" : "closest hit");
 
   thread->set_operand_value(dst, data, PRED_TYPE, thread, pI);
 
