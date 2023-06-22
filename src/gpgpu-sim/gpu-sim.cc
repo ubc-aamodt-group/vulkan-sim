@@ -1522,7 +1522,7 @@ void gpgpu_sim::gpu_print_stat() {
   }
   fprintf(statfout, "\n");
   fprintf(statfout, "inst_class_by_shader\n");
-  for (unsigned i=0; i<5; i++) {
+  for (unsigned i=0; i<16; i++) {
     fprintf(statfout, "%d:", i);
     for (unsigned j=0; j<20; j++) {
       fprintf(statfout, "%d\t", gpgpu_ctx->func_sim->g_inst_class_stat[i][j]);

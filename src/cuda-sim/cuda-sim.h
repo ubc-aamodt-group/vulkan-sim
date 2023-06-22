@@ -165,7 +165,7 @@ class cuda_sim {
   unsigned g_max_tree_depth = 0;
   unsigned g_total_shaders = 0;
   unsigned long long g_inst_type_latency[28] = {0};
-  unsigned g_inst_class_stat[6][20] = {};
+  unsigned g_inst_class_stat[16][20] = {};
   std::vector<std::pair<unsigned, unsigned> > g_traceray_instructions;
   
   char *cdp_latency_str;
