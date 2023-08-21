@@ -42,7 +42,7 @@ include ../../version_detection.mk
 
 OUTPUT_DIR=$(SIM_OBJ_FILES_DIR)/cuda-sim
 
-MESA_PATH := ../../../mesa
+MESA_PATH := ../../../mesa-vulkan-sim
 VULKAN_PATHS += -I$(MESA_PATH)/src/intel/
 VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/
 VULKAN_PATHS += -I$(MESA_PATH)/include/
