@@ -4,10 +4,10 @@ Welcome to Vulkan-Sim, a cycle level GPU simulator for Vulkan ray tracing worklo
 This document will walk you through Vulkan-Sim installation.
 
 If you use Vulkan-Sim in your research, please cite:  
-Mohammadreza Saed, Yuan Hsi Chou, Lufei Liu, Tyler Nowicki, Tor M. Aamodt, Vulkan-Sim: A GPU Architecture Simulator for Ray Tracing, In proceedings of the ACM/IEEE International Symposium on Microarchitecture (MICRO 2022), Chicago, Illinois, October 1–5, 2022.
+> Mohammadreza Saed, Yuan Hsi Chou, Lufei Liu, Tyler Nowicki, Tor M. Aamodt, Vulkan-Sim: A GPU Architecture Simulator for Ray Tracing, In proceedings of the ACM/IEEE International Symposium on Microarchitecture (MICRO 2022), Chicago, Illinois, October 1–5, 2022.
 
-Vulkan-Sim version 1.1.0 and above is also compatible with LumiBench. If you use LumiBench in your research, please cite:
-Lufei Liu, Mohammadreza Saed, Yuan Hsi Chou, Davit Grigoryan, Tyler Nowicki, Tor M. Aamodt, LumiBench: A Benchmark Suite for Hardware Ray Tracing, In proceedings of the IEEE International Symposium on Workload Characterization (IISWC), Ghent, Belgium October 1–3, 2023.
+Vulkan-Sim version 1.1.0 and above is also compatible with LumiBench. If you use LumiBench in your research, please cite:  
+> Lufei Liu, Mohammadreza Saed, Yuan Hsi Chou, Davit Grigoryan, Tyler Nowicki, Tor M. Aamodt, LumiBench: A Benchmark Suite for Hardware Ray Tracing, In proceedings of the IEEE International Symposium on Workload Characterization (IISWC), Ghent, Belgium, October 1–3, 2023.
 
 #  Required Software/Packages 
 - Ubuntu 20.04
@@ -33,7 +33,6 @@ cd vulkan-sim-root/
 git clone https://github.com/ubc-aamodt-group/vulkan-sim
 git clone https://github.com/ubc-aamodt-group/mesa-vulkan-sim
 ```
-
 3. The resulting folder structure should look like this.
 ```
 vulkan-sim-root/-|- vulkan-sim/
