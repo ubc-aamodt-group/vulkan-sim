@@ -6,7 +6,7 @@ This document will walk you through Vulkan-Sim installation.
 If you use Vulkan-Sim in your research, please cite:  
 > Mohammadreza Saed, Yuan Hsi Chou, Lufei Liu, Tyler Nowicki, Tor M. Aamodt, Vulkan-Sim: A GPU Architecture Simulator for Ray Tracing, In proceedings of the ACM/IEEE International Symposium on Microarchitecture (MICRO 2022), Chicago, Illinois, October 1–5, 2022.
 
-Vulkan-Sim version 1.1.0 and above is also compatible with LumiBench. If you use LumiBench in your research, please cite:  
+Vulkan-Sim version 2.0.0 and above is also compatible with LumiBench. If you use LumiBench in your research, please cite:  
 > Lufei Liu, Mohammadreza Saed, Yuan Hsi Chou, Davit Grigoryan, Tyler Nowicki, Tor M. Aamodt, LumiBench: A Benchmark Suite for Hardware Ray Tracing, In proceedings of the IEEE International Symposium on Workload Characterization (IISWC), Ghent, Belgium, October 1–3, 2023.
 
 #  Required Software/Packages 
@@ -28,7 +28,7 @@ sudo apt install -y build-essential git ninja-build meson libboost-all-dev xutil
 mkdir vulkan-sim-root/
 cd vulkan-sim-root/
 ```
-2. Clone the following repos in the folder you just created. Ensure that the cloned Mesa version matches the Vulkan-Sim version. For example, Vulkan-Sim version 1.1.0 is only supported with mesa-vulkan-sim v1.1.0 tag. 
+2. Clone the following repos in the folder you just created. Ensure that the cloned Mesa version matches the Vulkan-Sim version. For example, Vulkan-Sim version 2.0.0 is only supported with mesa-vulkan-sim v2.0.0 release. 
 ``` bash
 git clone https://github.com/ubc-aamodt-group/vulkan-sim
 git clone https://github.com/ubc-aamodt-group/mesa-vulkan-sim
@@ -79,7 +79,7 @@ cd ../mesa-vulkan-sim/
 ninja -C build/ install
 ```
 
-### Running the RayTracingInVulkan application with Vulkan-Sim
+# Running RayTracingInVulkan (LumiBench) with Vulkan-Sim
 1. Download RayTracingInVulkan from our repo to a local folder
 ``` bash
 git clone https://github.com/ubc-aamodt-group/RayTracingInVulkan.git
@@ -105,7 +105,7 @@ cd build/linux/bin/
 
 Please refer to the README in RayTracingInVulkan for more information. 
 
-Note that Vulkan-Sim version 1.1.0 no longer supports the trace runner. 
+Note that Vulkan-Sim version 2.0.0 no longer supports the trace runner. 
 
 #  Troubleshooting   
 - If meson indicates missing libraries when compiling mesa, please follow the instructions and install the corresponding packages. E.g: If missing library `elf`, then install the package with `sudo apt install libelf-dev`
