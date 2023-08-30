@@ -847,6 +847,9 @@ bool warp_inst_t::check_pending_writes(new_addr_type addr) {
     m_pending_writes.erase(addr);
     return true;
   }
+  else {
+    return false;
+  }
 }
 
 unsigned warp_inst_t::dec_thread_latency(std::deque<std::pair<unsigned, new_addr_type> > &store_queue) { 
@@ -1330,6 +1333,11 @@ void kernel_info_t::destroy_cta_streams() {
   }
   printf("size %lu\n", stream_size);
   m_cta_streams.clear();
+
+  if ((get_uid() >= (m_max_simulated_kernels)) && (m_max_simulated_kernels != 0)) {
+    printf("Max simulated kernels of %d has reached, exiting.\n", m_max_simulated_kernels);
+    exit(0);
+  }
 }
 
 #define MAX_VIRTUAL_ST_ENTRIES 32

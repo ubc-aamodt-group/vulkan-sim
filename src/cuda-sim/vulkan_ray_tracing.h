@@ -30,9 +30,14 @@
 #define VULKAN_RAY_TRACING_H
 
 #include "vulkan/vulkan.h"
+#if defined(MESA_USE_INTEL_DRIVER)
 #include "vulkan/vulkan_intel.h"
-
 #include "vulkan/anv_acceleration_structure.h"
+
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+#include "lvp_acceleration_structure.h"
+#endif
+
 #include "intersection_table.h"
 #include "compiler/spirv/spirv.h"
 
@@ -149,6 +154,34 @@ typedef struct shader_stage_info {
     char* function_name;
 } shader_stage_info;
 
+
+typedef struct Pixel{
+    Pixel(float c0, float c1, float c2, float c3)
+    : c0(c0), c1(c1), c2(c2), c3(c3) {}
+    Pixel() {}
+
+    union
+    {
+        float r;
+        float c0;
+    };
+    union
+    {
+        float g;
+        float c1;
+    };
+    union
+    {
+        float b;
+        float c2;
+    };
+    union
+    {
+        float a;
+        float c3;
+    };
+} Pixel;
+
 // For launcher
 typedef struct storage_image_metadata
 {
@@ -186,8 +219,31 @@ typedef struct texture_metadata
     VkFilter filter;
 } texture_metadata;
 
+
+#if defined(MESA_USE_INTEL_DRIVER)
+#define DESCRIPTOR_SET_STRUCT anv_descriptor_set
+#define DESCRIPTOR_STRUCT anv_descriptor
+#define DESCRIPTOR_LAYOUT_STRUCT anv_descriptor_set_binding_layout
+
+#define VSIM_DEBUG_PRINT 0
 struct anv_descriptor_set;
 struct anv_descriptor;
+
+#elif defined(MESA_USE_LVPIPE_DRIVER)
+#define DESCRIPTOR_SET_STRUCT lvp_descriptor_set
+#define DESCRIPTOR_STRUCT lvp_descriptor
+#define DESCRIPTOR_LAYOUT_STRUCT lvp_descriptor_set_binding_layout
+
+struct lvp_descriptor_set;
+struct lvp_descriptor;
+
+#endif
+
+#define VSIM_DPRINTF(...) \
+   if(VSIM_DEBUG_PRINT) { \
+      printf(__VA_ARGS__); \
+      fflush(stdout); \
+   }
 
 class VulkanRayTracing
 {
@@ -199,18 +255,21 @@ private:
     static std::vector<std::vector<Descriptor> > descriptors;
     static std::ofstream imageFile;
     static bool firstTime;
-    static struct anv_descriptor_set *descriptorSet;
+    static struct DESCRIPTOR_SET_STRUCT *descriptorSet;
 
     // For Launcher
     static void* launcher_descriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS];
     static void* launcher_deviceDescriptorSets[MAX_DESCRIPTOR_SETS][MAX_DESCRIPTOR_SET_BINDINGS];
     static std::vector<void*> child_addrs_from_driver;
+    static std::map<void*, void*> VulkanRayTracing::blas_addr_map;
+    static void* tlas_addr;
     static bool dumped;
     static bool _init_;
 public:
     // static RayDebugGPUData rayDebugGPUData[2000][2000];
     static warp_intersection_table*** intersection_table;
-    static const IntersectionTableType intersectionTableType = IntersectionTableType::Baseline;
+    static warp_intersection_table*** anyhit_table;
+    static IntersectionTableType intersectionTableType;
 
 private:
     static bool mt_ray_triangle_test(float3 p0, float3 p1, float3 p2, Ray ray_properties, float* thit);
@@ -242,7 +301,7 @@ public:
     static void setPipelineInfo(VkRayTracingPipelineCreateInfoKHR* pCreateInfos);
     static void setGeometries(VkAccelerationStructureGeometryKHR* pGeometries, uint32_t geometryCount);
     static void setAccelerationStructure(VkAccelerationStructureKHR accelerationStructure);
-    static void setDescriptorSet(struct anv_descriptor_set *set);
+    static void setDescriptorSet(struct DESCRIPTOR_SET_STRUCT *set);
     static void invoke_gpgpusim();
     static uint32_t registerShaders(char * shaderPath, gl_shader_stage shaderType);
     static void vkCmdTraceRaysKHR( // called by vulkan application
@@ -259,22 +318,22 @@ public:
     static void callMissShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callClosestHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
     static void callIntersectionShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter);
-    static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread);
+    static void callAnyHitShader(const ptx_instruction *pI, ptx_thread_info *thread, uint32_t shader_counter);
     static void setDescriptor(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void* getDescriptorAddress(uint32_t setID, uint32_t binding);
 
-    static void image_store(struct anv_descriptor* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchsIDEXT_W, 
+    static void image_store(struct DESCRIPTOR_STRUCT* desc, uint32_t gl_LaunchIDEXT_X, uint32_t gl_LaunchIDEXT_Y, uint32_t gl_LaunchIDEXT_Z, uint32_t gl_LaunchsIDEXT_W, 
               float hitValue_X, float hitValue_Y, float hitValue_Z, float hitValue_W, const ptx_instruction *pI, ptx_thread_info *thread);
-    static void getTexture(struct anv_descriptor *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3, std::vector<ImageMemoryTransactionRecord>& transactions, uint64_t launcher_offset = 0);
-    static void image_load(struct anv_descriptor *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3);
+    static void getTexture(struct DESCRIPTOR_STRUCT *desc, float x, float y, float lod, float &c0, float &c1, float &c2, float &c3, std::vector<ImageMemoryTransactionRecord>& transactions, uint64_t launcher_offset = 0);
+    static void image_load(struct DESCRIPTOR_STRUCT *desc, uint32_t x, uint32_t y, float &c0, float &c1, float &c2, float &c3);
 
     static void dump_descriptor_set(uint32_t setID, uint32_t descID, void *address, uint32_t size, VkDescriptorType type);
     static void dump_descriptor_set_for_AS(uint32_t setID, uint32_t descID, void *address, uint32_t desc_size, VkDescriptorType type, uint32_t backwards_range, uint32_t forward_range, bool split_files, VkAccelerationStructureKHR _topLevelAS);
-    static void dump_descriptor_sets(struct anv_descriptor_set *set);
-    static void dump_AS(struct anv_descriptor_set *set, VkAccelerationStructureKHR _topLevelAS);
+    static void dump_descriptor_sets(struct DESCRIPTOR_SET_STRUCT *set);
+    static void dump_AS(struct DESCRIPTOR_SET_STRUCT *set, VkAccelerationStructureKHR _topLevelAS);
     static void dump_callparams_and_sbt(void *raygen_sbt, void *miss_sbt, void *hit_sbt, void *callable_sbt, bool is_indirect, uint32_t launch_width, uint32_t launch_height, uint32_t launch_depth, uint32_t launch_size_addr);
-    static void dumpTextures(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
-    static void dumpStorageImage(struct anv_descriptor *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
+    static void dumpTextures(struct DESCRIPTOR_STRUCT *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
+    static void dumpStorageImage(struct DESCRIPTOR_STRUCT *desc, uint32_t setID, uint32_t binding, VkDescriptorType type);
     static void setDescriptorSetFromLauncher(void *address, void *deviceAddress, uint32_t setID, uint32_t descID);
     static void setStorageImageFromLauncher(void *address, 
                                             void *deviceAddress,
@@ -305,6 +364,9 @@ public:
                                        uint32_t row_pitch_B,
                                        uint32_t filter);
     static void pass_child_addr(void *address);
+    static void allocBLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr);
+    static void allocTLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr);
+    static void* allocBuffer(void* bufferAddr, uint64_t bufferSize);
     static void findOffsetBounds(int64_t &max_backwards, int64_t &min_backwards, int64_t &min_forwards, int64_t &max_forwards, VkAccelerationStructureKHR _topLevelAS);
     static void* gpgpusim_alloc(uint32_t size);
 };

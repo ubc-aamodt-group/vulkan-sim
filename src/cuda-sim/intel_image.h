@@ -41,33 +41,6 @@
 #include "vulkan_ray_tracing.h"
 
 
-typedef struct Pixel{
-    Pixel(float c0, float c1, float c2, float c3)
-    : c0(c0), c1(c1), c2(c2), c3(c3) {}
-    Pixel() {}
-
-    union
-    {
-        float r;
-        float c0;
-    };
-    union
-    {
-        float g;
-        float c1;
-    };
-    union
-    {
-        float b;
-        float c2;
-    };
-    union
-    {
-        float a;
-        float c3;
-    };
-} Pixel;
-
 float SRGB_to_linearRGB(float s)
 {
     assert(0 <= s && s <= 1);

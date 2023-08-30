@@ -85,7 +85,7 @@ extern void gpgpusim_addTreelets_cpp(VkAccelerationStructureKHR accelerationStru
     VulkanRayTracing::setAccelerationStructure(accelerationStructure);
 }
 
-extern "C" void gpgpusim_setDescriptorSet(struct anv_descriptor_set *set)
+extern "C" void gpgpusim_setDescriptorSet(struct DESCRIPTOR_SET_STRUCT *set)
 {
     VulkanRayTracing::setDescriptorSet(set);
 }
@@ -116,7 +116,7 @@ extern void gpgpusim_vkCmdTraceRaysKHR_cpp(
 
 extern void gpgpusim_setDescriptorSet_cpp(void *set)
 {
-    VulkanRayTracing::setDescriptorSet((struct anv_descriptor_set*) set);
+    VulkanRayTracing::setDescriptorSet((struct DESCRIPTOR_SET_STRUCT*) set);
 }
 
 extern void gpgpusim_setDescriptorSetFromLauncher_cpp(void *address, void *deviceAddress, uint32_t setID, uint32_t descID)
@@ -163,6 +163,21 @@ extern void gpgpusim_setTextureFromLauncher_cpp(void *address,
 extern "C" void gpgpusim_pass_child_addr(void *address)
 {
     VulkanRayTracing::pass_child_addr(address);
+}
+
+extern "C" void gpgpusim_allocBLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr)
+{
+    VulkanRayTracing::allocBLAS(rootAddr, bufferSize, gpgpusimAddr);
+}
+
+extern "C" void gpgpusim_allocTLAS(void* rootAddr, uint64_t bufferSize, void* gpgpusimAddr)
+{
+    VulkanRayTracing::allocTLAS(rootAddr, bufferSize, gpgpusimAddr);
+}
+
+extern "C" void* gpgpusim_allocBuffer(void* bufferAddr, uint64_t bufferSize)
+{
+    return VulkanRayTracing::allocBuffer(bufferAddr, bufferSize);
 }
 
 #endif /* GPGPUSIM_CALLS_FROM_MESA_CC */

@@ -47,6 +47,18 @@ VULKAN_PATHS += -I$(MESA_PATH)/src/intel/
 VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/
 VULKAN_PATHS += -I$(MESA_PATH)/include/
 VULKAN_PATHS += -I$(MESA_PATH)/src/
+
+# Lavapipe additions
+VULKAN_PATHS += -I$(MESA_PATH)/src/compiler/nir/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/compiler/nir/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/gallium/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/vulkan/util/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/vulkan/runtime/
+VULKAN_PATHS += -I$(MESA_PATH)/build/src/gallium/frontends/lavapipe/
+VULKAN_PATHS += -I$(MESA_PATH)/src/gallium/auxiliary/
+VULKAN_PATHS += -I$(MESA_PATH)/src/gallium/frontends/lavapipe/
+VULKAN_PATHS += -I$(MESA_PATH)/src/vulkan/runtime/
+
 VULKAN_PATHS += -I$(MESA_PATH)/src/gallium/include/
 VULKAN_PATHS += -I$(MESA_PATH)/src/mesa
 VULKAN_PATHS += -I$(MESA_PATH)/src/mapi/
@@ -55,14 +67,24 @@ VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/vulkan/
 VULKAN_PATHS += -I$(MESA_PATH)/build/src/intel/vulkan/
 VULKAN_PATHS += -I$(MESA_PATH)/src/vulkan/wsi/
 
+LLVM_PATH = -I/usr/lib/llvm-10/include
+
 LIB_Vulkan_Intel_DIR = $(MESA_PATH)/build/install/lib/x86_64-linux-gnu/
 
-OPT	:= -fpermissive -O3 -g3 -Wall -Wno-unused-function -Wno-sign-compare $(VULKAN_PATHS)
+OPT	:= -fpermissive -O3 -g3 -Wall -Wno-unused-function -Wno-sign-compare $(VULKAN_PATHS) $(LLVM_PATH)
 ifeq ($(DEBUG),1)
-	OPT := -fpermissive -g3 -Wall  -Wno-unused-function -Wno-sign-compare $(VULKAN_PATHS)
+	OPT := -fpermissive -g3 -Wall  -Wno-unused-function -Wno-sign-compare $(VULKAN_PATHS) $(LLVM_PATH)
 endif
 OPT += -I$(CUDA_INSTALL_PATH)/include  -I$(OUTPUT_DIR)/ -I. -I$(SIM_OBJ_FILES_DIR)
 OPT += -fPIC 
+
+# Temporary hardcode value
+OPT += -DMESA_USE_LVPIPE_DRIVER
+ifeq ($(DEBUG),1)
+	OPT += -DVSIM_DEBUG_PRINT=1
+else
+	OPT += -DVSIM_DEBUG_PRINT=0
+endif
 
 ifeq ($(TRACE),1)
 	OPT += -DTRACING_ON=1
@@ -73,7 +95,7 @@ ifeq ($(INTEL),1)
     CXX_OPT += -std=c++0x
 else 
 ifeq ($(GNUC_CPP0X),1)
-    CXX_OPT += -std=c++0x
+    CXX_OPT += -std=c++14
 endif
 endif
 

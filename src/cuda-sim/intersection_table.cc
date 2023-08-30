@@ -54,14 +54,14 @@ Coalescing_warp_intersection_table::add_intersection(uint32_t hit_group_index, u
         loads.push_back(MemoryTransactionRecord(&table[i].hitGroupIndex, 4, TransactionType::Intersection_Table_Load));
         
         uint32_t hitGroupIndex;
-        mem->read(&hitGroupIndex, sizeof(uint32_t), &(table[i].hitGroupIndex));
+        mem->read(&(table[i].hitGroupIndex), sizeof(uint32_t), &hitGroupIndex);
         // mem->read(&table[i], sizeof(Coalescing_Entry), &entry);
         if (hitGroupIndex == hit_group_index)
         {
             bool thread_mask_tid;
-            mem->read(&thread_mask_tid, sizeof(bool), &(table[i].thread_mask[tid]));
+            mem->read(&(table[i].thread_mask[tid]), sizeof(bool), &thread_mask_tid);
             // loads.push_back(MemoryTransactionRecord(&table[i].thread_mask[tid], 1, TransactionType::Intersection_Table_Load));
-            if (!table[i].thread_mask[tid])
+            if (!thread_mask_tid)
             {
                 thread_mask_tid = true;
                 mem->write(&(table[i].thread_mask[tid]), sizeof(bool), &thread_mask_tid, thread, pI);
@@ -98,10 +98,14 @@ Coalescing_warp_intersection_table::add_intersection(uint32_t hit_group_index, u
 }
 
 
-void Coalescing_warp_intersection_table::clear() {
+void Coalescing_warp_intersection_table::clear(const ptx_instruction *pI, ptx_thread_info *thread) {
+    memory_space *mem = thread->get_global_memory();
+
     for (int i = 0; i < tableSize; i++) 
-        for(int i = 0; i < 32; i++) {
-            table->thread_mask[i] = false;
+        for(int j = 0; j < 32; i++) {
+            // table[i]->thread_mask[j] = false;
+            bool thread_mask_tid = false;
+            mem->write(&(table[i].thread_mask[j]), sizeof(bool), &thread_mask_tid, thread, pI);
         }
     tableSize = 0;
 }
@@ -182,7 +186,7 @@ Baseline_warp_intersection_table::add_intersection(uint32_t hit_group_index, uin
     return std::make_pair(loads, stores);
 }
 
-void Baseline_warp_intersection_table::clear() {
+void Baseline_warp_intersection_table::clear(const ptx_instruction *pI, ptx_thread_info *thread) {
     for(int i = 0; i < 32; i++)
         index[i] = 0;
 }

@@ -629,14 +629,11 @@ void shader_core_stats::print_roofline(FILE *fout) const {
     perf_str.append("\t");
     cacheline_str.append(std::to_string(rt_total_cacheline_fetched[i]));
     cacheline_str.append("\t");
-    cycle_str.append(std::to_string(rt_total_cycles[i]));
-    cycle_str.append("\t");
     int_str.append(std::to_string(rt_total_intersection_stages[i]));
     int_str.append("\t");
   }
 
   fprintf(fout, "rt_total_cacheline_fetched = %s\n", cacheline_str.c_str());
-  fprintf(fout, "rt_total_cycles = %s\n", cycle_str.c_str());
   fprintf(fout, "rt_total_intersection_stages = %s\n", int_str.c_str());
   fprintf(fout, "rt_op_intensity = %s\n", op_int_str.c_str());
   fprintf(fout, "rt_perf = %s\n", perf_str.c_str());
@@ -775,7 +772,8 @@ void shader_core_stats::print(FILE *fout) const {
   // RT unit stats
   fprintf(fout, "rt_avg_warp_latency = %f\n", (float)rt_total_warp_latency / rt_total_warps);
   fprintf(fout, "rt_avg_thread_latency = %f\n", (float)rt_total_thread_latency / rt_total_warps);
-  fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_occupancy / rt_total_warps);
+  fprintf(fout, "rt_avg_efficiency = %f\n", (float)rt_total_simt_efficiency / rt_total_warps);
+  fprintf(fout, "rt_avg_warp_occupancy = %f\n", (float)rt_total_warp_latency / rt_total_cycles_sum / m_config->m_rt_max_warps);
   print_roofline(fout);
   fprintf(fout, "rt_writes = %d\n", rt_writes);
   fprintf(fout, "rt_max_mem_store_q = %d\n", rt_max_store_q);
@@ -1040,7 +1038,7 @@ void shader_core_stats::visualizer_print(gzFile visualizer_file) {
 
   gzprintf(visualizer_file, "cacheMissRate_globalL1_all:  ");
   for (unsigned i = 0; i < m_config->num_shader(); i++)
-    gzprintf(visualizer_file, "%u ", l1d_missrate[i]);
+    gzprintf(visualizer_file, "%f ", l1d_missrate[i]);
   gzprintf(visualizer_file, "\n");
   gzprintf(visualizer_file, "L1DMiss:  ");
   for (unsigned i = 0; i < m_config->num_shader(); i++)
@@ -3085,7 +3083,9 @@ void rt_unit::cycle() {
   // Check to see if any warps are complete
   int completed_warp_uid = -1;
   for (auto it=m_current_warps.begin(); it!=m_current_warps.end(); it++) {
-    
+    warp_inst_t debug_inst = it->second;
+    assert(it->first == debug_inst.get_uid());
+    RT_DPRINTF("Checking warp inst uid: %d\n", debug_inst.get_uid());
     // A completed warp has no more memory accesses and all the intersection delays are complete and has no pending writes
     if (it->second.rt_mem_accesses_empty() && it->second.rt_intersection_delay_done() && !it->second.has_pending_writes()) {
       RT_DPRINTF("Shader %d: Warp %d (uid: %d) completed!\n", m_sid, it->second.warp_id(), it->first);
@@ -3128,12 +3128,16 @@ void rt_unit::cycle() {
         float avg_thread_cycles = (float)total_thread_cycles / m_config->warp_size;
         m_stats->rt_total_thread_latency += avg_thread_cycles;
 
-        float rt_warp_occupancy = (float)total_thread_cycles / (m_config->warp_size * total_cycles);
-        m_stats->rt_total_warp_occupancy += rt_warp_occupancy;
+        float rt_simt_efficiency = (float)total_thread_cycles / (m_config->warp_size * total_cycles);
+        m_stats->rt_total_simt_efficiency += rt_simt_efficiency;
         
         // Complete max 1 warp per cycle (?)
         break;
       }
+    }
+    else
+    {
+      RT_DPRINTF("Cycle: %d, Warp inst uid: %d not done. rt_mem_accesses_empty: %d, rt_intersection_delay_done: %d, no pending_writes: %d\n", GPGPU_Context()->the_gpgpusim->g_the_gpu->gpu_sim_cycle, debug_inst.get_uid(), it->second.rt_mem_accesses_empty(), it->second.rt_intersection_delay_done(), !it->second.has_pending_writes());
     }
   }
   
@@ -3300,7 +3304,7 @@ mem_access_t rt_unit::create_mem_access(new_addr_type addr) {
   unsigned warp_parts = m_config->mem_warp_parts;
   unsigned subwarp_size = m_config->warp_size / warp_parts;
   
-  unsigned block_address = line_size_based_tag_func(addr, segment_size);
+  new_addr_type block_address = line_size_based_tag_func(addr, segment_size);
   unsigned chunk = (addr & 127) / 32;
   
   warp_inst_t::transaction_info info;

@@ -49,6 +49,8 @@
 typedef address_type mem_addr_t;
 
 #define MEM_BLOCK_SIZE (4 * 1024)
+#define VULKAN_ADDR_BLK 16
+#define VULKAN_ADDR_LOG2_BLK 4
 
 template <unsigned BSIZE>
 class mem_storage {
@@ -101,6 +103,7 @@ class memory_space {
   virtual void read(mem_addr_t addr, size_t length, void *data) const = 0;
   virtual void print(const char *format, FILE *fout) const = 0;
   virtual void set_watch(addr_t addr, unsigned watchpoint) = 0;
+  virtual void bind_vulkan_buffer(void* bufferAddr, unsigned bufferSize, void* devPtr) = 0;
 };
 
 template <unsigned BSIZE>
@@ -116,15 +119,18 @@ class memory_space_impl : public memory_space {
   virtual void print(const char *format, FILE *fout) const;
 
   virtual void set_watch(addr_t addr, unsigned watchpoint);
+  virtual void bind_vulkan_buffer(void* bufferAddr, unsigned bufferSize, void* devPtr);
 
  private:
   void read_single_block(mem_addr_t blk_idx, mem_addr_t addr, size_t length,
                          void *data) const;
+  void* find_vulkan_buffer(mem_addr_t addr) const;
   std::string m_name;
   unsigned m_log2_block_size;
   typedef mem_map<mem_addr_t, mem_storage<BSIZE> > map_t;
   map_t m_data;
   std::map<unsigned, mem_addr_t> m_watchpoints;
+  std::map<void*, void*> m_vulkan_address_map;
 };
 
 #endif

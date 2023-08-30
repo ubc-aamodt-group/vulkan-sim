@@ -1785,6 +1785,7 @@ class shader_core_config : public core_config {
   char * m_rt_coherence_engine_config_str;
   ray_coherence_config m_rt_coherence_engine_config;
   bool bypassL0Complet;
+  unsigned m_rt_intersection_table_type;
 };
 
 struct shader_core_stats_pod {
@@ -1906,6 +1907,7 @@ struct shader_core_stats_pod {
   // Other ray tracing stats
   unsigned long long rt_total_warp_latency;
   unsigned long long rt_total_thread_latency;
+  double rt_total_simt_efficiency;
   double rt_total_warp_occupancy;
   unsigned rt_total_warps;
   unsigned long long *rt_total_cacheline_fetched;

@@ -1105,7 +1105,9 @@ class cache_stats {
 
   unsigned g_rt_cold_miss = 0;
   unsigned g_rt_miss = 0;
-  unsigned g_nonrt_miss = 0;
+  unsigned g_rt_cache_stats[NUM_CACHE_REQUEST_STATUS] = {};
+  unsigned g_rt_cache_write_stats[NUM_CACHE_REQUEST_STATUS] = {};
+
  private:
   bool check_valid(int type, int status) const;
   bool check_fail_valid(int type, int fail) const;

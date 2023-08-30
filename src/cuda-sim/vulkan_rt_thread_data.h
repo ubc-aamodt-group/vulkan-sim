@@ -2,7 +2,10 @@
 #define VULKAN_RT_THREAD_DATA_H
 
 #include "vulkan/vulkan.h"
+
+#if defined(MESA_USE_INTEL_DRIVER)
 #include "vulkan/vulkan_intel.h"
+#endif
 
 #include "vulkan_ray_tracing.h"
 
@@ -14,8 +17,10 @@
 #include <cmath>
 #include <stack>
 
+#include "compiler/nir/nir.h"
+
 typedef struct variable_decleration_entry{
-  uint64_t type;
+  nir_variable_mode type;
   std::string name;
   uint64_t address;
   uint32_t size;
@@ -43,7 +48,8 @@ typedef struct Traversal_data {
     float Tmin;
     float Tmax;
     int32_t current_shader_counter; // set to shader_counter in call_intersection and -1 in call_miss and call_closest_hit
-
+    int32_t current_shader_type; 
+    uint32_t n_all_hits;
     uint32_t rayFlags;
     uint32_t cullMask;
     uint32_t sbtRecordOffset;
@@ -56,10 +62,11 @@ typedef struct Vulkan_RT_thread_data {
     std::vector<variable_decleration_entry> variable_decleration_table;
 
     std::vector<Traversal_data*> traversal_data;
+    std::vector<Hit_data*> all_hit_data;
 
 
-    variable_decleration_entry* get_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
-        if(type == 8192)
+    variable_decleration_entry* get_variable_decleration_entry(nir_variable_mode type, std::string name, uint32_t size) {
+        if(type == nir_var_ray_hit_attrib)
             return get_hitAttribute();
         
         for (int i = 0; i < variable_decleration_table.size(); i++) {
@@ -71,7 +78,7 @@ typedef struct Vulkan_RT_thread_data {
         return NULL;
     }
 
-    uint64_t add_variable_decleration_entry(uint64_t type, std::string name, uint32_t size) {
+    uint64_t add_variable_decleration_entry(nir_variable_mode type, std::string name, uint32_t size) {
         variable_decleration_entry entry;
         entry.type = type;
         entry.name = name;
@@ -86,7 +93,7 @@ typedef struct Vulkan_RT_thread_data {
     variable_decleration_entry* get_hitAttribute() {
         variable_decleration_entry* hitAttribute = NULL;
         for (int i = 0; i < variable_decleration_table.size(); i++) {
-            if (variable_decleration_table[i].type == 8192) {
+            if (variable_decleration_table[i].type == nir_var_ray_hit_attrib) {
                 assert (variable_decleration_table[i].address != NULL);
                 assert (hitAttribute == NULL); // There should be only 1 hitAttribute
                 hitAttribute = &(variable_decleration_table[i]);
@@ -95,14 +102,14 @@ typedef struct Vulkan_RT_thread_data {
         return hitAttribute;
     }
 
-    void set_hitAttribute(float3 barycentric) {
+    void set_hitAttribute(float3 barycentric, const ptx_instruction *pI, ptx_thread_info *thread) {
         variable_decleration_entry* hitAttribute = get_hitAttribute();
         float* address;
         if(hitAttribute == NULL) {
-            address = (float*)add_variable_decleration_entry(8192, "attribs", 12);
+            address = (float*)add_variable_decleration_entry(nir_var_ray_hit_attrib, "attribs", 12);
         }
         else {
-            assert (hitAttribute->type == 8192);
+            assert (hitAttribute->type == nir_var_ray_hit_attrib);
             assert (hitAttribute->address != NULL);
             // hitAttribute->name = name;
             address = (float*)(hitAttribute->address);
@@ -110,9 +117,9 @@ typedef struct Vulkan_RT_thread_data {
         // address[0] = barycentric.x;
         // address[1] = barycentric.y;
         // address[2] = barycentric.z;
-        gpgpu_context *ctx = GPGPU_Context();
-        CUctx_st *context = GPGPUSim_Context(ctx);
-        context->get_device()->get_gpgpu()->memcpy_to_gpu(address, &barycentric, sizeof(float3));
+
+        memory_space *mem = thread->get_global_memory();
+        mem->write(address, sizeof(float3), &barycentric, thread, pI);
     }
 } Vulkan_RT_thread_data;
 

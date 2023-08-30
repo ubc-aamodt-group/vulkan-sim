@@ -39,7 +39,7 @@
 #include <utility>
 #include <limits.h>
 
-#define INTERSECTION_TABLE_MAX_LENGTH 100
+#define INTERSECTION_TABLE_MAX_LENGTH 1000
 
 enum class IntersectionTableType {
     Baseline,
@@ -57,7 +57,7 @@ public:
             add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID,
                             const ptx_instruction *pI, ptx_thread_info *thread) = 0;
     
-    virtual void clear() = 0;
+    virtual void clear(const ptx_instruction *pI, ptx_thread_info *thread) = 0;
     virtual bool shader_exists(uint32_t tid, uint32_t shader_counter, const ptx_instruction *pI, ptx_thread_info *thread) = 0;
     virtual bool exit_shaders(uint32_t shader_counter, uint32_t tid) = 0;
     virtual uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread) = 0;
@@ -96,7 +96,7 @@ public:
     std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
             add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID,
                             const ptx_instruction *pI, ptx_thread_info *thread);
-    void clear();
+    void clear(const ptx_instruction *pI, ptx_thread_info *thread);
     bool shader_exists(uint32_t tid, uint32_t shader_counter, const ptx_instruction *pI, ptx_thread_info *thread);
     bool exit_shaders(uint32_t shader_counter, uint32_t tid);
     uint32_t get_primitiveID(uint32_t shader_counter, uint32_t tid, const ptx_instruction *pI, ptx_thread_info *thread);
@@ -125,7 +125,7 @@ public:
         delete table;
     }
 
-    void clear();
+    void clear(const ptx_instruction *pI, ptx_thread_info *thread);
 
     std::pair<std::vector<MemoryTransactionRecord>, std::vector<MemoryStoreTransactionRecord> >
             add_intersection(uint32_t hit_group_index, uint32_t tid, uint32_t primitiveID, uint32_t instanceID,

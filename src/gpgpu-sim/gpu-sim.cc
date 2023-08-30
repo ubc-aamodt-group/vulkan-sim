@@ -289,6 +289,10 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       opp, "-gpgpu_rt_intersection_latency", OPT_CSTR, &m_rt_intersection_latency_str,
       "latency of pipelined intersection tests (7 types)",
       "0,0,0,0,0,0,0");
+  option_parser_register(
+      opp, "-gpgpu_rt_intersection_table_type", OPT_UINT32, &m_rt_intersection_table_type,
+      "type of intersection table",
+      "0");
   option_parser_register(opp, "-gpgpu_cache:il1", OPT_CSTR,
                          &m_L1I_config.m_config_string,
                          "shader L1 instruction cache config "
@@ -1504,6 +1508,7 @@ void gpgpu_sim::gpu_print_stat() {
   fprintf(statfout, "\n");
 
   fprintf(statfout, "rt_num_hits = %d\n", gpgpu_ctx->func_sim->g_rt_num_hits);
+  fprintf(statfout, "rt_num_any_hits = %d\n", gpgpu_ctx->func_sim->g_rt_num_any_hits);
   fprintf(statfout, "rt_n_anyhit_rays = %d\n", gpgpu_ctx->func_sim->g_n_anyhit_rays);
   fprintf(statfout, "rt_n_closesthit_rays = %d\n", gpgpu_ctx->func_sim->g_n_closesthit_rays);
   fprintf(statfout, "rt_n_total_rays = %d\n", gpgpu_ctx->func_sim->g_n_closesthit_rays + gpgpu_ctx->func_sim->g_n_anyhit_rays);
@@ -1517,7 +1522,7 @@ void gpgpu_sim::gpu_print_stat() {
   }
   fprintf(statfout, "\n");
   fprintf(statfout, "inst_class_by_shader\n");
-  for (unsigned i=0; i<5; i++) {
+  for (unsigned i=0; i<16; i++) {
     fprintf(statfout, "%d:", i);
     for (unsigned j=0; j<20; j++) {
       fprintf(statfout, "%d\t", gpgpu_ctx->func_sim->g_inst_class_stat[i][j]);
